@@ -17,7 +17,6 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 from app.config import get_settings
 from app.middleware.error_handlers import register_error_handlers
 from app.middleware.request_id import RequestIDMiddleware
-from app.routers import health, auth, users
 
 settings = get_settings()
 
@@ -55,6 +54,13 @@ app.add_middleware(RequestIDMiddleware)
 register_error_handlers(app)
 
 # ── Routers ───────────────────────────────────────────────────────────────────
+from app.routers import health, auth, users, organizations, projects, sessions, messages
+
 app.include_router(health.router)
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
+app.include_router(organizations.router, prefix="/api/v1")
+app.include_router(projects.router, prefix="/api/v1")
+app.include_router(sessions.router, prefix="/api/v1")
+app.include_router(messages.router, prefix="/api/v1")
+

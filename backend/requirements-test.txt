@@ -1,1 +1,0 @@
-aiosqlite>=0.20,<0.21        # SQLite async driver for tests (not used in production)

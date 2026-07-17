@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime
+from typing import List
 
 from sqlalchemy import DateTime, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -21,5 +22,5 @@ class Organization(Base):
     )
 
     # relationships (back-populated by child models)
-    users: Mapped[list["User"]] = relationship(back_populates="organization")
-    projects: Mapped[list["Project"]] = relationship(back_populates="organization")
+    users: Mapped[List["User"]] = relationship(back_populates="organization")
+    projects: Mapped[List["Project"]] = relationship(back_populates="organization")

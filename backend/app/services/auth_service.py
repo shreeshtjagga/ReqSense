@@ -13,6 +13,14 @@ import hashlib
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """Return dt as UTC-aware. If dt has no tzinfo (e.g. from SQLite), assume UTC."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 import jwt
 from argon2 import PasswordHasher
@@ -57,7 +65,7 @@ def _hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def create_access_token(user: User) -> tuple[str, int]:
+def create_access_token(user: User) -> "tuple[str, int]":
     """Return (encoded_jwt, expires_in_seconds)."""
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
@@ -113,7 +121,7 @@ async def register_user(
     email: str,
     password: str,
     role: str,
-    organization_id: uuid.UUID | None,
+    organization_id: Optional[uuid.UUID],
 ) -> User:
     # Duplicate email check
     existing = await db.execute(select(User).where(User.email == email))
@@ -155,8 +163,8 @@ async def login_user(
 
     # Lockout check
     now = datetime.now(timezone.utc)
-    if user.locked_until and user.locked_until > now:
-        remaining = int((user.locked_until - now).total_seconds() / 60) + 1
+    if user.locked_until and _as_utc(user.locked_until) > now:
+        remaining = int((_as_utc(user.locked_until) - now).total_seconds() / 60) + 1
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Account is locked. Try again in {remaining} minute(s).",
@@ -176,7 +184,9 @@ async def login_user(
         user.failed_login_attempts += 1
         if user.failed_login_attempts >= _MAX_FAILED_ATTEMPTS:
             user.locked_until = now + timedelta(minutes=_LOCKOUT_MINUTES)
-        await db.flush()
+        # Commit before raising so lockout state isn't rolled back by the
+        # exception handler's rollback (SQLAlchemy flushes are transactional).
+        await db.commit()
         raise _invalid
 
     # Successful login — reset counter
@@ -216,7 +226,7 @@ async def refresh_tokens(
 
     now = datetime.now(timezone.utc)
 
-    if not record or record.revoked or record.expires_at < now:
+    if not record or record.revoked or _as_utc(record.expires_at) < now:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token is invalid or expired.",
@@ -271,7 +281,7 @@ async def initiate_password_reset(
     db: AsyncSession,
     *,
     email: str,
-) -> str | None:
+) -> Optional[str]:
     """
     Returns the raw reset token if the email exists, None if it doesn't.
     The caller always responds with HTTP 200 to avoid user enumeration.
@@ -305,7 +315,7 @@ async def complete_password_reset(
     record = result.scalar_one_or_none()
 
     now = datetime.now(timezone.utc)
-    if not record or record.used or record.expires_at < now:
+    if not record or record.used or _as_utc(record.expires_at) < now:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Reset token is invalid or has expired.",
@@ -322,3 +332,42 @@ async def complete_password_reset(
 
     user.password_hash = hash_password(new_password)
     await db.flush()
+
+
+def create_email_verification_token(user_id: uuid.UUID) -> str:
+    """Generate a signed JWT token for email verification, expiring in 24 hours."""
+    payload = {
+        "sub": str(user_id),
+        "exp": datetime.now(timezone.utc) + timedelta(hours=24),
+        "purpose": "email_verification",
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+async def verify_email_token(db: AsyncSession, token: str) -> None:
+    """Verify email verification token and mark user's email as verified."""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("purpose") != "email_verification":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid token purpose.",
+            )
+        user_id = uuid.UUID(payload.get("sub"))
+    except (jwt.PyJWTError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification token is invalid or has expired.",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User not found.",
+        )
+
+    user.email_verified = True
+    await db.flush()
+

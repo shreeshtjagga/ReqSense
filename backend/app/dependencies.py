@@ -10,7 +10,7 @@ get_current_user_or_stream_token: accepts both access tokens and short-lived str
 """
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -19,13 +19,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.user import User
+from app.models.project import Project
 from app.services.auth_service import decode_token
+
 
 _bearer = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+    credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(_bearer)],
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """
@@ -65,8 +67,8 @@ async def get_current_user(
 
 
 async def get_current_user_or_stream_token(
-    token: Annotated[str | None, Query(alias="stream_token")] = None,
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)] = None,
+    token: Annotated[Optional[str], Query(alias="stream_token")] = None,
+    credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(_bearer)] = None,
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """
@@ -74,7 +76,7 @@ async def get_current_user_or_stream_token(
     OR a ?stream_token=... query param (short-lived stream token).
     Used on SSE endpoints where EventSource can't set custom headers.
     """
-    raw_token: str | None = None
+    raw_token: Optional[str] = None
 
     if token:
         raw_token = token
@@ -140,7 +142,7 @@ def require_same_org(org_id: uuid.UUID):
     pass  # see require_same_org_check below for the inline helper
 
 
-def require_same_org_check(user: User, resource_org_id: uuid.UUID | None) -> None:
+def require_same_org_check(user: User, resource_org_id: Optional[uuid.UUID]) -> None:
     """
     Inline org-scoping check.
     Admins are exempt — they can access any org's resources.
@@ -156,3 +158,64 @@ def require_same_org_check(user: User, resource_org_id: uuid.UUID | None) -> Non
 
 # Convenience type aliases for use in route signatures
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+async def get_scoped_project(
+    project_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Project:
+    """
+    Loads the project and enforces:
+    - project.organization_id == user.organization_id (except for admins)
+    - role-based membership: developer must be projects.developer_id or same org+role='developer';
+      client must exist in project_clients for this project.
+    Raises 404 (not 403) on any mismatch — never leak existence of other orgs' data.
+    """
+    from app.models.project import ProjectClient
+
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found.",
+        )
+
+    if user.role == "admin":
+        return project
+
+    # Org check: user must belong to the project's organization
+    if not project.organization_id or user.organization_id != project.organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found.",
+        )
+
+    # Role check
+    if user.role == "client":
+        # Client must be explicitly invited to the project (exist in project_clients)
+        client_res = await db.execute(
+            select(ProjectClient).where(
+                ProjectClient.project_id == project_id,
+                ProjectClient.client_id == user.id,
+            )
+        )
+        if not client_res.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found.",
+            )
+    elif user.role == "developer":
+        # Must be developer_id or same org + developer (which they are, since org is matched above)
+        pass
+    else:
+        # Unknown role
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found.",
+        )
+
+    return project
+

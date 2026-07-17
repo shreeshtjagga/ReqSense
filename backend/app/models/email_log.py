@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import DateTime, String, Text, func
 from sqlalchemy import Uuid
@@ -21,7 +22,7 @@ class EmailLog(Base):
     status: Mapped[str] = mapped_column(
         String(50), nullable=False
     )  # 'sent', 'failed'
-    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     sent_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

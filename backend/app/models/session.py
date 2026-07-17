@@ -5,6 +5,7 @@ Tracks drift/contradiction stats and stability score in real time.
 
 import uuid
 from datetime import datetime
+from typing import List, Optional
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, func
 from sqlalchemy import Uuid
@@ -29,7 +30,7 @@ class Session(Base):
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     total_messages: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     drift_events: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     contradiction_events: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -37,6 +38,6 @@ class Session(Base):
 
     project: Mapped["Project"] = relationship(back_populates="sessions")
     client: Mapped["User"] = relationship()
-    messages: Mapped[list["Message"]] = relationship(
+    messages: Mapped[List["Message"]] = relationship(
         back_populates="session", cascade="all, delete-orphan"
     )

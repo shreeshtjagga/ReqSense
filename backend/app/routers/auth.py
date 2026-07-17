@@ -121,3 +121,19 @@ async def reset_password(
         db, raw_token=body.token, new_password=body.new_password
     )
     return JSONResponse(content={"message": "Password reset successful."})
+
+
+from app.schemas.auth import VerifyEmailRequest
+
+@router.post(
+    "/verify-email",
+    status_code=status.HTTP_200_OK,
+    summary="Consume email verification token",
+)
+async def verify_email(
+    body: VerifyEmailRequest,
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    await auth_service.verify_email_token(db, token=body.token)
+    return JSONResponse(content={"message": "Email verification successful."})
+

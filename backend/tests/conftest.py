@@ -114,3 +114,154 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     ) as ac:
         yield ac
     app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def clean_database():
+    """Resets database state by deleting all rows from all tables before each test."""
+    async with TestSessionLocal() as session:
+        for table in reversed(Base.metadata.sorted_tables):
+            await session.execute(table.delete())
+        await session.commit()
+
+
+
+@pytest_asyncio.fixture()
+async def test_db() -> AsyncGenerator[AsyncSession, None]:
+    """Provides a transactional db session wrapper for raw DB inserts in tests."""
+    async with TestSessionLocal() as session:
+        yield session
+        await session.commit()
+
+
+@pytest_asyncio.fixture()
+async def org_a(test_db: AsyncSession):
+    from app.models.organization import Organization
+    org = Organization(name="Organization A")
+    test_db.add(org)
+    await test_db.flush()
+    return org
+
+
+@pytest_asyncio.fixture()
+async def org_b(test_db: AsyncSession):
+    from app.models.organization import Organization
+    org = Organization(name="Organization B")
+    test_db.add(org)
+    await test_db.flush()
+    return org
+
+
+@pytest_asyncio.fixture()
+async def admin_a(test_db: AsyncSession, org_a):
+    from app.models.user import User
+    from app.services.auth_service import hash_password
+    user = User(
+        name="Admin A",
+        email="admin_a@a.com",
+        password_hash=hash_password("Pass1234"),
+        role="admin",
+        organization_id=org_a.id,
+        is_active=True,
+    )
+    test_db.add(user)
+    await test_db.flush()
+    return user
+
+
+@pytest_asyncio.fixture()
+async def dev_a(test_db: AsyncSession, org_a):
+    from app.models.user import User
+    from app.services.auth_service import hash_password
+    user = User(
+        name="Developer A",
+        email="dev_a@a.com",
+        password_hash=hash_password("Pass1234"),
+        role="developer",
+        organization_id=org_a.id,
+        is_active=True,
+    )
+    test_db.add(user)
+    await test_db.flush()
+    return user
+
+
+@pytest_asyncio.fixture()
+async def dev_b(test_db: AsyncSession, org_b):
+    from app.models.user import User
+    from app.services.auth_service import hash_password
+    user = User(
+        name="Developer B",
+        email="dev_b@b.com",
+        password_hash=hash_password("Pass1234"),
+        role="developer",
+        organization_id=org_b.id,
+        is_active=True,
+    )
+    test_db.add(user)
+    await test_db.flush()
+    return user
+
+
+@pytest_asyncio.fixture()
+async def client_a(test_db: AsyncSession, org_a):
+    from app.models.user import User
+    from app.services.auth_service import hash_password
+    user = User(
+        name="Client A",
+        email="client_a@a.com",
+        password_hash=hash_password("Pass1234"),
+        role="client",
+        organization_id=org_a.id,
+        is_active=True,
+    )
+    test_db.add(user)
+    await test_db.flush()
+    return user
+
+
+@pytest_asyncio.fixture()
+async def client_b(test_db: AsyncSession, org_b):
+    from app.models.user import User
+    from app.services.auth_service import hash_password
+    user = User(
+        name="Client B",
+        email="client_b@b.com",
+        password_hash=hash_password("Pass1234"),
+        role="client",
+        organization_id=org_b.id,
+        is_active=True,
+    )
+    test_db.add(user)
+    await test_db.flush()
+    return user
+
+
+@pytest_asyncio.fixture()
+async def project_a(test_db: AsyncSession, org_a, dev_a):
+    from app.models.project import Project
+    proj = Project(
+        name="Project A",
+        description="Test Project A",
+        domain="web_app",
+        organization_id=org_a.id,
+        developer_id=dev_a.id,
+        status="active",
+    )
+    test_db.add(proj)
+    await test_db.flush()
+    return proj
+
+
+@pytest_asyncio.fixture()
+async def session_a(test_db: AsyncSession, project_a, client_a):
+    from app.models.session import Session
+    sess = Session(
+        project_id=project_a.id,
+        client_id=client_a.id,
+        status="active",
+    )
+    test_db.add(sess)
+    await test_db.flush()
+    return sess
+

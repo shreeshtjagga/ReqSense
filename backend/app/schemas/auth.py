@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
+from typing import Optional
 
 
 # ── Registration ──────────────────────────────────────────────────────────────
@@ -15,7 +16,7 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)
     role: str = Field(..., pattern="^(client|developer|admin)$")
-    organization_id: uuid.UUID | None = None
+    organization_id: Optional[uuid.UUID] = None
 
     @field_validator("password")
     @classmethod
@@ -85,6 +86,11 @@ class ResetPasswordRequest(BaseModel):
 class TokenPayload(BaseModel):
     sub: str          # user UUID as string
     role: str
-    org: str | None   # organization UUID as string, nullable
+    org: Optional[str]   # organization UUID as string, nullable
     exp: datetime
     type: str         # "access" or "stream"
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+

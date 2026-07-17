@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy import Uuid
@@ -14,22 +15,22 @@ class FeatureStatus(Base):
     __tablename__ = "feature_status"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)
-    project_id: Mapped[uuid.UUID | None] = mapped_column(
+    project_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(), ForeignKey("projects.id", ondelete="SET NULL"), index=True, nullable=True
     )
-    atom_id: Mapped[uuid.UUID | None] = mapped_column(
+    atom_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(), ForeignKey("requirement_atoms.id", ondelete="SET NULL"), nullable=True
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
         String(50), default="planned", nullable=False
     )  # 'planned', 'in_progress', 'completed'
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)  # optimistic locking
-    created_by: Mapped[uuid.UUID | None] = mapped_column(
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    updated_by: Mapped[uuid.UUID | None] = mapped_column(
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     updated_at: Mapped[datetime] = mapped_column(
