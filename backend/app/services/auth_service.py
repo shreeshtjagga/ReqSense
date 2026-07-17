@@ -331,6 +331,15 @@ async def complete_password_reset(
         )
 
     user.password_hash = hash_password(new_password)
+    
+    # Revoke all old refresh tokens for this user
+    from sqlalchemy import update
+    await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.user_id == user.id)
+        .values(revoked=True)
+    )
+
     await db.flush()
 
 

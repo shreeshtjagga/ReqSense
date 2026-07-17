@@ -70,6 +70,12 @@ TestSessionLocal = async_sessionmaker(
     autoflush=False,
 )
 
+# ── Override AsyncSessionLocal globally for tests ─────────────────────────────
+import app.database as app_database
+app_database.AsyncSessionLocal = TestSessionLocal
+
+
+
 
 async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
     async with TestSessionLocal() as session:
