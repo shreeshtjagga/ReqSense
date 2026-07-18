@@ -8,7 +8,7 @@ from sendgrid.helpers.mail import Mail
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.config import get_settings
-from app.database import AsyncSessionLocal
+import app.database as _app_database  # late-binding: test overrides AsyncSessionLocal on this module
 from app.models.email_log import EmailLog
 from app.tasks.celery_app import celery_app
 
@@ -49,8 +49,13 @@ def run_sync(coro):
 
 
 async def _save_email_log(to_email: str, template: str, status: str, error_message: str = None) -> None:
-    """Save an email log entry to the database."""
-    async with AsyncSessionLocal() as db:
+    """Save an email log entry to the database.
+
+    Uses app.database.AsyncSessionLocal via the module reference so that the
+    test conftest override (app_database.AsyncSessionLocal = TestSessionLocal)
+    is picked up even when this coroutine runs in a new thread/event-loop.
+    """
+    async with _app_database.AsyncSessionLocal() as db:
         log_entry = EmailLog(
             to_email=to_email,
             template=template,

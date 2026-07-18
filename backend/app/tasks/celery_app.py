@@ -22,4 +22,12 @@ celery_app.conf.update(
 )
 
 # Autodiscover tasks from the app.tasks package
+celery_app.conf.update(
+    imports=[
+        "app.tasks.email_tasks",
+        "app.tasks.srs_tasks",
+        "app.tasks.impact_tasks",
+    ]
+)
 celery_app.autodiscover_tasks(["app.tasks"])
+
