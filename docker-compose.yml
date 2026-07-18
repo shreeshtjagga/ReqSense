@@ -1,0 +1,123 @@
+version: "3.9"
+
+# docker-compose.yml — ReqSense AI local development stack
+#
+# Starts: Postgres, Redis, Chroma (local), API, Celery worker.
+# Frontend runs separately via `npm run dev` (hot-reload).
+#
+# Usage:
+#   docker compose up -d            # start everything in background
+#   docker compose logs -f api      # tail API logs
+#   docker compose exec api bash    # shell into API container
+#   docker compose down -v          # stop and remove volumes (destructive)
+
+services:
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: reqsense
+      POSTGRES_PASSWORD: reqsense
+      POSTGRES_DB: reqsense
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reqsense"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Redis (broker + cache) ─────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── ChromaDB local (skip this service if using Chroma Cloud) ───────────────
+  chroma:
+    image: chromadb/chroma:latest
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      IS_PERSISTENT: "TRUE"
+
+  # ── Run Alembic migrations before API starts ────────────────────────────────
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: ./backend/.env
+    command: alembic upgrade head
+    restart: "no"
+
+  # ── FastAPI API ─────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    env_file: ./backend/.env
+    environment:
+      # Override DB/Redis to use Docker service names
+      DATABASE_URL: "postgresql+asyncpg://reqsense:reqsense@db:5432/reqsense"
+      REDIS_URL: "redis://redis:6379"
+      CELERY_BROKER_URL: "redis://redis:6379/1"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/2"
+      # Use local Chroma container by default for local dev
+      CHROMA_MODE: "local"
+      CHROMA_PERSIST_DIRECTORY: "/data/chroma_db"
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/data/chroma_db   # share with chroma service if desired
+    command: >
+      sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  # ── Celery Worker ───────────────────────────────────────────────────────────
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: ./backend/.env
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://reqsense:reqsense@db:5432/reqsense"
+      REDIS_URL: "redis://redis:6379"
+      CELERY_BROKER_URL: "redis://redis:6379/1"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/2"
+      CHROMA_MODE: "local"
+      CHROMA_PERSIST_DIRECTORY: "/data/chroma_db"
+    volumes:
+      - chroma_data:/data/chroma_db
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+
+volumes:
+  postgres_data:
+  chroma_data:

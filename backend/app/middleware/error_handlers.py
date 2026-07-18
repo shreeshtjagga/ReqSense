@@ -18,6 +18,7 @@ and request_id regardless of which endpoint produced the error.
 import logging
 from typing import Any
 
+import sentry_sdk
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -108,6 +109,16 @@ def register_error_handlers(app: FastAPI) -> None:
             request.method,
             request.url.path,
         )
+        # Capture explicitly so 500s always reach Sentry even when
+        # traces_sample_rate < 1 (the FastAPI integration only samples traces,
+        # not error events, but being explicit here removes all ambiguity).
+        with sentry_sdk.push_scope() as scope:
+            scope.set_tag("request_id", request_id)
+            scope.set_context("request", {
+                "method": request.method,
+                "url": str(request.url),
+            })
+            sentry_sdk.capture_exception(exc)
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=_error_envelope(
