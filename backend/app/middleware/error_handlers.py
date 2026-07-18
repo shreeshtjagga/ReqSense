@@ -60,14 +60,19 @@ def register_error_handlers(app: FastAPI) -> None:
             500: "INTERNAL_SERVER_ERROR",
         }
         code = code_map.get(exc.status_code, f"HTTP_{exc.status_code}")
+        message = str(exc.detail)
+        if message == "STALE_VERSION":
+            code = "STALE_VERSION"
+            message = "The record has been updated by another transaction."
         return JSONResponse(
             status_code=exc.status_code,
             content=_error_envelope(
                 code=code,
-                message=str(exc.detail),
+                message=message,
                 request_id=request_id,
             ),
         )
+
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(

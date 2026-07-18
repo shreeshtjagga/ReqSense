@@ -82,6 +82,8 @@ async def get_session(
     return await _get_scoped_session(session_id, current_user, db)
 
 
+from app.tasks.srs_tasks import generate_srs_task
+
 @router.patch("/{session_id}/end", response_model=SessionRead)
 async def end_session(
     session_id: uuid.UUID,
@@ -99,4 +101,30 @@ async def end_session(
     session.ended_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(session)
+    
+    # Enqueue background task
+    generate_srs_task.delay(str(session_id))
     return session
+
+
+@router.post("/{session_id}/end", response_model=SessionRead)
+async def end_session_post(
+    session_id: uuid.UUID,
+    current_user: User = Depends(require_roles("admin", "developer", "client")),
+    db: AsyncSession = Depends(get_db),
+):
+    session = await _get_scoped_session(session_id, current_user, db)
+    if session.status != "active":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Session is not active.",
+        )
+    session.status = "completed"
+    session.ended_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(session)
+    
+    # Enqueue background task
+    generate_srs_task.delay(str(session_id))
+    return session
+
