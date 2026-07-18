@@ -10,6 +10,8 @@ class FeatureStatusCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
     atom_id: Optional[uuid.UUID] = None
+    project_id: Optional[uuid.UUID] = None
+
 
 
 class FeatureStatusUpdate(BaseModel):

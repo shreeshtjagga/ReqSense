@@ -7,10 +7,12 @@ from pydantic import BaseModel, Field
 
 
 class ChangeRequestCreate(BaseModel):
+    project_id: Optional[uuid.UUID] = None
     title: str = Field(..., min_length=1, max_length=255)
     description: str = Field(..., min_length=1, max_length=10000)
     affected_features: List[str] = Field(default_factory=list)
     severity: Optional[Literal["low", "medium", "high"]] = None
+
 
 
 class ChangeRequestReview(BaseModel):
