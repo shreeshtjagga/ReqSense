@@ -138,7 +138,7 @@ async def test_messages_scoping(client: AsyncClient, dev_a, dev_b, client_a, pro
     # 2. List messages (client succeeds, dev_b 404)
     resp = await client.get(f"/api/v1/sessions/{sess_id}/messages", headers=headers_client)
     assert resp.status_code == 200
-    assert len(resp.json()) == 1
+    assert len(resp.json()) >= 2  # user msg + ARIA reply
 
     resp = await client.get(f"/api/v1/sessions/{sess_id}/messages", headers=headers_b)
     assert resp.status_code == 404

@@ -1,0 +1,567 @@
+# ReqSense AI — Master Build Prompt (v5, Final)
+
+Give this entire file to your AI coding agent (Claude Code / Cursor / Copilot).
+This is v3 with two rounds of deliberate changes on top:
+1. Frontend styling moved to **Material UI (MUI)** instead of Tailwind CSS.
+2. Three v3 items were cut as not-needed-yet: the Celery Beat vendor
+   health-ping job, the Groq circuit breaker, and login gating on
+   `email_verified`. All three are real patterns for later, not for v1 —
+   see the specific notes at each section below for why.
+
+The doc keeps v3's underlying philosophy throughout: it deliberately
+excludes speculative architecture (repository/UOW layers, event buses,
+CQRS, API gateways, OpenTelemetry, provider-interface abstractions, feature
+flags) — those solve problems this app doesn't have at v1 and would cost
+more agent-generated bugs than they prevent. Build exactly what's below.
+
+---
+
+## WHAT YOU ARE BUILDING
+
+ReqSense AI — a full-stack web application where an AI agent called **ARIA**
+sits between a software client and a developer during requirements gathering
+sessions. ARIA conducts the conversation, detects contradictions in real
+time, and auto-generates a Software Requirements Specification (SRS)
+document at the end.
+
+The system has 3 user roles, scoped under an organization:
+
+- **Client** — chats with ARIA, explains what they want built
+- **Developer** — watches session, reads SRS, manages change requests
+- **Admin** — manages platform, views analytics
+
+---
+
+## TECH STACK — EXACT
+
+### Backend
+- Python 3.11
+- FastAPI
+- PostgreSQL (via SQLAlchemy ORM + asyncpg)
+- **Redis via `redis.asyncio`** (NOT `aioredis` — deprecated/merged upstream)
+- ChromaDB (vector store) — backed by a persistent volume or hosted Chroma
+  Cloud, never bare local disk on an ephemeral host
+- Sentence Transformers — model: `all-MiniLM-L6-v2`
+- Groq API — model: `llama-3.1-8b-instant` (verify current model
+  availability before locking this in — check
+  `https://console.groq.com/docs/models`)
+- **Groq SDK called directly — NO LangChain**
+- python-docx (SRS generation)
+- SendGrid (email notifications, sent via Celery — never inline in a request)
+- **PyJWT** for JWT (NOT `python-jose`)
+- **argon2-cffi** for password hashing (NOT `passlib`+`bcrypt`)
+- Pydantic v2
+- Alembic (database migrations)
+- uvicorn
+- **Celery + Redis broker** — background jobs: SRS generation, embedding,
+  impact analysis, email sending
+- **boto3** (or `cloudflare-r2` client) — object storage for generated
+  `.docx` files and Chroma persistence, if not using a hosted vector DB
+- **slowapi** — rate limiting
+- **sentry-sdk** — error tracking
+- **tenacity** — retry/backoff for external API calls (Groq, SendGrid)
+
+### Frontend
+- React 18 + Vite
+- **Material UI (MUI) v5** — `@mui/material`, `@mui/icons-material`,
+  `@emotion/react`, `@emotion/styled` — this replaces Tailwind CSS as the
+  styling/component system. One central `theme.js` defines palette,
+  typography, and spacing; all components use MUI's `sx` prop or `styled()`
+  rather than utility classes, so there is a single source of visual truth
+  instead of two competing styling systems.
+- React Router v6
+- Axios
+- Zustand (state management)
+- Recharts (analytics charts) — MUI has no native charting; Recharts stays
+- React Query (server state)
+- Lucide React icons are dropped in favor of `@mui/icons-material`, so the
+  icon set matches the component library instead of mixing two icon fonts
+- Framer Motion (animations) — kept; MUI's built-in `Transition` components
+  cover simple cases, Framer Motion stays for anything more custom
+- react-hot-toast is dropped in favor of MUI's `Snackbar` + `Alert`, so
+  notifications look native to the rest of the UI instead of being a
+  visually separate library
+
+### Deployment
+- Backend: Render (Web Service + separate Background Worker service for
+  Celery)
+- Frontend: Vercel
+- Database: Render PostgreSQL
+- Redis: Render Redis (also used as Celery broker)
+- Object storage: Cloudflare R2 or AWS S3 for `.docx` files and (if
+  self-hosting Chroma) its persistence directory, attached via a Render
+  Persistent Disk if you keep Chroma local
+- Error tracking: Sentry (free tier is fine to start)
+
+---
+
+## FOLDER STRUCTURE — BUILD EXACTLY THIS
+
+```
+reqsense-ai/
+├── backend/
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py
+│   │   ├── config.py
+│   │   ├── database.py
+│   │   ├── dependencies.py              # includes scoped-access dependency (see AUTH section)
+│   │   ├── middleware/
+│   │   │   ├── __init__.py
+│   │   │   ├── request_id.py            # NEW
+│   │   │   └── error_handlers.py        # NEW — standard error envelope
+│   │   ├── models/
+│   │   │   ├── __init__.py
+│   │   │   ├── organization.py
+│   │   │   ├── user.py
+│   │   │   ├── project.py
+│   │   │   ├── session.py
+│   │   │   ├── message.py
+│   │   │   ├── requirement_atom.py
+│   │   │   ├── contradiction.py
+│   │   │   ├── srs_version.py
+│   │   │   ├── feature_status.py
+│   │   │   ├── change_request.py
+│   │   │   ├── audit_log.py
+│   │   │   ├── refresh_token.py
+│   │   │   ├── password_reset_token.py
+│   │   │   ├── llm_usage_log.py
+│   │   │   └── email_log.py
+│   │   ├── schemas/
+│   │   │   ├── __init__.py
+│   │   │   ├── auth.py
+│   │   │   ├── user.py
+│   │   │   ├── organization.py
+│   │   │   ├── project.py
+│   │   │   ├── session.py
+│   │   │   ├── message.py
+│   │   │   ├── requirement_atom.py
+│   │   │   ├── contradiction.py
+│   │   │   ├── srs.py
+│   │   │   ├── feature_status.py
+│   │   │   ├── change_request.py
+│   │   │   └── analytics.py
+│   │   ├── routers/
+│   │   │   ├── __init__.py
+│   │   │   ├── health.py
+│   │   │   ├── auth.py
+│   │   │   ├── users.py
+│   │   │   ├── organizations.py
+│   │   │   ├── projects.py
+│   │   │   ├── sessions.py
+│   │   │   ├── messages.py
+│   │   │   ├── srs.py
+│   │   │   ├── feature_status.py
+│   │   │   ├── change_requests.py
+│   │   │   ├── contradictions.py        # NEW — developer override endpoint
+│   │   │   ├── analytics.py
+│   │   │   └── audit_logs.py
+│   │   ├── services/
+│   │   │   ├── __init__.py
+│   │   │   ├── auth_service.py
+│   │   │   ├── aria_agent.py
+│   │   │   ├── rdcd_layer.py
+│   │   │   ├── recovery_agent.py
+│   │   │   ├── impact_analyser.py
+│   │   │   ├── srs_generator.py
+│   │   │   ├── embedding_service.py
+│   │   │   ├── vector_store.py
+│   │   │   ├── session_memory.py
+│   │   │   ├── notification_service.py
+│   │   │   ├── audit_service.py
+│   │   │   ├── storage_service.py
+│   │   │   └── rate_limit_service.py
+│   │   ├── tasks/
+│   │   │   ├── __init__.py
+│   │   │   ├── celery_app.py
+│   │   │   ├── srs_tasks.py
+│   │   │   ├── impact_tasks.py
+│   │   │   └── email_tasks.py           # NEW — send_email_task
+│   │   └── utils/
+│   │       ├── __init__.py
+│   │       ├── prompts.py               # includes PROMPT_VERSION constant
+│   │       └── helpers.py
+│   ├── tests/
+│   │   ├── conftest.py
+│   │   ├── test_auth.py
+│   │   ├── test_messages.py
+│   │   ├── test_rdcd_layer.py
+│   │   └── test_scoped_access.py        # NEW
+│   ├── alembic/
+│   │   ├── env.py
+│   │   └── versions/
+│   ├── alembic.ini
+│   ├── requirements.txt
+│   ├── .env.example
+│   └── Dockerfile
+├── frontend/
+│   ├── src/
+│   │   ├── main.jsx
+│   │   ├── App.jsx
+│   │   ├── theme.js                     # CHANGED (was index.css) — MUI theme: palette, typography, spacing
+│   │   ├── api/
+│   │   │   ├── axios.js
+│   │   │   ├── auth.js
+│   │   │   ├── projects.js
+│   │   │   ├── sessions.js
+│   │   │   ├── messages.js
+│   │   │   ├── srs.js
+│   │   │   ├── changeRequests.js
+│   │   │   ├── contradictions.js        # NEW
+│   │   │   └── analytics.js
+│   │   ├── store/
+│   │   │   ├── authStore.js
+│   │   │   └── projectStore.js
+│   │   ├── components/
+│   │   │   ├── common/
+│   │   │   │   ├── Navbar.jsx           # MUI AppBar
+│   │   │   │   ├── Sidebar.jsx          # MUI Drawer
+│   │   │   │   ├── Button.jsx           # thin wrapper over MUI Button, if custom variants needed
+│   │   │   │   ├── Input.jsx            # thin wrapper over MUI TextField
+│   │   │   │   ├── Modal.jsx            # MUI Dialog
+│   │   │   │   ├── Badge.jsx            # MUI Chip
+│   │   │   │   ├── Card.jsx             # MUI Card
+│   │   │   │   ├── Loader.jsx           # MUI CircularProgress / Skeleton
+│   │   │   │   ├── Alert.jsx            # MUI Alert (paired with Snackbar for toasts)
+│   │   │   │   ├── ErrorBoundary.jsx
+│   │   │   │   └── EmptyState.jsx
+│   │   │   ├── chat/
+│   │   │   │   ├── ChatWindow.jsx
+│   │   │   │   ├── ChatMessage.jsx
+│   │   │   │   ├── ChatInput.jsx
+│   │   │   │   ├── ConflictAlert.jsx    # MUI Alert, amber severity="warning"
+│   │   │   │   ├── ConflictOverridePanel.jsx  # NEW — resolve/ignore/merge UI
+│   │   │   │   └── TypingIndicator.jsx
+│   │   │   ├── dashboard/
+│   │   │   │   ├── ProjectCard.jsx
+│   │   │   │   ├── StatsCard.jsx
+│   │   │   │   ├── RecentActivity.jsx
+│   │   │   │   └── QuickActions.jsx
+│   │   │   ├── srs/
+│   │   │   │   ├── SRSViewer.jsx
+│   │   │   │   ├── SRSSection.jsx
+│   │   │   │   └── VersionHistory.jsx
+│   │   │   └── analytics/
+│   │   │       ├── DriftChart.jsx
+│   │   │       ├── ResolutionChart.jsx
+│   │   │       └── StabilityGauge.jsx
+│   │   ├── pages/
+│   │   │   ├── auth/
+│   │   │   │   ├── Login.jsx
+│   │   │   │   ├── Register.jsx
+│   │   │   │   ├── ForgotPassword.jsx
+│   │   │   │   └── ResetPassword.jsx
+│   │   │   ├── client/
+│   │   │   │   ├── ClientDashboard.jsx
+│   │   │   │   ├── ChatSession.jsx
+│   │   │   │   └── ChangeRequestForm.jsx
+│   │   │   ├── developer/
+│   │   │   │   ├── DevDashboard.jsx
+│   │   │   │   ├── ProjectDetail.jsx
+│   │   │   │   ├── SRSPage.jsx
+│   │   │   │   ├── FeatureTracker.jsx
+│   │   │   │   └── ChangeRequests.jsx
+│   │   │   ├── admin/
+│   │   │   │   ├── AdminDashboard.jsx
+│   │   │   │   ├── UserManagement.jsx
+│   │   │   │   └── Analytics.jsx
+│   │   │   └── NotFound.jsx
+│   │   ├── hooks/
+│   │   │   ├── useAuth.js
+│   │   │   ├── useProject.js
+│   │   │   └── useSession.js
+│   │   └── utils/
+│   │       ├── constants.js
+│   │       └── helpers.js
+│   ├── index.html
+│   ├── vite.config.js
+│   └── package.json
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+├── docker-compose.yml
+└── README.md
+```
+
+> `tailwind.config.js` and `postcss.config.js` are removed — MUI's `ThemeProvider`
+> in `main.jsx` (wrapping `theme.js`) is the single styling source of truth.
+
+---
+
+## DATABASE SCHEMA — BUILD ALL THESE TABLES
+
+*(unchanged from v3 — no frontend change affects the data layer)*
+
+> All FK columns must have explicit indexes. Add `CREATE INDEX` statements in
+> Alembic migrations for every `*_id` foreign key column below. Also add
+> these composite indexes, which matter more than single-column FK indexes
+> for this app's actual query patterns:
+> `(session_id, created_at)` on messages, `(project_id, created_at)` on
+> requirement_atoms, `(project_id, status)` on feature_status and
+> change_requests.
+
+### Table: organizations
+```sql
+id            UUID PRIMARY KEY DEFAULT gen_random_uuid()
+name          VARCHAR(255) NOT NULL
+created_at    TIMESTAMP DEFAULT NOW()
+```
+
+### Table: users
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+organization_id UUID REFERENCES organizations(id)
+name            VARCHAR(255) NOT NULL
+email           VARCHAR(255) UNIQUE NOT NULL
+password_hash   VARCHAR(255)
+role            VARCHAR(50) NOT NULL   -- 'client', 'developer', 'admin'
+is_active       BOOLEAN DEFAULT true
+email_verified  BOOLEAN DEFAULT false  -- tracked, not enforced (see auth_service.py note)
+failed_login_attempts INTEGER DEFAULT 0
+locked_until    TIMESTAMP
+created_at      TIMESTAMP DEFAULT NOW()
+updated_at      TIMESTAMP DEFAULT NOW()
+```
+
+### Table: refresh_tokens
+```sql
+id            UUID PRIMARY KEY DEFAULT gen_random_uuid()
+user_id       UUID REFERENCES users(id)
+token_hash    VARCHAR(255) NOT NULL
+expires_at    TIMESTAMP NOT NULL
+revoked       BOOLEAN DEFAULT false
+created_at    TIMESTAMP DEFAULT NOW()
+```
+
+### Table: password_reset_tokens
+```sql
+id            UUID PRIMARY KEY DEFAULT gen_random_uuid()
+user_id       UUID REFERENCES users(id)
+token         VARCHAR(255) NOT NULL
+expires_at    TIMESTAMP NOT NULL
+used          BOOLEAN DEFAULT false
+created_at    TIMESTAMP DEFAULT NOW()
+```
+
+### Table: projects
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+organization_id UUID REFERENCES organizations(id)
+name            VARCHAR(255) NOT NULL
+description     TEXT
+domain          VARCHAR(100)   -- 'mobile_app', 'web_app', 'software', 'api'
+developer_id    UUID REFERENCES users(id)
+status          VARCHAR(50) DEFAULT 'active'  -- 'active', 'completed', 'on_hold', 'archived'
+created_at      TIMESTAMP DEFAULT NOW()
+updated_at      TIMESTAMP DEFAULT NOW()
+```
+
+### Table: project_clients
+```sql
+id            UUID PRIMARY KEY DEFAULT gen_random_uuid()
+project_id    UUID REFERENCES projects(id)
+client_id     UUID REFERENCES users(id)
+invited_at    TIMESTAMP DEFAULT NOW()
+```
+
+### Table: sessions
+```sql
+id            UUID PRIMARY KEY DEFAULT gen_random_uuid()
+project_id    UUID REFERENCES projects(id)
+client_id     UUID REFERENCES users(id)
+status        VARCHAR(50) DEFAULT 'active'  -- 'active', 'completed', 'abandoned'
+started_at    TIMESTAMP DEFAULT NOW()
+ended_at      TIMESTAMP
+total_messages INTEGER DEFAULT 0
+drift_events   INTEGER DEFAULT 0
+contradiction_events INTEGER DEFAULT 0
+stability_score FLOAT DEFAULT 100.0
+```
+
+### Table: messages
+```sql
+id            UUID PRIMARY KEY DEFAULT gen_random_uuid()
+session_id    UUID REFERENCES sessions(id)
+sender        VARCHAR(50) NOT NULL  -- 'client', 'aria', 'system'
+content       TEXT NOT NULL         -- enforce max 4000 chars at the schema layer
+message_type  VARCHAR(50) DEFAULT 'normal'  -- 'normal', 'question', 'conflict_alert', 'clarification', 'summary'
+created_at    TIMESTAMP DEFAULT NOW()
+```
+*(Messages are append-only. No soft delete, no editing — the conversation
+log is the source of truth for the SRS and must not be mutable.)*
+
+### Table: requirement_atoms
+```sql
+id                UUID PRIMARY KEY DEFAULT gen_random_uuid()
+session_id        UUID REFERENCES sessions(id)
+project_id        UUID REFERENCES projects(id)
+subject           VARCHAR(255)
+action            VARCHAR(255)
+constraint_text    TEXT
+raw_text          TEXT NOT NULL   -- enforce max 5000 chars
+embedding_id      VARCHAR(255)     -- ChromaDB document ID
+embedding_model   VARCHAR(100)     -- e.g. 'all-MiniLM-L6-v2'
+embedding_version VARCHAR(30)      -- e.g. 'v1'
+status            VARCHAR(50) DEFAULT 'active'  -- 'active', 'superseded', 'conflicted', 'resolved'
+turn_number       INTEGER
+created_at        TIMESTAMP DEFAULT NOW()
+```
+
+### Table: contradictions
+```sql
+id            UUID PRIMARY KEY DEFAULT gen_random_uuid()
+session_id    UUID REFERENCES sessions(id)
+atom_1_id     UUID REFERENCES requirement_atoms(id)
+atom_2_id     UUID REFERENCES requirement_atoms(id)
+similarity_score FLOAT
+confidence    FLOAT              -- model's confidence this is a real contradiction, 0.0–1.0
+conflict_type VARCHAR(100)       -- 'scope_creep', 'user_shift', 'priority_flip', 'direct_contradiction'
+aria_message  TEXT
+client_clarification TEXT
+resolution    TEXT
+resolved_by   UUID REFERENCES users(id)   -- nullable; set when a developer overrides
+status        VARCHAR(50) DEFAULT 'pending'  -- 'pending', 'resolved', 'unresolved', 'ignored'
+detected_at   TIMESTAMP DEFAULT NOW()
+resolved_at   TIMESTAMP
+```
+*(Models 2-way conflicts only. If you later need 3+ atom conflicts,
+introduce a `contradiction_atoms` join table instead of adding `atom_3_id`.)*
+
+### Table: srs_versions
+```sql
+id                    UUID PRIMARY KEY DEFAULT gen_random_uuid()
+project_id            UUID REFERENCES projects(id)
+session_id            UUID REFERENCES sessions(id)
+version               VARCHAR(20) NOT NULL  -- '1.0', '1.1', '2.0'
+file_url              VARCHAR(500)          -- S3/R2 object URL
+generated_by          VARCHAR(50) DEFAULT 'system'
+change_summary        TEXT
+llm_model             VARCHAR(100)
+prompt_version        VARCHAR(20)
+generation_latency_ms INTEGER
+created_at            TIMESTAMP DEFAULT NOW()
+```
+
+### Table: feature_status
+```sql
+id            UUID PRIMARY KEY DEFAULT gen_random_uuid()
+project_id    UUID REFERENCES projects(id)
+atom_id       UUID REFERENCES requirement_atoms(id)
+title         VARCHAR(255) NOT NULL
+description   TEXT
+status        VARCHAR(50) DEFAULT 'planned'  -- 'planned', 'in_progress', 'completed'
+version       INTEGER NOT NULL DEFAULT 1     -- optimistic locking
+created_by    UUID REFERENCES users(id)
+updated_by    UUID REFERENCES users(id)
+updated_at    TIMESTAMP DEFAULT NOW()
+```
+
+### Table: change_requests
+```sql
+id            UUID PRIMARY KEY DEFAULT gen_random_uuid()
+project_id    UUID REFERENCES projects(id)
+client_id     UUID REFERENCES users(id)
+title         VARCHAR(255) NOT NULL
+description   TEXT NOT NULL           -- enforce max 10000 chars
+affected_features TEXT[]
+impact_report TEXT
+severity      VARCHAR(50)   -- 'low', 'medium', 'high'
+status        VARCHAR(50) DEFAULT 'pending'  -- 'pending', 'approved', 'rejected'
+developer_note TEXT
+version       INTEGER NOT NULL DEFAULT 1     -- optimistic locking
+created_at    TIMESTAMP DEFAULT NOW()
+reviewed_at   TIMESTAMP
+```
+
+### Table: audit_logs
+```sql
+id            UUID PRIMARY KEY DEFAULT gen_random_uuid()
+user_id       UUID REFERENCES users(id)
+action        VARCHAR(255) NOT NULL
+entity_type   VARCHAR(100)
+entity_id     UUID
+metadata      JSONB
+ip_address    VARCHAR(50)
+request_id    VARCHAR(100)    -- correlates to X-Request-ID
+created_at    TIMESTAMP DEFAULT NOW()
+```
+
+### Table: llm_usage_logs
+```sql
+id                 UUID PRIMARY KEY DEFAULT gen_random_uuid()
+session_id         UUID REFERENCES sessions(id)
+project_id         UUID REFERENCES projects(id)
+endpoint           VARCHAR(100)   -- 'aria_response', 'atom_extraction', 'contradiction_verify', 'impact_analysis'
+prompt_version     VARCHAR(20)
+prompt_tokens      INTEGER
+completion_tokens  INTEGER
+estimated_cost_usd NUMERIC(10,6)
+created_at         TIMESTAMP DEFAULT NOW()
+```
+
+### Table: email_logs
+```sql
+id            UUID PRIMARY KEY DEFAULT gen_random_uuid()
+to_email      VARCHAR(255) NOT NULL
+template      VARCHAR(100) NOT NULL   -- 'invite', 'password_reset', 'session_summary', 'change_request'
+status        VARCHAR(50)             -- 'sent', 'failed'
+error_message TEXT
+sent_at       TIMESTAMP DEFAULT NOW()
+```
+
+---
+
+## ENVIRONMENT VARIABLES
+
+*(unchanged from v3 — frontend styling swap has no env impact)*
+
+### backend/.env
+```
+DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/reqsense
+REDIS_URL=redis://localhost:6379
+CELERY_BROKER_URL=redis://localhost:6379/1
+CELERY_RESULT_BACKEND=redis://localhost:6379/2
+
+GROQ_API_KEY=your_groq_api_key
+GROQ_MODEL=llama-3.1-8b-instant
+GROQ_TIMEOUT_SECONDS=15
+
+SENDGRID_API_KEY=your_sendgrid_api_key
+SENDGRID_TIMEOUT_SECONDS=5
+FROM_EMAIL=noreply@reqsense.ai
+
+SECRET_KEY=your_super_secret_jwt_key_min_32_chars
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+REFRESH_TOKEN_EXPIRE_DAYS=14
+STREAM_TOKEN_EXPIRE_SECONDS=60
+
+CHROMA_MODE=hosted            # 'hosted' or 'local' — prefer hosted for prod
+CHROMA_API_KEY=your_chroma_cloud_key
+CHROMA_TENANT=your_tenant
+CHROMA_DATABASE=reqsense
+CHROMA_PERSIST_DIRECTORY=/data/chroma_db   # only used if CHROMA_MODE=local
+CHROMA_TIMEOUT_SECONDS=10
+
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+EMBEDDING_VERSION=v1
+
+S3_BUCKET_NAME=reqsense-srs-docs
+S3_ACCESS_KEY_ID=your_key
+S3_SECRET_ACCESS_KEY=your_secret
+S3_ENDPOINT_URL=https://your-account.r2.cloudflarestorage.com   # omit if using plain AWS S3
+S3_REGION=auto
+S3_TIMEOUT_SECONDS=10
+
+SENTRY_DSN=your_sentry_dsn
+
+FRONTEND_URL=http://localhost:5173
+ALLOWED_ORIGINS=http://localhost:5173
+
+RATE_LIMIT_MESSAGES_PER_MINUTE=30
+RATE_LIMIT_LOGIN_PER_MINUTE=5
+RATE_LIMIT_ANALYTICS_PER_MINUTE=100
+RATE_LIMIT_DOWNLOADS_PER_MINUTE=20
+
+PROMPT_VERSION=v1.0
+ENV=development   # 'development' | 'production' — gates /docs,
