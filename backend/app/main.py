@@ -57,6 +57,7 @@ register_error_handlers(app)
 from app.routers import (
     health, auth, users, organizations, projects, sessions, messages,
     contradictions, srs, feature_status, change_requests,
+    analytics, audit_logs,
 )
 
 app.include_router(health.router)
@@ -70,4 +71,6 @@ app.include_router(contradictions.router, prefix="/api/v1")
 app.include_router(srs.router, prefix="/api/v1")
 app.include_router(feature_status.router, prefix="/api/v1")
 app.include_router(change_requests.router, prefix="/api/v1")
+app.include_router(analytics.router, prefix="/api/v1")
+app.include_router(audit_logs.router, prefix="/api/v1")
 
