@@ -1,0 +1,157 @@
+# render.yaml — ReqSense AI deployment manifest
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Services declared here:
+#   1. reqsense-api        — FastAPI web service (Dockerfile)
+#   2. reqsense-worker     — Celery background worker (same image, different CMD)
+#
+# Datastores (managed outside this file via Render dashboard or separate
+# render.yaml entries — see comments below):
+#   - PostgreSQL  →  Render Postgres (attach as DATABASE_URL)
+#   - Redis       →  Render Redis    (attach as REDIS_URL, CELERY_BROKER_URL, CELERY_RESULT_BACKEND)
+#
+# Persistent disk for local Chroma (only needed if CHROMA_MODE=local):
+#   Attach a Render Disk to reqsense-api at /data — see item below.
+
+services:
+  # ── FastAPI API ──────────────────────────────────────────────────────────────
+  - type: web
+    name: reqsense-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: starter           # upgrade to standard for production
+    region: oregon          # match your database region
+    healthCheckPath: /health
+    autoDeploy: true
+
+    # ── Persistent disk for local Chroma (comment out if using Chroma Cloud) ──
+    # disk:
+    #   name: chroma-data
+    #   mountPath: /data
+    #   sizeGB: 10
+
+    envVars:
+      - key: ENV
+        value: production
+
+      # These are populated from the Render dashboard secret environment
+      # (or a linked Render Postgres / Redis service):
+      - key: DATABASE_URL
+        fromDatabase:
+          name: reqsense-db
+          property: connectionString
+
+      - key: REDIS_URL
+        fromService:
+          name: reqsense-redis
+          type: redis
+          property: connectionString
+
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: reqsense-redis
+          type: redis
+          property: connectionString
+
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          name: reqsense-redis
+          type: redis
+          property: connectionString
+
+      # Secrets — set these in the Render dashboard, NOT here:
+      - key: SECRET_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: FROM_EMAIL
+        sync: false
+      - key: S3_BUCKET_NAME
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_ENDPOINT_URL
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false          # set to https://your-vercel-app.vercel.app
+      - key: CHROMA_MODE
+        sync: false          # 'hosted' or 'local'
+      - key: CHROMA_API_KEY
+        sync: false
+      - key: CHROMA_TENANT
+        sync: false
+
+  # ── Celery Worker ────────────────────────────────────────────────────────────
+  - type: worker
+    name: reqsense-worker
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: starter
+    region: oregon
+    # Override CMD to start Celery instead of Uvicorn
+    dockerCommand: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+
+    envVars:
+      - key: ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: reqsense-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: reqsense-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: reqsense-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          name: reqsense-redis
+          type: redis
+          property: connectionString
+      - key: SECRET_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: FROM_EMAIL
+        sync: false
+      - key: S3_BUCKET_NAME
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_ENDPOINT_URL
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: CHROMA_MODE
+        sync: false
+      - key: CHROMA_API_KEY
+        sync: false
+      - key: CHROMA_TENANT
+        sync: false
+
+databases:
+  - name: reqsense-db
+    databaseName: reqsense
+    plan: starter
+    region: oregon
+
+  - name: reqsense-redis
+    plan: starter
+    region: oregon
