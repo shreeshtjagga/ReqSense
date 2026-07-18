@@ -128,5 +128,25 @@ class SRSGenerator:
         await db.commit()
         await db.refresh(srs_version)
 
+        # 8. Send notification email to the client if client_id is set
+        if session.client_id:
+            try:
+                from app.models.user import User
+                client_user_res = await db.execute(select(User).where(User.id == session.client_id))
+                client_user = client_user_res.scalar_one_or_none()
+                if client_user and client_user.email:
+                    from app.services.notification_service import send_session_summary_email
+                    download_url = StorageService.get_download_url(file_url)
+                    send_session_summary_email(
+                        to_email=client_user.email,
+                        context={
+                            "session_id": str(session_id),
+                            "version": version_str,
+                            "download_url": download_url,
+                        }
+                    )
+            except Exception as e:
+                logger.error(f"Failed to queue session summary email for session {session_id}: {e}")
+
         logger.info(f"SRS version {version_str} successfully generated and saved.")
         return srs_version

@@ -12,9 +12,3 @@ export const listMessages = async (sessionId, limit = 100, offset = 0) => {
   });
   return response.data;
 };
-
-export const getStreamUrl = (sessionId, userMessage, token) => {
-  return `${API_URL}${API_PREFIX}/sessions/${sessionId}/messages/stream?user_message=${encodeURIComponent(
-    userMessage
-  )}&token=${token}`;
-};
