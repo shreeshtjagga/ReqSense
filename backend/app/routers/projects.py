@@ -137,16 +137,13 @@ async def add_client_to_project(
     await db.refresh(pc)
 
     # Queue invite email via Celery task
-    from app.tasks.email_tasks import send_email_task
+    from app.services.notification_service import send_project_invite_email
     from app.config import get_settings
     settings = get_settings()
-    send_email_task.delay(
+    send_project_invite_email(
         to_email=client_user.email,
-        template="invite",
-        context={
-            "project_name": project.name,
-            "invite_url": f"{settings.FRONTEND_URL}/projects/{project.id}"
-        }
+        project_name=project.name,
+        invite_url=f"{settings.FRONTEND_URL}/projects/{project.id}"
     )
 
     return pc

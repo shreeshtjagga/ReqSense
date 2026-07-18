@@ -24,6 +24,13 @@ class EmbeddingService:
         return embedding.tolist()
 
     @staticmethod
+    def embed(text: str) -> List[float]:
+        """Alias for get_embedding — use this for consistency across callers."""
+        model = get_model()
+        embedding = model.encode(text)
+        return embedding.tolist()
+
+    @staticmethod
     def get_model_info() -> dict:
         """Get the model metadata."""
         return {

@@ -54,8 +54,8 @@ export const Analytics = () => {
         const ignoredCount = list.filter((c) => c.status === 'ignored').length;
         setStats({ pending: pendingCount, resolved: resolvedCount, ignored: ignoredCount });
       } catch (e) {
-        // Fallback placeholder counts if route not resolved
-        setStats({ pending: 2, resolved: 5, ignored: 1 });
+        // Real endpoint returned an error — show zeros rather than fake data
+        setStats({ pending: 0, resolved: 0, ignored: 0 });
       }
 
     } catch (err) {

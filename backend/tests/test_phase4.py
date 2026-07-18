@@ -180,14 +180,15 @@ async def test_list_messages_scoped(
 async def test_end_session_enqueues_srs_task(
     client: AsyncClient, dev_a, project_a, session_a
 ):
-    """POST /sessions/{id}/end returns 200 immediately (does not block on SRS)."""
+    """PATCH /sessions/{id}/end returns 200 immediately (does not block on SRS)."""
     headers_a = await get_auth_headers(client, dev_a.email)
 
     with patch("app.routers.sessions.generate_srs_task") as mock_task:
         mock_task.delay = MagicMock(return_value=None)
-        resp = await client.post(
+        resp = await client.patch(
             f"/api/v1/sessions/{session_a.id}/end",
             headers=headers_a,
+            json={"status": "completed"}
         )
 
     # Should return 200 immediately

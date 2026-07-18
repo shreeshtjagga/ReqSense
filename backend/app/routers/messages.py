@@ -226,7 +226,10 @@ async def create_message(
                 and contradiction_result.get("conflict_type", "none") != "none"
                 and contradiction_result.get("confidence", 0) > 0.0
             ):
+                import uuid as _uuid
+                c_id = _uuid.uuid4()
                 c = Contradiction(
+                    id=c_id,
                     session_id=session_id,
                     confidence=contradiction_result.get("confidence"),
                     conflict_type=contradiction_result.get("conflict_type"),
@@ -234,6 +237,29 @@ async def create_message(
                     status="pending",
                 )
                 db.add(c)
+
+                # ── Wire contradiction into chat as a conflict_alert Message ──
+                # This is what makes contradictions visible to the client in real
+                # time. ConflictAlert.jsx parses this JSON when message_type === 'conflict_alert'.
+                conflict_msg = Message(
+                    session_id=session_id,
+                    sender="aria",
+                    message_type="conflict_alert",
+                    content=json.dumps({
+                        "contradiction_id": str(c_id),
+                        "conflict_type": contradiction_result.get("conflict_type"),
+                        "aria_message": contradiction_result.get("aria_message", ""),
+                        "confidence": contradiction_result.get("confidence"),
+                    }),
+                )
+                db.add(conflict_msg)
+
+                # ── Update session contradiction counter and stability score ──
+                session.contradiction_events = (session.contradiction_events or 0) + 1
+                # Each contradiction reduces stability by 10 points, floored at 0
+                session.stability_score = max(
+                    0.0, (session.stability_score if session.stability_score is not None else 100.0) - 10.0
+                )
 
         await db.commit()
         await db.refresh(user_msg)
@@ -313,41 +339,3 @@ async def list_messages(
     return result.scalars().all()
 
 
-# ── GET /stream (SSE) ─────────────────────────────────────────────────────────
-
-@router.get("/stream")
-async def stream_aria_response(
-    session_id: uuid.UUID,
-    user_message: str,
-    current_user: User = Depends(require_roles("admin", "developer", "client")),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Server-Sent Events endpoint streaming ARIA tokens.
-    No DB writes happen during streaming (use POST /messages to persist).
-    """
-    session = await _get_scoped_active_session(session_id, current_user, db)
-
-    try:
-        history = await SessionMemory.get_messages(session_id)
-    except Exception:
-        history = []
-
-    async def _event_generator() -> AsyncGenerator[str, None]:
-        try:
-            async for token in AriaAgent.stream_aria_response(history, user_message):
-                yield f"data: {json.dumps({'token': token})}\n\n"
-        except Exception as exc:
-            logger.error("SSE stream error: %s", exc)
-            yield f"data: {json.dumps({'error': 'Stream interrupted'})}\n\n"
-        finally:
-            yield "data: [DONE]\n\n"
-
-    return StreamingResponse(
-        _event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
-    )

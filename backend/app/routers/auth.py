@@ -53,15 +53,12 @@ async def register(
     
     # Generate verification token
     verification_token = auth_service.create_email_verification_token(user.id)
-    # Queue email task
-    from app.tasks.email_tasks import send_email_task
-    send_email_task.delay(
+    # Queue email task via notification service
+    from app.services.notification_service import send_verification_email
+    send_verification_email(
         to_email=user.email,
-        template="verify_email",
-        context={
-            "token": verification_token,
-            "verify_url": f"{settings.FRONTEND_URL}/verify-email?token={verification_token}"
-        }
+        token=verification_token,
+        verify_url=f"{settings.FRONTEND_URL}/verify-email?token={verification_token}"
     )
 
     return RegisterResponse(id=user.id, email=user.email, role=user.role)
@@ -115,14 +112,11 @@ async def forgot_password(
     # Always 200 — don't reveal whether the email exists
     raw_token = await auth_service.initiate_password_reset(db, email=body.email)
     if raw_token:
-        from app.tasks.email_tasks import send_email_task
-        send_email_task.delay(
+        from app.services.notification_service import send_password_reset_email
+        send_password_reset_email(
             to_email=body.email,
-            template="password_reset",
-            context={
-                "token": raw_token,
-                "reset_url": f"{settings.FRONTEND_URL}/reset-password?token={raw_token}"
-            }
+            token=raw_token,
+            reset_url=f"{settings.FRONTEND_URL}/reset-password?token={raw_token}"
         )
     return JSONResponse(
         content={"message": "If this email is registered, a reset link has been sent."}
