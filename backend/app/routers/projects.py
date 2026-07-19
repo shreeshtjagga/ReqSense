@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import CurrentUser, get_current_user, get_scoped_project, require_roles
+from app.models.audit_log import AuditLog
 from app.models.project import Project, ProjectClient
 from app.schemas.project import (
     ProjectClientAdd,
@@ -37,6 +38,14 @@ async def create_project(
         or (current_user.id if current_user.role == "developer" else None),
     )
     db.add(project)
+    await db.flush()  # Get the project ID before commit
+    db.add(AuditLog(
+        user_id=current_user.id,
+        action="create_project",
+        entity_type="project",
+        entity_id=project.id,
+        metadata={"name": project.name, "domain": project.domain},
+    ))
     await db.commit()
     await db.refresh(project)
     return project
@@ -84,8 +93,16 @@ async def update_project(
     current_user: User = Depends(require_roles("admin", "developer")),
     db: AsyncSession = Depends(get_db),
 ):
-    for field, value in body.model_dump(exclude_unset=True).items():
+    updates = body.model_dump(exclude_unset=True)
+    for field, value in updates.items():
         setattr(project, field, value)
+    db.add(AuditLog(
+        user_id=current_user.id,
+        action="update_project",
+        entity_type="project",
+        entity_id=project.id,
+        metadata={"fields_changed": list(updates.keys())},
+    ))
     await db.commit()
     await db.refresh(project)
     return project
@@ -97,6 +114,13 @@ async def delete_project(
     current_user: User = Depends(require_roles("admin")),
     db: AsyncSession = Depends(get_db),
 ):
+    db.add(AuditLog(
+        user_id=current_user.id,
+        action="delete_project",
+        entity_type="project",
+        entity_id=project.id,
+        metadata={"name": project.name},
+    ))
     await db.delete(project)
     await db.commit()
 

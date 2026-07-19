@@ -16,6 +16,7 @@ GET /v1/sessions/{session_id}/messages/stream
 """
 
 import asyncio
+import functools
 import json
 import logging
 import uuid
@@ -117,7 +118,10 @@ async def create_message(
     completion_tokens = 0
     aria_content = ""
     try:
-        aria_result = AriaAgent.generate_response(history, sanitized_content)
+        loop = asyncio.get_event_loop()
+        aria_result = await loop.run_in_executor(
+            None, AriaAgent.generate_response, history, sanitized_content
+        )
         aria_content = aria_result.get("content", "")
         prompt_tokens = aria_result.get("prompt_tokens", 0)
         completion_tokens = aria_result.get("completion_tokens", 0)
@@ -132,25 +136,33 @@ async def create_message(
     extracted_atoms: list = []
     if body.sender in ("client", "user"):
         try:
-            extracted_atoms = RDCDLayer.extract_atoms(sanitized_content)
+            loop = asyncio.get_event_loop()
+            extracted_atoms = await loop.run_in_executor(
+                None, RDCDLayer.extract_atoms, sanitized_content
+            )
         except Exception as exc:
             logger.warning("Atom extraction failed: %s", exc)
 
     # ── 5. Embed atoms + search Chroma for contradictions — pre-transaction ──
     # Each element: (atom_dict, existing_atom_dict_or_None, contradiction_result_or_None)
     atom_contradiction_pairs: list = []
+    loop = asyncio.get_event_loop()
     for atom_dict in extracted_atoms:
         raw_text = atom_dict.get("raw_text", sanitized_content)
         chroma_match = None
         contradiction_result = None
         try:
             if not _is_test_env():
-                embedding = EmbeddingService.embed(raw_text)
-                # Use project_id as a stable UUID key for cross-session contradiction search
-                results = VectorStore.query_similar_atoms(
-                    session_id=session.project_id,
-                    query_embedding=embedding,
-                    limit=1,
+                # Embedding + Chroma are synchronous SDK calls — run off the event loop thread
+                embedding = await loop.run_in_executor(None, EmbeddingService.embed, raw_text)
+                # Use project_id as the stable collection key for cross-session contradiction search
+                results = await loop.run_in_executor(
+                    None,
+                    lambda: VectorStore.query_similar_atoms(
+                        session_id=session.project_id,
+                        query_embedding=embedding,
+                        limit=1,
+                    )
                 )
                 if results and results[0]["distance"] < 0.3:
                     chroma_match = results[0]
@@ -160,8 +172,9 @@ async def create_message(
                         "action": results[0].get("metadata", {}).get("action", ""),
                         "constraint_text": results[0].get("metadata", {}).get("constraint_text", ""),
                     }
-                    contradiction_result = RDCDLayer.detect_contradiction(
-                        existing_atom_dict, atom_dict
+                    contradiction_result = await loop.run_in_executor(
+                        None,
+                        functools.partial(RDCDLayer.detect_contradiction, existing_atom_dict, atom_dict),
                     )
             else:
                 # Mock: skip Chroma in test env

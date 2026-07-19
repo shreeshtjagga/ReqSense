@@ -9,11 +9,10 @@ export const ConflictAlert = ({ contradiction, onResolve }) => {
   const isDeveloper = user?.role === ROLES.DEVELOPER || user?.role === ROLES.ADMIN;
 
   const {
-    id,
+    contradiction_id,
     conflict_type,
     confidence,
     aria_message,
-    similarity_score,
   } = contradiction;
 
   return (
@@ -39,10 +38,6 @@ export const ConflictAlert = ({ contradiction, onResolve }) => {
         <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
           <strong>Conflict Type:</strong>
           <span>{conflict_type || 'direct_contradiction'}</span>
-        </Box>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-          <strong>Similarity:</strong>
-          <span>{similarity_score ? `${Math.round(similarity_score * 100)}%` : 'N/A'}</span>
         </Box>
         <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
           <strong>Confidence:</strong>

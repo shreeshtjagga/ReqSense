@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Typography, Box, Alert, Button, Grid, Stack, Divider, Paper } from '@mui/material';
+import { Typography, Box, Alert, Button, Grid, Stack, Divider, Paper, Skeleton } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
 import ChatWindow from '../../components/chat/ChatWindow';
 import { getSession, endSession } from '../../api/sessions';
 import { listMessages, createMessage } from '../../api/messages';
 import { getProject } from '../../api/projects';
+import { resolveContradiction } from '../../api/contradictions';
 import { useToastStore } from '../../store/toastStore';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import StopIcon from '@mui/icons-material/Stop';
@@ -111,6 +112,26 @@ export const ChatSession = () => {
     }
   };
 
+  // Handler wired from ChatWindow → ChatMessage → ConflictAlert → "Resolve Contradiction" button.
+  // contradiction here is the parsed JSON from the conflict_alert message content:
+  //   { contradiction_id, conflict_type, aria_message, confidence }
+  const handleResolveConflict = async (contradiction) => {
+    const contradictionId = contradiction?.contradiction_id;
+    if (!contradictionId) {
+      showToast('Cannot resolve — contradiction ID is missing.', 'error');
+      return;
+    }
+    try {
+      await resolveContradiction(contradictionId, { action: 'resolved', resolution: 'Resolved directly from chat session.' });
+      showToast('Contradiction marked as resolved.', 'success');
+      // Refetch messages so the conflict_alert bubble can be replaced/updated.
+      const updatedMsgs = await listMessages(sessionId);
+      setMessages(updatedMsgs);
+    } catch (err) {
+      showToast('Failed to resolve contradiction. Try from the Project Detail page.', 'error');
+    }
+  };
+
   if (loading && !session) {
     return (
       <Layout>
@@ -198,6 +219,7 @@ export const ChatSession = () => {
               messages={messages}
               sending={sending}
               onSendMessage={handleSendMessage}
+              onResolveConflict={handleResolveConflict}
               disabled={session?.status !== 'active'}
               title={`Gathering session for ${project?.name || 'Project'}`}
             />

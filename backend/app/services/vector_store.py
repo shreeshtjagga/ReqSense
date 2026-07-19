@@ -47,27 +47,31 @@ def get_chroma_client():
 
 class VectorStore:
     @staticmethod
-    def _get_collection_name(session_id: uuid.UUID) -> str:
+    def _get_collection_name(collection_id: uuid.UUID) -> str:
         # Chroma collections must be between 3 and 63 chars and contain alphanumeric/dash/underscore
-        clean_id = str(session_id).replace("-", "_")
-        return f"session_{clean_id}"
+        # We scope by project_id so atoms from all sessions in a project share one collection,
+        # enabling cross-session contradiction detection.
+        clean_id = str(collection_id).replace("-", "_")
+        return f"project_{clean_id}"
 
     @classmethod
-    def get_or_create_collection(cls, session_id: uuid.UUID):
+    def get_or_create_collection(cls, collection_id: uuid.UUID):
         client = get_chroma_client()
-        collection_name = cls._get_collection_name(session_id)
+        collection_name = cls._get_collection_name(collection_id)
         return client.get_or_create_collection(name=collection_name)
 
     @classmethod
-    def upsert_atoms(cls, session_id: uuid.UUID, atoms: List[Dict[str, Any]]) -> None:
+    def upsert_atoms(cls, collection_id: uuid.UUID, atoms: List[Dict[str, Any]]) -> None:
         """
-        Upsert requirement atoms into session-specific Chroma collection.
+        Upsert requirement atoms into project-scoped Chroma collection.
         Each atom dict should have: 'id', 'embedding', 'document' (raw_text), and optional 'metadata'.
+
+        Note: callers pass project_id as collection_id to scope atoms per project across all sessions.
         """
         if not atoms:
             return
 
-        collection = cls.get_or_create_collection(session_id)
+        collection = cls.get_or_create_collection(collection_id)
         ids = [str(atom["id"]) for atom in atoms]
         embeddings = [atom["embedding"] for atom in atoms]
         documents = [atom["document"] for atom in atoms]
@@ -84,12 +88,14 @@ class VectorStore:
     @classmethod
     def query_similar_atoms(
         cls,
-        session_id: uuid.UUID,
+        session_id: uuid.UUID,  # NOTE: callers pass project_id here for cross-session search
         query_embedding: List[float],
         limit: int = 5
     ) -> List[Dict[str, Any]]:
         """
-        Query the session collection for atoms similar to the query embedding.
+        Query the project collection for atoms similar to the query embedding.
+        The 'session_id' parameter name is kept for backward compatibility with callers
+        but the value passed is always the project_id (collection_id).
         """
         collection = cls.get_or_create_collection(session_id)
         results = collection.query(

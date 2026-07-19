@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import CurrentUser, require_roles
+from app.models.audit_log import AuditLog
 from app.models.user import User
 from app.schemas.user import UserAdminCreate, UserAdminUpdate, UserResponse
 from app.services.auth_service import hash_password
@@ -65,6 +66,14 @@ async def admin_create_user(
         email_verified=False,
     )
     db.add(user)
+    await db.flush()  # get the new user's ID before committing
+    db.add(AuditLog(
+        user_id=current_user.id,
+        action="admin_create_user",
+        entity_type="user",
+        entity_id=user.id,
+        metadata={"email": user.email, "role": user.role},
+    ))
     await db.commit()
     await db.refresh(user)
     return user
@@ -135,6 +144,13 @@ async def admin_update_user(
             )
         setattr(user, field, value)
 
+    db.add(AuditLog(
+        user_id=current_user.id,
+        action="admin_update_user",
+        entity_type="user",
+        entity_id=user.id,
+        metadata={"fields_changed": list(body.model_dump(exclude_unset=True).keys())},
+    ))
     await db.commit()
     await db.refresh(user)
     return user
@@ -162,5 +178,12 @@ async def admin_delete_user(
     if current_user.organization_id and user.organization_id != current_user.organization_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
+    db.add(AuditLog(
+        user_id=current_user.id,
+        action="admin_delete_user",
+        entity_type="user",
+        entity_id=user.id,
+        metadata={"email": user.email, "role": user.role},
+    ))
     await db.delete(user)
     await db.commit()
