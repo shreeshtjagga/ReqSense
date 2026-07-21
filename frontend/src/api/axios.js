@@ -21,7 +21,23 @@ instance.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response Interceptor: Handle 401 errors with silent refresh
+// Response Interceptor #1: Normalize backend error envelope
+// Backend returns: { "error": { "code": "...", "message": "..." } }
+// Every page reads: err.response?.data?.detail
+// This interceptor maps them so all existing code keeps working without changes.
+instance.interceptors.response.use(
+  (r) => r,
+  (error) => {
+    if (error.response?.data?.error) {
+      // Hoist message to .detail and code to .code at the top level
+      error.response.data.detail = error.response.data.error.message;
+      error.response.data.code = error.response.data.error.code;
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Response Interceptor #2: Handle 401 errors with silent refresh
 let isRefreshing = false;
 let failedQueue = [];
 

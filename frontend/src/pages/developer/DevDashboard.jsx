@@ -14,6 +14,7 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Paper,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
@@ -23,9 +24,10 @@ import EmptyState from '../../components/common/EmptyState';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { listProjects, createProject } from '../../api/projects';
-import { getOverviewAnalytics } from '../../api/analytics';
+import { getOverviewAnalytics, getDeveloperPortfolio } from '../../api/analytics';
 import { useProjectStore } from '../../store/projectStore';
 import { useToastStore } from '../../store/toastStore';
+import EmailVerificationBanner from '../../components/common/EmailVerificationBanner';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import ChatIcon from '@mui/icons-material/Chat';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
@@ -39,6 +41,7 @@ export const DevDashboard = () => {
 
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ total_projects: 0, total_sessions: 0, total_contradictions: 0 });
+  const [portfolio, setPortfolio] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
   
   // Create Project form state
@@ -58,6 +61,13 @@ export const DevDashboard = () => {
         setStats(statsData);
       } catch (err) {
         console.warn('Analytics endpoint unavailable or empty:', err);
+      }
+
+      try {
+        const portfolioData = await getDeveloperPortfolio();
+        setPortfolio(portfolioData);
+      } catch (err) {
+        console.warn('Portfolio analytics unavailable:', err);
       }
     } catch (err) {
       showToast('Error loading developer dashboard.', 'error');
@@ -94,7 +104,12 @@ export const DevDashboard = () => {
       // Refresh list
       fetchDashboardData();
     } catch (err) {
-      showToast('Failed to create project.', 'error');
+      const errorMsg = typeof err.response?.data?.detail === 'string'
+        ? err.response.data.detail
+        : (Array.isArray(err.response?.data?.detail)
+            ? err.response.data.detail.map(d => d.msg).join(', ')
+            : 'Failed to create project.');
+      showToast(errorMsg, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -102,6 +117,7 @@ export const DevDashboard = () => {
 
   return (
     <Layout>
+      <EmailVerificationBanner />
       <Box sx={{ mb: 4, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
         <Box>
           <Typography variant="h3" sx={{ fontWeight: 800, mb: 1 }}>
@@ -133,6 +149,40 @@ export const DevDashboard = () => {
           <StatsCard title="Pending Contradictions" value={stats.total_contradictions} icon={WarningAmberIcon} color="warning.main" />
         </Grid>
       </Grid>
+
+      {portfolio && (
+        <Paper variant="outlined" sx={{ p: 2.5, mb: 4, borderRadius: 2 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+            Portfolio
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={4}>
+              <Typography variant="caption" color="text.secondary">Contradictions resolved</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                {portfolio.contradictions_resolved_rate != null
+                  ? `${Math.round(portfolio.contradictions_resolved_rate * 100)}%`
+                  : '—'}
+              </Typography>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <Typography variant="caption" color="text.secondary">Avg SRS turnaround (hrs)</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                {portfolio.avg_srs_turnaround_hours != null
+                  ? portfolio.avg_srs_turnaround_hours.toFixed(1)
+                  : '—'}
+              </Typography>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <Typography variant="caption" color="text.secondary">Change-request approval rate</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                {portfolio.change_request_approval_rate != null
+                  ? `${Math.round(portfolio.change_request_approval_rate * 100)}%`
+                  : '—'}
+              </Typography>
+            </Grid>
+          </Grid>
+        </Paper>
+      )}
 
       {/* Projects list */}
       <Box sx={{ mb: 2 }}>

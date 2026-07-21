@@ -11,6 +11,7 @@ import NotFound from './pages/NotFound';
 
 // Client Pages
 import ClientDashboard from './pages/client/ClientDashboard';
+import ClientSessions from './pages/client/ClientSessions';
 import ChatSession from './pages/client/ChatSession';
 import ChangeRequestForm from './pages/client/ChangeRequestForm';
 
@@ -25,6 +26,7 @@ import SRSPage from './pages/developer/SRSPage';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import UserManagement from './pages/admin/UserManagement';
 import Analytics from './pages/admin/Analytics';
+import AdminAuditLogs from './pages/admin/AdminAuditLogs';
 
 // Common Components
 import ToastNotification from './components/common/Alert';
@@ -79,6 +81,14 @@ export const App = () => {
         />
 
         {/* Client Routes */}
+        <Route
+          path="/client/sessions"
+          element={
+            <PrivateRoute allowedRoles={['client']}>
+              <ClientSessions />
+            </PrivateRoute>
+          }
+        />
         <Route
           path="/client/sessions/:sessionId"
           element={
@@ -144,6 +154,14 @@ export const App = () => {
           element={
             <PrivateRoute allowedRoles={['admin', 'developer']}>
               <Analytics />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/admin/audit-logs"
+          element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <AdminAuditLogs />
             </PrivateRoute>
           }
         />

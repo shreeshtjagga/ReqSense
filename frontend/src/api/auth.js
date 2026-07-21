@@ -30,6 +30,11 @@ export const verifyEmail = async (token) => {
   return response.data;
 };
 
+export const resendVerificationEmail = async () => {
+  const response = await api.post('/auth/resend-verification');
+  return response.data;
+};
+
 export const getCurrentUser = async () => {
   const response = await api.get('/users/me');
   return response.data;

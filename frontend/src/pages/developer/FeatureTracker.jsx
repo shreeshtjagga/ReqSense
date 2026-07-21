@@ -20,6 +20,7 @@ import {
   DialogActions,
   TextField,
   Stack,
+  Divider,
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import Layout from '../../components/layout/Layout';
@@ -109,12 +110,11 @@ export const FeatureTracker = () => {
       // Refresh features from database
       fetchFeatures(projectId);
     } catch (err) {
-      const isConflict = err.response?.status === 409 || err.response?.data?.detail === 'STALE_VERSION';
+      const isConflict = err.response?.status === 409 || err.response?.data?.code === 'STALE_VERSION';
       if (isConflict) {
         // Handle STALE_VERSION 409 conflict
         showToast('Someone else updated this feature. Refreshing your layout...', 'error');
         setEditOpen(false);
-        // Refresh features immediately to get the latest version
         fetchFeatures(projectId);
       } else {
         showToast(err.response?.data?.detail || 'Failed to update feature.', 'error');

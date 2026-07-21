@@ -34,3 +34,13 @@ export const removeClientFromProject = async (projectId, clientId) => {
   const response = await api.delete(`/projects/${projectId}/clients/${clientId}`);
   return response.data;
 };
+
+export const createProjectInvite = async (projectId, { email, role = 'client' }) => {
+  const response = await api.post(`/projects/${projectId}/invites`, { email, role });
+  return response.data;
+};
+
+export const lookupUserByEmail = async (email) => {
+  const response = await api.get('/users/lookup', { params: { email } });
+  return response.data;
+};

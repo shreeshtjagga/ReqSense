@@ -11,8 +11,9 @@ import {
   RadioGroup,
   FormControlLabel,
   Radio,
+  Alert,
 } from '@mui/material';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useNavigate, Link as RouterLink, useSearchParams } from 'react-router-dom';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { registerUser } from '../../api/auth';
@@ -20,12 +21,19 @@ import { useToastStore } from '../../store/toastStore';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 
 export const Register = () => {
+  const [searchParams] = useSearchParams();
+  const inviteToken = searchParams.get('invite') || '';
+  const inviteOrg = searchParams.get('org') || '';
+  const inviteRole = searchParams.get('role') || 'client';
+  const inviteEmail = searchParams.get('email') || '';
+  const isInviteFlow = Boolean(inviteToken);
+
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(inviteEmail);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState('client');
-  const [orgId, setOrgId] = useState('');
+  const [role, setRole] = useState(isInviteFlow ? inviteRole : 'client');
+  const [orgId, setOrgId] = useState(inviteOrg);
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
@@ -54,8 +62,9 @@ export const Register = () => {
         name,
         email,
         password,
-        role,
-        organization_id: orgId.trim() || null,
+        role: isInviteFlow ? inviteRole : role,
+        organization_id: (isInviteFlow ? inviteOrg : orgId).trim() || null,
+        invite_token: inviteToken || null,
       });
 
       showToast('Registration successful! Please check your email to verify.', 'success');
@@ -110,9 +119,24 @@ export const Register = () => {
           <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
             Register
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }} align="center">
-            Create your account on ReqSense AI
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }} align="center">
+            {isInviteFlow
+              ? 'Complete signup to join the project you were invited to.'
+              : 'Create your account on ReqSense AI'}
           </Typography>
+
+          <Alert severity="info" sx={{ width: '100%', mb: 2 }}>
+            Each email address has one role (client, developer, or admin).
+            If you need both client and developer access, register with two emails
+            (for example name+dev@ and name+client@).
+          </Alert>
+
+          {isInviteFlow && (
+            <Alert severity="success" sx={{ width: '100%', mb: 2 }}>
+              You were invited as a <strong>{inviteRole}</strong>. Your account will be
+              attached to the project automatically after signup.
+            </Alert>
+          )}
 
           <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%' }}>
             <Stack spacing={2.5}>
@@ -128,6 +152,7 @@ export const Register = () => {
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
                 required
+                disabled={isInviteFlow && Boolean(inviteEmail)}
               />
               <Input
                 label="Password"
@@ -145,7 +170,7 @@ export const Register = () => {
                 required
               />
               
-              <FormControl component="fieldset">
+              <FormControl component="fieldset" disabled={isInviteFlow}>
                 <FormLabel component="legend" sx={{ fontWeight: 600, mb: 0.5 }}>
                   Register As
                 </FormLabel>
@@ -162,12 +187,14 @@ export const Register = () => {
                 </RadioGroup>
               </FormControl>
 
-              <Input
-                label="Organization ID (Optional UUID)"
-                value={orgId}
-                onChange={(e) => setOrgId(e.target.value)}
-                placeholder="Leave blank to create a new organization scope"
-              />
+              {!isInviteFlow && (
+                <Input
+                  label="Organization ID (Optional UUID)"
+                  value={orgId}
+                  onChange={(e) => setOrgId(e.target.value)}
+                  placeholder="Leave blank to create a new organization scope"
+                />
+              )}
 
               <Button
                 type="submit"
@@ -177,7 +204,7 @@ export const Register = () => {
                 size="large"
                 loading={loading}
               >
-                Register Account
+                {isInviteFlow ? 'Accept Invite & Register' : 'Register Account'}
               </Button>
 
               <Typography variant="body2" align="center" sx={{ mt: 1 }}>

@@ -8,6 +8,7 @@ import { listMessages, createMessage } from '../../api/messages';
 import { getProject } from '../../api/projects';
 import { resolveContradiction } from '../../api/contradictions';
 import { useToastStore } from '../../store/toastStore';
+import { useAuthStore } from '../../store/authStore';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import StopIcon from '@mui/icons-material/Stop';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
@@ -16,6 +17,7 @@ export const ChatSession = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const showToast = useToastStore((state) => state.showToast);
+  const { user } = useAuthStore();
 
   const [session, setSession] = useState(null);
   const [project, setProject] = useState(null);
@@ -220,7 +222,7 @@ export const ChatSession = () => {
               sending={sending}
               onSendMessage={handleSendMessage}
               onResolveConflict={handleResolveConflict}
-              disabled={session?.status !== 'active'}
+              disabled={session?.status !== 'active' || user?.role !== 'client'}
               title={`Gathering session for ${project?.name || 'Project'}`}
             />
           )}

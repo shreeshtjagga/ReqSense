@@ -15,7 +15,11 @@ import {
   TableRow,
   Paper,
   Stack,
-  Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
@@ -23,10 +27,16 @@ import Badge from '../../components/common/Badge';
 import Button from '../../components/common/Button';
 import EmptyState from '../../components/common/EmptyState';
 import ConflictOverridePanel from '../../components/chat/ConflictOverridePanel';
-import { getProject } from '../../api/projects';
+import EmailVerificationBanner from '../../components/common/EmailVerificationBanner';
+import {
+  getProject,
+  addClientToProject,
+  createProjectInvite,
+  lookupUserByEmail,
+} from '../../api/projects';
 import { listSessionsForProject } from '../../api/sessions';
 import { resolveContradiction } from '../../api/contradictions';
-import { listMessages } from '../../api/messages'; // We can search for contradictions inside session messages, or load them from DB
+import { getProjectSummary } from '../../api/analytics';
 import { useToastStore } from '../../store/toastStore';
 import { useProjectStore } from '../../store/projectStore';
 import { formatDateTime } from '../../utils/helpers';
@@ -34,7 +44,8 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import WarningIcon from '@mui/icons-material/Warning';
 import ChatIcon from '@mui/icons-material/Chat';
-import axios from '../../api/axios'; // We can fetch contradictions directly
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import axios from '../../api/axios';
 
 export const ProjectDetail = () => {
   const { projectId } = useParams();
@@ -46,12 +57,18 @@ export const ProjectDetail = () => {
   const [sessions, setSessions] = useState([]);
   const [contradictions, setContradictions] = useState([]);
   const [atoms, setAtoms] = useState([]);
+  const [engagement, setEngagement] = useState(null);
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(true);
-  
-  // Resolve modal state
+
   const [selectedContradiction, setSelectedContradiction] = useState(null);
   const [resolving, setResolving] = useState(false);
+
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteLookup, setInviteLookup] = useState(null);
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteStep, setInviteStep] = useState('lookup');
 
   const fetchProjectDetails = async () => {
     try {
@@ -63,13 +80,17 @@ export const ProjectDetail = () => {
       const sessList = await listSessionsForProject(projectId);
       setSessions(sessList);
 
-      // Load contradictions and requirement atoms
-      // We'll call custom endpoints or list them via direct API requests if endpoints exist
+      try {
+        const summary = await getProjectSummary(projectId);
+        setEngagement(summary);
+      } catch {
+        setEngagement(null);
+      }
+
       try {
         const contradictionsRes = await axios.get(`/contradictions/project/${projectId}`);
         setContradictions(contradictionsRes.data || []);
       } catch (err) {
-        // Fallback: fetch contradictions via sessions
         const allContradictions = [];
         for (const s of sessList) {
           try {
@@ -84,7 +105,6 @@ export const ProjectDetail = () => {
         const atomsRes = await axios.get(`/requirement-atoms/project/${projectId}`);
         setAtoms(atomsRes.data || []);
       } catch (err) {
-        // Fallback: load atoms from active sessions
         const allAtoms = [];
         for (const s of sessList) {
           try {
@@ -94,7 +114,6 @@ export const ProjectDetail = () => {
         }
         setAtoms(allAtoms);
       }
-
     } catch (err) {
       showToast('Error loading project details.', 'error');
     } finally {
@@ -120,12 +139,81 @@ export const ProjectDetail = () => {
       await resolveContradiction(id, resolveData);
       showToast('Contradiction resolved successfully!', 'success');
       setSelectedContradiction(null);
-      // Reload details
       fetchProjectDetails();
     } catch (err) {
       showToast('Failed to resolve contradiction.', 'error');
     } finally {
       setResolving(false);
+    }
+  };
+
+  const resetInviteDialog = () => {
+    setInviteEmail('');
+    setInviteLookup(null);
+    setInviteStep('lookup');
+    setInviteBusy(false);
+  };
+
+  const handleInviteLookup = async () => {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email) {
+      showToast('Enter an email address.', 'error');
+      return;
+    }
+    setInviteBusy(true);
+    try {
+      const user = await lookupUserByEmail(email);
+      if (user.role !== 'client') {
+        showToast(
+          `That account is a ${user.role}, not a client. Each email has one role — invite a client email instead.`,
+          'error',
+        );
+        setInviteLookup(null);
+        setInviteStep('lookup');
+        return;
+      }
+      setInviteLookup(user);
+      setInviteStep('found');
+    } catch (err) {
+      if (err.response?.status === 404) {
+        setInviteLookup(null);
+        setInviteStep('not_found');
+      } else {
+        showToast(err.response?.data?.detail || 'Lookup failed.', 'error');
+      }
+    } finally {
+      setInviteBusy(false);
+    }
+  };
+
+  const handleAddExistingClient = async () => {
+    if (!inviteLookup?.id) return;
+    setInviteBusy(true);
+    try {
+      await addClientToProject(projectId, inviteLookup.id);
+      showToast(`${inviteLookup.name} was added to the project.`, 'success');
+      setInviteOpen(false);
+      resetInviteDialog();
+      fetchProjectDetails();
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Failed to add client.', 'error');
+    } finally {
+      setInviteBusy(false);
+    }
+  };
+
+  const handleSendSignupInvite = async () => {
+    const email = inviteEmail.trim().toLowerCase();
+    setInviteBusy(true);
+    try {
+      await createProjectInvite(projectId, { email, role: 'client' });
+      showToast(`Signup invite sent to ${email}.`, 'success');
+      setInviteOpen(false);
+      resetInviteDialog();
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Failed to send invite.', 'error');
+    } finally {
+      setInviteBusy(false);
     }
   };
 
@@ -142,16 +230,28 @@ export const ProjectDetail = () => {
 
   return (
     <Layout>
+      <EmailVerificationBanner />
       <Box sx={{ mb: 4 }}>
-        <Button
-          variant="outlined"
-          color="inherit"
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/')}
-          sx={{ mb: 2 }}
-        >
-          Back to Dashboard
-        </Button>
+        <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={2} sx={{ mb: 2 }}>
+          <Button
+            variant="outlined"
+            color="inherit"
+            startIcon={<ArrowBackIcon />}
+            onClick={() => navigate('/')}
+          >
+            Back to Dashboard
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<PersonAddIcon />}
+            onClick={() => {
+              resetInviteDialog();
+              setInviteOpen(true);
+            }}
+          >
+            Invite Client
+          </Button>
+        </Stack>
         <Stack direction="row" spacing={2} alignItems="center">
           <Typography variant="h3" sx={{ fontWeight: 800 }}>
             {project?.name}
@@ -163,6 +263,38 @@ export const ProjectDetail = () => {
         </Typography>
       </Box>
 
+      {engagement && (
+        <Paper variant="outlined" sx={{ p: 2.5, mb: 3, borderRadius: 2 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+            Client Engagement
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary">Messages sent</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>{engagement.messages_sent ?? 0}</Typography>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary">Avg response (s)</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                {engagement.avg_response_time_seconds != null
+                  ? Math.round(engagement.avg_response_time_seconds)
+                  : '—'}
+              </Typography>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary">Sessions completed</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>{engagement.sessions_completed ?? 0}</Typography>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary">Last active</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600, mt: 0.5 }}>
+                {engagement.last_active ? formatDateTime(engagement.last_active) : '—'}
+              </Typography>
+            </Grid>
+          </Grid>
+        </Paper>
+      )}
+
       <Box sx={{ width: '100%', mb: 4 }}>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={tabValue} onChange={handleTabChange} aria-label="project-details-tabs">
@@ -172,7 +304,6 @@ export const ProjectDetail = () => {
           </Tabs>
         </Box>
 
-        {/* Sessions Tab */}
         {tabValue === 0 && (
           <Box sx={{ py: 3 }}>
             {sessions.length === 0 ? (
@@ -221,7 +352,6 @@ export const ProjectDetail = () => {
           </Box>
         )}
 
-        {/* Contradictions Tab */}
         {tabValue === 1 && (
           <Box sx={{ py: 3 }}>
             {contradictions.length === 0 ? (
@@ -279,7 +409,6 @@ export const ProjectDetail = () => {
           </Box>
         )}
 
-        {/* Requirement Atoms Tab */}
         {tabValue === 2 && (
           <Box sx={{ py: 3 }}>
             {atoms.length === 0 ? (
@@ -321,7 +450,6 @@ export const ProjectDetail = () => {
         )}
       </Box>
 
-      {/* Resolve Override Panel Dialog */}
       <ConflictOverridePanel
         open={Boolean(selectedContradiction)}
         contradiction={selectedContradiction}
@@ -329,6 +457,73 @@ export const ProjectDetail = () => {
         onResolveSubmit={handleResolveSubmit}
         loading={resolving}
       />
+
+      <Dialog
+        open={inviteOpen}
+        onClose={() => {
+          setInviteOpen(false);
+          resetInviteDialog();
+        }}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Invite Client</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Look up an existing client in your organization by email, or send a one-time signup invite.
+          </Typography>
+          <TextField
+            label="Client email"
+            type="email"
+            fullWidth
+            value={inviteEmail}
+            onChange={(e) => {
+              setInviteEmail(e.target.value);
+              setInviteStep('lookup');
+              setInviteLookup(null);
+            }}
+            disabled={inviteBusy}
+            sx={{ mt: 1 }}
+          />
+          {inviteStep === 'found' && inviteLookup && (
+            <Alert severity="success" sx={{ mt: 2 }}>
+              Found <strong>{inviteLookup.name}</strong> ({inviteLookup.email}). Add them to this project?
+            </Alert>
+          )}
+          {inviteStep === 'not_found' && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              No account with that email in your organization. Send a signup invite link instead?
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            color="inherit"
+            onClick={() => {
+              setInviteOpen(false);
+              resetInviteDialog();
+            }}
+            disabled={inviteBusy}
+          >
+            Cancel
+          </Button>
+          {inviteStep === 'lookup' && (
+            <Button variant="contained" onClick={handleInviteLookup} loading={inviteBusy}>
+              Look up
+            </Button>
+          )}
+          {inviteStep === 'found' && (
+            <Button variant="contained" onClick={handleAddExistingClient} loading={inviteBusy}>
+              Add to project
+            </Button>
+          )}
+          {inviteStep === 'not_found' && (
+            <Button variant="contained" onClick={handleSendSignupInvite} loading={inviteBusy}>
+              Send signup invite
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
     </Layout>
   );
 };
