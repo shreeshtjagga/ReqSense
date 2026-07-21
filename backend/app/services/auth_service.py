@@ -122,7 +122,41 @@ async def register_user(
     password: str,
     role: str,
     organization_id: Optional[uuid.UUID],
+    invite_token: Optional[uuid.UUID] = None,
 ) -> User:
+    from app.models.project import ProjectClient
+    from app.models.project_invite_token import ProjectInviteToken
+
+    invite = None
+    if invite_token:
+        invite_res = await db.execute(
+            select(ProjectInviteToken).where(ProjectInviteToken.id == invite_token)
+        )
+        invite = invite_res.scalar_one_or_none()
+        if not invite:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid invite token.",
+            )
+        if invite.used:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This invite has already been used.",
+            )
+        if _as_utc(invite.expires_at) < datetime.now(timezone.utc):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This invite has expired.",
+            )
+        if invite.email.lower() != email.lower():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email must match the invite address.",
+            )
+        # Invite dictates org + role (single-role accounts)
+        organization_id = invite.organization_id
+        role = invite.role
+
     # Duplicate email check
     existing = await db.execute(select(User).where(User.email == email))
     if existing.scalar_one_or_none():
@@ -140,6 +174,12 @@ async def register_user(
     )
     db.add(user)
     await db.flush()  # get user.id without committing
+
+    if invite:
+        db.add(ProjectClient(project_id=invite.project_id, client_id=user.id))
+        invite.used = True
+        db.add(invite)
+
     return user
 
 

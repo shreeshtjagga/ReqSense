@@ -186,36 +186,28 @@ async def get_scoped_project(
     if user.role == "admin":
         return project
 
-    # Org check: user must belong to the project's organization
-    if not project.organization_id or user.organization_id != project.organization_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found.",
-        )
+    # Developer owner check
+    if user.role == "developer" and project.developer_id == user.id:
+        return project
 
-    # Role check
+    # Org check (if both belong to same org)
+    if project.organization_id and user.organization_id == project.organization_id:
+        if user.role == "developer":
+            return project
+
+    # Client membership check
     if user.role == "client":
-        # Client must be explicitly invited to the project (exist in project_clients)
         client_res = await db.execute(
             select(ProjectClient).where(
                 ProjectClient.project_id == project_id,
                 ProjectClient.client_id == user.id,
             )
         )
-        if not client_res.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Project not found.",
-            )
-    elif user.role == "developer":
-        # Must be developer_id or same org + developer (which they are, since org is matched above)
-        pass
-    else:
-        # Unknown role
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found.",
-        )
+        if client_res.scalar_one_or_none():
+            return project
 
-    return project
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Project not found.",
+    )
 

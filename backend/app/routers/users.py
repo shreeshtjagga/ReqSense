@@ -12,7 +12,7 @@ from app.database import get_db
 from app.dependencies import CurrentUser, require_roles
 from app.models.audit_log import AuditLog
 from app.models.user import User
-from app.schemas.user import UserAdminCreate, UserAdminUpdate, UserResponse
+from app.schemas.user import UserAdminCreate, UserAdminUpdate, UserResponse, UserLookupResponse
 from app.services.auth_service import hash_password
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -21,6 +21,28 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.get("/me", response_model=UserResponse, summary="Get current user profile")
 async def get_me(current_user: CurrentUser) -> UserResponse:
     return UserResponse.model_validate(current_user)
+
+
+@router.get("/lookup", response_model=UserLookupResponse, summary="Look up user by email")
+async def lookup_user(
+    email: str,
+    current_user: User = Depends(require_roles("admin", "developer")),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Look up user by email, scoped to the current user's organization.
+    """
+    query = select(User).where(User.email == email)
+    if current_user.organization_id:
+        query = query.where(User.organization_id == current_user.organization_id)
+    res = await db.execute(query)
+    user = res.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found in your organization."
+        )
+    return user
 
 
 # ── Platform / Organization Admin CRUD ────────────────────────────────────────

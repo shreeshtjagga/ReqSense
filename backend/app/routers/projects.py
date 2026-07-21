@@ -1,5 +1,6 @@
 """Projects router — full Phase 2 CRUD with scoped access."""
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,10 +11,13 @@ from app.database import get_db
 from app.dependencies import CurrentUser, get_current_user, get_scoped_project, require_roles
 from app.models.audit_log import AuditLog
 from app.models.project import Project, ProjectClient
+from app.models.project_invite_token import ProjectInviteToken
 from app.schemas.project import (
     ProjectClientAdd,
     ProjectClientRead,
     ProjectCreate,
+    ProjectInviteCreate,
+    ProjectInviteRead,
     ProjectRead,
     ProjectUpdate,
 )
@@ -60,21 +64,14 @@ async def list_projects(
         result = await db.execute(select(Project))
     elif current_user.role == "developer":
         result = await db.execute(
-            select(Project)
-            .where(
-                Project.organization_id == current_user.organization_id,
-                Project.developer_id == current_user.id
-            )
+            select(Project).where(Project.developer_id == current_user.id)
         )
     else:
         # client — projects where they are invited
         result = await db.execute(
             select(Project)
             .join(ProjectClient, ProjectClient.project_id == Project.id)
-            .where(
-                Project.organization_id == current_user.organization_id,
-                ProjectClient.client_id == current_user.id
-            )
+            .where(ProjectClient.client_id == current_user.id)
         )
     return result.scalars().all()
 
@@ -141,6 +138,11 @@ async def add_client_to_project(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid client_id or client belongs to a different organization."
         )
+    if client_user.role != "client":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="That user is not a client account. Each email has one role — use a separate client email.",
+        )
 
     # Check if client is already invited
     existing_res = await db.execute(
@@ -191,3 +193,75 @@ async def remove_client_from_project(
         raise HTTPException(status_code=404, detail="Client not on project")
     await db.delete(pc)
     await db.commit()
+
+
+@router.post(
+    "/{project_id}/invites",
+    response_model=ProjectInviteRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a one-time signup invite for a client email",
+)
+async def create_project_invite(
+    body: ProjectInviteCreate,
+    project: Project = Depends(get_scoped_project),
+    current_user: User = Depends(require_roles("admin", "developer")),
+    db: AsyncSession = Depends(get_db),
+):
+    if not project.organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Project must belong to an organization before inviting clients.",
+        )
+
+    email = body.email.strip().lower()
+
+    # If user already exists in this org, tell the developer to use Add Client instead
+    existing = await db.execute(select(User).where(User.email == email))
+    existing_user = existing.scalar_one_or_none()
+    if existing_user:
+        if existing_user.organization_id == project.organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User already registered. Use Add Client with their email lookup instead.",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="That email is already registered to another organization.",
+        )
+
+    invite = ProjectInviteToken(
+        email=email,
+        project_id=project.id,
+        organization_id=project.organization_id,
+        role=body.role,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        used=False,
+    )
+    db.add(invite)
+    await db.flush()
+
+    db.add(AuditLog(
+        user_id=current_user.id,
+        action="create_project_invite",
+        entity_type="project",
+        entity_id=project.id,
+        metadata={"email": email, "role": body.role, "invite_id": str(invite.id)},
+    ))
+    await db.commit()
+    await db.refresh(invite)
+
+    from app.config import get_settings
+    from app.services.notification_service import send_project_invite_email
+    settings = get_settings()
+    invite_url = (
+        f"{settings.FRONTEND_URL}/register"
+        f"?invite={invite.id}&org={project.organization_id}&role={body.role}"
+        f"&email={email}"
+    )
+    send_project_invite_email(
+        to_email=email,
+        project_name=project.name,
+        invite_url=invite_url,
+    )
+
+    return invite

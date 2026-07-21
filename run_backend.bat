@@ -11,7 +11,7 @@ if not exist ".venv\Scripts\activate.bat" (
 call .venv\Scripts\activate
 
 echo [ReqSense] Starting Celery worker in a separate window...
-start "ReqSense Celery Worker" cmd /k "title ReqSense AI - Celery Worker && cd /d %~dp0backend && call .venv\Scripts\activate && celery -A app.tasks.celery_app worker --loglevel=info"
+start "ReqSense Celery Worker" cmd /k "title ReqSense AI - Celery Worker && cd /d %~dp0backend && call .venv\Scripts\activate && celery -A app.tasks.celery_app worker --loglevel=info -P solo"
 
 echo [ReqSense] Starting FastAPI application server...
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
