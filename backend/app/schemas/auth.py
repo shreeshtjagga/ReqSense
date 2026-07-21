@@ -17,6 +17,7 @@ class RegisterRequest(BaseModel):
     password: str = Field(..., min_length=8, max_length=128)
     role: str = Field(..., pattern="^(client|developer|admin)$")
     organization_id: Optional[uuid.UUID] = None
+    invite_token: Optional[uuid.UUID] = None
 
     @field_validator("password")
     @classmethod

@@ -33,3 +33,12 @@ class UserAdminUpdate(BaseModel):
     role: Optional[str] = None
     is_active: Optional[bool] = None
 
+
+class UserLookupResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    email: EmailStr
+    role: str
+
+    model_config = {"from_attributes": True}
+

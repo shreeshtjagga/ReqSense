@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, Float, ForeignKey, String, Text, func
 from sqlalchemy import Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -61,6 +61,10 @@ class Project(Base):
     status: Mapped[str] = mapped_column(
         String(50), default="active", nullable=False
     )  # 'active', 'completed', 'on_hold', 'archived'
+    # Chroma distance threshold for contradiction recall (lower = stricter)
+    chroma_similarity_threshold: Mapped[float] = mapped_column(
+        Float, default=0.3, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

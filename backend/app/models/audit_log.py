@@ -33,3 +33,9 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )
+
+    def __init__(self, **kwargs):
+        if "metadata" in kwargs:
+            kwargs["metadata_"] = kwargs.pop("metadata")
+        super().__init__(**kwargs)
+
