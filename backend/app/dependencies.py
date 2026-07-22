@@ -186,16 +186,7 @@ async def get_scoped_project(
     if user.role == "admin":
         return project
 
-    # Developer owner check
-    if user.role == "developer" and project.developer_id == user.id:
-        return project
-
-    # Org check (if both belong to same org)
-    if project.organization_id and user.organization_id == project.organization_id:
-        if user.role == "developer":
-            return project
-
-    # Client membership check
+    # Client membership check (independent of user organization)
     if user.role == "client":
         client_res = await db.execute(
             select(ProjectClient).where(
@@ -204,6 +195,17 @@ async def get_scoped_project(
             )
         )
         if client_res.scalar_one_or_none():
+            return project
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found.",
+        )
+
+    # Developer check: developer_id or same organization
+    if user.role == "developer":
+        if project.developer_id == user.id:
+            return project
+        if project.organization_id and user.organization_id == project.organization_id:
             return project
 
     raise HTTPException(

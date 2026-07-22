@@ -1,16 +1,28 @@
 import React from 'react';
-import { Typography, Box, Stack } from '@mui/material';
+import { Typography, Box, Stack, IconButton, Tooltip } from '@mui/material';
 import Card from '../common/Card';
 import Badge from '../common/Badge';
 import FolderIcon from '@mui/icons-material/Folder';
+import HistoryIcon from '@mui/icons-material/History';
+import { useNavigate } from 'react-router-dom';
 import { PROJECT_DOMAIN_LABELS } from '../../utils/constants';
 import { formatDate } from '../../utils/helpers';
 
-export const ProjectCard = ({ project, onClick }) => {
-  const { name, description, domain, status, created_at } = project;
+export const ProjectCard = ({ project, onClick, onHistoryClick }) => {
+  const { id, name, description, domain, status, created_at } = project;
+  const navigate = useNavigate();
+
+  const handleHistory = (e) => {
+    e.stopPropagation();
+    if (onHistoryClick) {
+      onHistoryClick(project);
+    } else {
+      navigate(`/client/projects/${id}/sessions`);
+    }
+  };
 
   return (
-    <Card onClick={onClick} sx={{ height: '100%' }}>
+    <Card onClick={onClick} sx={{ height: '100%', position: 'relative' }}>
       <Stack spacing={2} sx={{ height: '100%', justifyContent: 'space-between' }}>
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1.5 }}>
@@ -29,7 +41,14 @@ export const ProjectCard = ({ project, onClick }) => {
             >
               <FolderIcon />
             </Box>
-            <Badge label={status} type="feature" /> {/* Same status color mapping works */}
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Tooltip title="View Session History">
+                <IconButton size="small" onClick={handleHistory} sx={{ color: 'text.secondary', '&:hover': { color: 'secondary.main' } }}>
+                  <HistoryIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Badge label={status} type="feature" />
+            </Stack>
           </Box>
 
           <Typography variant="h5" sx={{ fontWeight: 700, mb: 1, color: 'text.primary' }}>

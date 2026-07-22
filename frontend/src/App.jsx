@@ -7,11 +7,12 @@ import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import ForgotPassword from './pages/auth/ForgotPassword';
 import ResetPassword from './pages/auth/ResetPassword';
-import NotFound from './pages/NotFound';
+import AcceptInvite from './pages/auth/AcceptInvite';
 
 // Client Pages
 import ClientDashboard from './pages/client/ClientDashboard';
 import ClientSessions from './pages/client/ClientSessions';
+import ClientProjectSessions from './pages/client/ClientProjectSessions';
 import ChatSession from './pages/client/ChatSession';
 import ChangeRequestForm from './pages/client/ChangeRequestForm';
 
@@ -69,6 +70,7 @@ export const App = () => {
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/accept-invite" element={<AcceptInvite />} />
 
         {/* Private Unified Dashboard Root */}
         <Route
@@ -86,6 +88,14 @@ export const App = () => {
           element={
             <PrivateRoute allowedRoles={['client']}>
               <ClientSessions />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/client/projects/:projectId/sessions"
+          element={
+            <PrivateRoute allowedRoles={['client', 'developer', 'admin']}>
+              <ClientProjectSessions />
             </PrivateRoute>
           }
         />
@@ -134,7 +144,7 @@ export const App = () => {
         <Route
           path="/dev/srs"
           element={
-            <PrivateRoute allowedRoles={['developer', 'admin', 'client']}>
+            <PrivateRoute allowedRoles={['developer', 'admin']}>
               <SRSPage />
             </PrivateRoute>
           }

@@ -101,8 +101,16 @@ async def end_session(
     session.ended_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(session)
-    
-    # Enqueue background task
+    return session
+
+
+@router.post("/{session_id}/generate-srs", response_model=SessionRead)
+async def trigger_srs_generation(
+    session_id: uuid.UUID,
+    current_user: User = Depends(require_roles("admin", "developer")),
+    db: AsyncSession = Depends(get_db),
+):
+    session = await _get_scoped_session(session_id, current_user, db)
     generate_srs_task.delay(str(session_id))
     return session
 

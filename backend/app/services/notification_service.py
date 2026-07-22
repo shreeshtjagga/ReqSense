@@ -12,16 +12,7 @@ from typing import Any, Dict
 logger = logging.getLogger(__name__)
 
 
-def send_verification_email(to_email: str, token: str, verify_url: str) -> None:
-    """Enqueue an email verification email."""
-    from app.tasks.email_tasks import send_email_task  # late import — avoids circular dep
 
-    send_email_task.delay(
-        to_email=to_email,
-        template="verify_email",
-        context={"token": token, "verify_url": verify_url},
-    )
-    logger.info("Queued verify_email to %s", to_email)
 
 
 def send_password_reset_email(to_email: str, token: str, reset_url: str) -> None:

@@ -17,7 +17,7 @@ class RegisterRequest(BaseModel):
     password: str = Field(..., min_length=8, max_length=128)
     role: str = Field(..., pattern="^(client|developer|admin)$")
     organization_id: Optional[uuid.UUID] = None
-    invite_token: Optional[uuid.UUID] = None
+    invite_token: Optional[str] = None
 
     @field_validator("password")
     @classmethod
@@ -90,8 +90,4 @@ class TokenPayload(BaseModel):
     org: Optional[str]   # organization UUID as string, nullable
     exp: datetime
     type: str         # "access" or "stream"
-
-
-class VerifyEmailRequest(BaseModel):
-    token: str
 

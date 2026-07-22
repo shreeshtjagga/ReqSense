@@ -229,11 +229,13 @@ async def create_project_invite(
             detail="That email is already registered to another organization.",
         )
 
+    token = str(uuid.uuid4())
     invite = ProjectInviteToken(
         email=email,
         project_id=project.id,
         organization_id=project.organization_id,
         role=body.role,
+        token=token,
         expires_at=datetime.now(timezone.utc) + timedelta(days=7),
         used=False,
     )
@@ -245,7 +247,7 @@ async def create_project_invite(
         action="create_project_invite",
         entity_type="project",
         entity_id=project.id,
-        metadata={"email": email, "role": body.role, "invite_id": str(invite.id)},
+        metadata={"email": email, "role": body.role, "invite_id": str(invite.id), "token": token},
     ))
     await db.commit()
     await db.refresh(invite)
@@ -253,11 +255,7 @@ async def create_project_invite(
     from app.config import get_settings
     from app.services.notification_service import send_project_invite_email
     settings = get_settings()
-    invite_url = (
-        f"{settings.FRONTEND_URL}/register"
-        f"?invite={invite.id}&org={project.organization_id}&role={body.role}"
-        f"&email={email}"
-    )
+    invite_url = f"{settings.FRONTEND_URL}/accept-invite?token={token}"
     send_project_invite_email(
         to_email=email,
         project_name=project.name,
@@ -265,3 +263,87 @@ async def create_project_invite(
     )
 
     return invite
+
+
+from pydantic import BaseModel
+
+class AcceptInviteRequest(BaseModel):
+    token: str
+
+
+def _as_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+@router.post("/invites/accept", summary="Accept a project invite token")
+async def accept_project_invite(
+    body: AcceptInviteRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    token_str = body.token.strip()
+    is_uuid = False
+    try:
+        parsed_uuid = uuid.UUID(token_str)
+        is_uuid = True
+    except ValueError:
+        parsed_uuid = None
+
+    if is_uuid:
+        q = select(ProjectInviteToken).where(
+            (ProjectInviteToken.token == token_str) | (ProjectInviteToken.id == parsed_uuid)
+        )
+    else:
+        q = select(ProjectInviteToken).where(ProjectInviteToken.token == token_str)
+
+    result = await db.execute(q)
+    invite = result.scalar_one_or_none()
+
+    if not invite:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invite token not found.",
+        )
+    if invite.used:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This invite token has already been used.",
+        )
+    if _as_utc(invite.expires_at) < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This invite token has expired.",
+        )
+
+    user_res = await db.execute(select(User).where(User.email == invite.email.lower()))
+    user = user_res.scalar_one_or_none()
+
+    if user:
+        pc_res = await db.execute(
+            select(ProjectClient).where(
+                ProjectClient.project_id == invite.project_id,
+                ProjectClient.client_id == user.id,
+            )
+        )
+        if not pc_res.scalar_one_or_none():
+            db.add(ProjectClient(project_id=invite.project_id, client_id=user.id))
+
+        invite.used = True
+        invite.accepted_at = datetime.now(timezone.utc)
+        await db.commit()
+
+        return {
+            "status": "accepted",
+            "user_exists": True,
+            "project_id": str(invite.project_id),
+            "email": invite.email,
+        }
+    else:
+        return {
+            "status": "pending_registration",
+            "user_exists": False,
+            "project_id": str(invite.project_id),
+            "email": invite.email,
+            "invite_token": str(invite.token or invite.id),
+        }

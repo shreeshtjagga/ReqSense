@@ -64,6 +64,7 @@ class AriaAgent:
         response = client.chat.completions.create(
             model=settings.GROQ_MODEL,
             messages=messages,
+            max_tokens=250,
             timeout=settings.GROQ_TIMEOUT_SECONDS
         )
 
@@ -110,6 +111,7 @@ class AriaAgent:
             return client.chat.completions.create(
                 model=settings.GROQ_MODEL,
                 messages=messages,
+                max_tokens=250,
                 stream=True,
                 stream_options={"include_usage": True},
                 timeout=settings.GROQ_TIMEOUT_SECONDS

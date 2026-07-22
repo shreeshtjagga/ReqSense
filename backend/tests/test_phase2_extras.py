@@ -5,7 +5,6 @@ from sqlalchemy import select
 from app.models.user import User
 from app.models.refresh_token import RefreshToken
 from app.models.email_log import EmailLog
-from app.services.auth_service import create_email_verification_token
 from app.tasks.celery_app import celery_app
 
 # Enable eager execution of Celery tasks during tests
@@ -19,50 +18,7 @@ async def get_auth_headers(client: AsyncClient, email: str, password: str = "Pas
     return {"Authorization": f"Bearer {token}"}
 
 
-@pytest.mark.asyncio
-async def test_email_verification_flow(client: AsyncClient, test_db):
-    """
-    Test registering a user trigger a verify_email task,
-    and then consuming the token to verify the email.
-    """
-    # 1. Register a user
-    email = "verify_test@example.com"
-    resp = await client.post(
-        "/api/v1/auth/register",
-        json={
-            "name": "Verify User",
-            "email": email,
-            "password": "VerifyPassword1",
-            "role": "client"
-        }
-    )
-    assert resp.status_code == 201
-    user_id = uuid.UUID(resp.json()["id"])
 
-    # 2. Check that email verification email log entry is created
-    result = await test_db.execute(
-        select(EmailLog).where(EmailLog.to_email == email, EmailLog.template == "verify_email")
-    )
-    log = result.scalars().first()
-    assert log is not None
-    assert log.status == "sent"
-
-    # 3. Check that the user has email_verified = False initially
-    user_res = await test_db.execute(select(User).where(User.id == user_id))
-    user = user_res.scalar_one()
-    assert user.email_verified is False
-
-    # 4. Generate email verification token (simulating what gets sent in email)
-    token = create_email_verification_token(user_id)
-
-    # 5. Consume token
-    resp_verify = await client.post("/api/v1/auth/verify-email", json={"token": token})
-    assert resp_verify.status_code == 200
-    assert resp_verify.json()["message"] == "Email verification successful."
-
-    # 6. Check that the user is now verified
-    await test_db.refresh(user)
-    assert user.email_verified is True
 
 
 @pytest.mark.asyncio

@@ -13,7 +13,6 @@ class UserResponse(BaseModel):
     email: EmailStr
     role: str
     is_active: bool
-    email_verified: bool
     organization_id: Optional[uuid.UUID]
     created_at: datetime
 

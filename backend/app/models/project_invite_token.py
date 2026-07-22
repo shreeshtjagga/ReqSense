@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -28,8 +29,10 @@ class ProjectInviteToken(Base):
         nullable=False,
     )
     role: Mapped[str] = mapped_column(String(50), default="client", nullable=False)
+    token: Mapped[Optional[str]] = mapped_column(String(255), unique=True, index=True, nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    accepted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

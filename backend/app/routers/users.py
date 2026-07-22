@@ -85,7 +85,6 @@ async def admin_create_user(
         role=body.role,
         organization_id=target_org_id,
         is_active=True,
-        email_verified=False,
     )
     db.add(user)
     await db.flush()  # get the new user's ID before committing

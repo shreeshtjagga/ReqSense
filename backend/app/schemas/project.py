@@ -60,9 +60,11 @@ class ProjectInviteRead(BaseModel):
     id: uuid.UUID
     email: str
     project_id: uuid.UUID
-    organization_id: uuid.UUID
+    organization_id: Optional[uuid.UUID] = None
     role: str
+    token: Optional[str] = None
     expires_at: datetime
     created_at: datetime
+    accepted_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}

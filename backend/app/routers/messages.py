@@ -89,9 +89,11 @@ def _find_keyword_match(
     if best is None or best_score < min_overlap:
         return None
     return {
+        "id": best.id,
         "document": best.raw_text,
         "distance": 1.0 - best_score,
         "metadata": {
+            "atom_id": str(best.id),
             "subject": best.subject or "",
             "action": best.action or "",
             "constraint_text": best.constraint_text or "",
@@ -187,7 +189,7 @@ async def create_message(
 
     # ── 2. Fetch session history from Redis — pre-transaction ────────────────
     try:
-        history = await SessionMemory.get_messages(session_id)
+        history = await SessionMemory.get_messages(session_id, db=db)
     except Exception as exc:
         logger.warning("Redis unavailable; proceeding with empty history: %s", exc)
         history = []
@@ -322,6 +324,7 @@ async def create_message(
             db.add(usage_log)
 
         # Write requirement atoms + contradictions
+        persisted_atoms = []
         for atom_dict, chroma_match, contradiction_result in atom_contradiction_pairs:
             ra = RequirementAtom(
                 session_id=session_id,
@@ -333,6 +336,9 @@ async def create_message(
                 status="active",
             )
             db.add(ra)
+            await db.flush()
+            ra.embedding_id = str(ra.id)
+            persisted_atoms.append((atom_dict, ra))
 
             if (
                 contradiction_result
@@ -341,9 +347,15 @@ async def create_message(
             ):
                 import uuid as _uuid
                 c_id = _uuid.uuid4()
+                atom_1_id = chroma_match.get("id") if chroma_match else None
+                similarity_score = float(chroma_match.get("distance", 0.0)) if chroma_match else None
+
                 c = Contradiction(
                     id=c_id,
                     session_id=session_id,
+                    atom_1_id=atom_1_id,
+                    atom_2_id=ra.id,
+                    similarity_score=similarity_score,
                     confidence=contradiction_result.get("confidence"),
                     conflict_type=contradiction_result.get("conflict_type"),
                     aria_message=contradiction_result.get("aria_message", ""),
@@ -409,17 +421,18 @@ async def create_message(
 
     # ── 8. Embed new atoms into Chroma (best-effort, after commit) ───────────
     if not _is_test_env():
-        for atom_dict, _, _ in atom_contradiction_pairs:
+        for atom_dict, ra in persisted_atoms:
             try:
                 raw_text = atom_dict.get("raw_text", sanitized_content)
                 embedding = EmbeddingService.embed(raw_text)
                 VectorStore.upsert_atoms(
                     session_id=session.project_id,
                     atoms=[{
-                        "id": uuid.uuid4(),
+                        "id": ra.id,
                         "embedding": embedding,
                         "document": raw_text,
                         "metadata": {
+                            "atom_id": str(ra.id),
                             "subject": atom_dict.get("subject", ""),
                             "action": atom_dict.get("action", ""),
                             "constraint_text": atom_dict.get("constraint_text", ""),

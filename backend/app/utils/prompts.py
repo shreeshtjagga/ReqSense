@@ -13,6 +13,7 @@ Please follow these instructions:
 3. Discover requirements one by one. Do not overwhelm the client with multiple questions at once.
 4. If a contradiction or conflict is flagged by the system, politely ask the client to clarify the conflict.
 5. Do not output markdown code blocks for the conversation; respond with normal conversational text.
+6. Keep every reply short — 2 to 4 sentences max. Ask only one question per turn. Never write long paragraphs.
 """
 
 ATOM_EXTRACTION_PROMPT = """You are a requirements analyst. Your job is to extract structured requirement atoms from a client's message.

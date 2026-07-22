@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
 import ProjectCard from '../../components/dashboard/ProjectCard';
 import { listProjects } from '../../api/projects';
-import { createSession } from '../../api/sessions';
+import { createSession, listSessionsForProject } from '../../api/sessions';
 import { useProjectStore } from '../../store/projectStore';
 import { useToastStore } from '../../store/toastStore';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
@@ -173,6 +173,13 @@ export const ClientDashboard = () => {
   const handleStartSession = async (project) => {
     try {
       setActiveProject(project);
+      const existingSessions = await listSessionsForProject(project.id);
+      const activeSession = existingSessions?.find((s) => s.status === 'active');
+      if (activeSession) {
+        showToast('Resuming active session...', 'info');
+        navigate(`/client/sessions/${activeSession.id}`);
+        return;
+      }
       const session = await createSession({ project_id: project.id });
       showToast('New requirement session started!', 'success');
       navigate(`/client/sessions/${session.id}`);
@@ -183,7 +190,6 @@ export const ClientDashboard = () => {
 
   return (
     <Layout>
-      <EmailVerificationBanner />
       {/* Page header */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h3" sx={{ fontWeight: 800, mb: 1 }}>
@@ -196,42 +202,7 @@ export const ClientDashboard = () => {
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
-      {/* How it works — info strip */}
-      <Paper
-        elevation={0}
-        sx={{
-          mb: 4,
-          p: 2.5,
-          borderRadius: 3,
-          border: '1px solid',
-          borderColor: 'divider',
-          bgcolor: 'background.paper',
-        }}
-      >
-        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 1, fontSize: '0.7rem' }}>
-          How it works
-        </Typography>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} divider={<Box sx={{ width: '1px', bgcolor: 'divider' }} />}>
-          {[
-            { step: '1', label: 'Developer creates a project and invites you' },
-            { step: '2', label: 'You chat with ARIA — describe your software idea in plain language' },
-            { step: '3', label: 'ARIA extracts structured requirements automatically' },
-            { step: '4', label: 'Developer reviews, resolves contradictions, and generates SRS' },
-          ].map((item) => (
-            <Stack key={item.step} direction="row" spacing={1.5} alignItems="flex-start" sx={{ flex: 1 }}>
-              <Chip
-                label={item.step}
-                size="small"
-                color="secondary"
-                sx={{ fontWeight: 700, minWidth: 28, height: 24 }}
-              />
-              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.5 }}>
-                {item.label}
-              </Typography>
-            </Stack>
-          ))}
-        </Stack>
-      </Paper>
+
 
       {/* Projects section */}
       {loading ? (
