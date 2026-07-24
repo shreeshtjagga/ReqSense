@@ -11,13 +11,9 @@ import {
   Box,
 } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/Dashboard';
-import ChatIcon from '@mui/icons-material/Chat';
-import AssignmentIcon from '@mui/icons-material/Assignment';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import PeopleIcon from '@mui/icons-material/People';
 import HistoryIcon from '@mui/icons-material/History';
-import RateReviewIcon from '@mui/icons-material/RateReview';
-import ListAltIcon from '@mui/icons-material/ListAlt';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { ROLES } from '../../utils/constants';
@@ -31,33 +27,17 @@ export const Sidebar = ({ mobileOpen, onDrawerToggle }) => {
 
   const role = user?.role;
 
-  // Define sidebar navigation items based on role
-  const getNavItems = () => {
-    const common = [{ text: 'Dashboard', icon: <DashboardIcon />, path: '/' }];
+  // Sidebar is only used for Admin management
+  if (role !== ROLES.ADMIN) {
+    return null;
+  }
 
-    if (role === ROLES.CLIENT) {
-      // Chat Sessions and Change Requests are accessed via the project hub (/client/projects/:id)
-      return [...common];
-    }
-
-    if (role === ROLES.DEVELOPER) {
-      // All project management options (Feature Status, Change Requests, SRS Documents) are accessed via the project detail page (/dev/projects/:id)
-      return [...common];
-    }
-
-    if (role === ROLES.ADMIN) {
-      return [
-        ...common,
-        { text: 'User Management', icon: <PeopleIcon />, path: '/admin/users' },
-        { text: 'Analytics Reports', icon: <BarChartIcon />, path: '/admin/analytics' },
-        { text: 'Audit Logs', icon: <HistoryIcon />, path: '/admin/audit-logs' },
-      ];
-    }
-
-    return common;
-  };
-
-  const navItems = getNavItems();
+  const navItems = [
+    { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
+    { text: 'User Management', icon: <PeopleIcon />, path: '/admin/users' },
+    { text: 'Analytics Reports', icon: <BarChartIcon />, path: '/admin/analytics' },
+    { text: 'Audit Logs', icon: <HistoryIcon />, path: '/admin/audit-logs' },
+  ];
 
   const drawerContent = (
     <Box>
@@ -123,7 +103,7 @@ export const Sidebar = ({ mobileOpen, onDrawerToggle }) => {
         open={mobileOpen}
         onClose={onDrawerToggle}
         ModalProps={{
-          keepMounted: true, // Better open performance on mobile.
+          keepMounted: true,
         }}
         sx={{
           display: { xs: 'block', sm: 'none' },
