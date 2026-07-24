@@ -316,8 +316,7 @@ export const ProjectDetail = () => {
                 <Table aria-label="sessions-table">
                   <TableHead sx={{ bgcolor: 'action.hover' }}>
                     <TableRow>
-                      <TableCell><strong>Session ID</strong></TableCell>
-                      <TableCell><strong>Client</strong></TableCell>
+                      <TableCell><strong>#</strong></TableCell>
                       <TableCell><strong>Status</strong></TableCell>
                       <TableCell><strong>Stability</strong></TableCell>
                       <TableCell><strong>Msg Count</strong></TableCell>
@@ -326,10 +325,9 @@ export const ProjectDetail = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {sessions.map((sess) => (
+                    {sessions.map((sess, idx) => (
                       <TableRow key={sess.id}>
-                        <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{sess.id}</TableCell>
-                        <TableCell>{sess.client_name || 'Anonymous Client'}</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }}>#{idx + 1}</TableCell>
                         <TableCell sx={{ textTransform: 'capitalize' }}>{sess.status}</TableCell>
                         <TableCell>{sess.stability_score ? `${Math.round(sess.stability_score)}%` : '100%'}</TableCell>
                         <TableCell>{sess.total_messages ?? 0}</TableCell>
