@@ -46,7 +46,11 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 
 // ── Project Overview Tab ──────────────────────────────────────────────────────
-const ProjectOverviewTab = ({ project, sessions }) => {
+const ProjectOverviewTab = ({ project, sessions, loadingSessions, onStartSession, starting }) => {
+  const navigate = useNavigate();
+
+  const activeSession = sessions.find((s) => s.status === 'active');
+
   return (
     <Box>
       <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
@@ -72,13 +76,102 @@ const ProjectOverviewTab = ({ project, sessions }) => {
         </Grid>
       </Grid>
 
-      <Paper variant="outlined" sx={{ p: 3, borderRadius: 3 }}>
+      <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, mb: 4 }}>
         <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
           Project Description
         </Typography>
         <Typography variant="body1" color="text.secondary">
           {project?.description || 'No detailed description provided for this project.'}
         </Typography>
+      </Paper>
+
+      {/* ── Chat / Sessions Section ─────────────────────────────────────── */}
+      <Paper
+        variant="outlined"
+        sx={{
+          p: 3,
+          borderRadius: 3,
+          borderColor: activeSession ? 'success.main' : 'divider',
+          bgcolor: activeSession ? 'success.50' : 'background.paper',
+        }}
+      >
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+          <Box>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              Requirement Gathering Chat
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {activeSession
+                ? 'You have an active session in progress.'
+                : 'Start a chat with ARIA to gather your requirements.'}
+            </Typography>
+          </Box>
+          <Button
+            variant="contained"
+            startIcon={activeSession ? <PlayArrowIcon /> : <AddIcon />}
+            onClick={onStartSession}
+            loading={starting}
+            color={activeSession ? 'success' : 'primary'}
+          >
+            {activeSession ? 'Resume Session' : 'Start New Session'}
+          </Button>
+        </Stack>
+
+        {loadingSessions ? (
+          <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 2 }} />
+        ) : sessions.length > 0 ? (
+          <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+            <Table size="small">
+              <TableHead sx={{ bgcolor: 'action.hover' }}>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 700 }}>#</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Started At</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Messages</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700 }}>Action</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {sessions.slice(0, 5).map((sess, idx) => {
+                  const isActive = sess.status === 'active';
+                  return (
+                    <TableRow key={sess.id} hover>
+                      <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }}>#{idx + 1}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={isActive ? 'Active' : 'Completed'}
+                          color={isActive ? 'success' : 'default'}
+                          size="small"
+                          sx={{ fontWeight: 700 }}
+                        />
+                      </TableCell>
+                      <TableCell>{formatDateTime(sess.started_at || sess.created_at)}</TableCell>
+                      <TableCell>{sess.total_messages || 0}</TableCell>
+                      <TableCell align="right">
+                        <Button
+                          variant={isActive ? 'contained' : 'outlined'}
+                          color={isActive ? 'secondary' : 'inherit'}
+                          size="small"
+                          startIcon={isActive ? <PlayArrowIcon /> : <VisibilityIcon />}
+                          onClick={() => navigate(`/client/sessions/${sess.id}`)}
+                        >
+                          {isActive ? 'Resume' : 'View'}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        ) : (
+          <Box sx={{ textAlign: 'center', py: 3 }}>
+            <SmartToyIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+            <Typography variant="body2" color="text.secondary">
+              No sessions yet. Start a chat with ARIA to begin!
+            </Typography>
+          </Box>
+        )}
       </Paper>
     </Box>
   );
@@ -338,6 +431,26 @@ export const ClientProjectHub = () => {
   const [loadingProject, setLoadingProject] = useState(true);
   const [loadingSessions, setLoadingSessions] = useState(true);
   const [tabValue, setTabValue] = useState(0);
+  const [starting, setStarting] = useState(false);
+
+  const handleStartSession = async () => {
+    setStarting(true);
+    try {
+      const activeSession = sessions.find((s) => s.status === 'active');
+      if (activeSession) {
+        showToast('Resuming your active session…', 'info');
+        navigate(`/client/sessions/${activeSession.id}`);
+        return;
+      }
+      const session = await createSession({ project_id: projectId });
+      showToast('New gathering session started!', 'success');
+      navigate(`/client/sessions/${session.id}`);
+    } catch (err) {
+      showToast('Failed to start a session. Please try again.', 'error');
+    } finally {
+      setStarting(false);
+    }
+  };
 
   const loadProject = async () => {
     try {
@@ -475,7 +588,15 @@ export const ClientProjectHub = () => {
         {/* Right Side: Main Content Area */}
         <Grid item xs={12} md={9}>
           <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, minHeight: '100%' }}>
-            {tabValue === 0 && <ProjectOverviewTab project={project} sessions={sessions} />}
+            {tabValue === 0 && (
+              <ProjectOverviewTab
+                project={project}
+                sessions={sessions}
+                loadingSessions={loadingSessions}
+                onStartSession={handleStartSession}
+                starting={starting}
+              />
+            )}
             {tabValue === 1 && (
               <ChatSessionsTab
                 projectId={projectId}
