@@ -3,7 +3,6 @@ import {
   Typography,
   Grid,
   Box,
-  Alert,
   Skeleton,
   Dialog,
   DialogTitle,
@@ -14,23 +13,17 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Paper,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
 import ProjectCard from '../../components/dashboard/ProjectCard';
-import StatsCard from '../../components/dashboard/StatsCard';
 import EmptyState from '../../components/common/EmptyState';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { listProjects, createProject } from '../../api/projects';
-import { getOverviewAnalytics, getDeveloperPortfolio } from '../../api/analytics';
 import { useProjectStore } from '../../store/projectStore';
 import { useToastStore } from '../../store/toastStore';
 import EmailVerificationBanner from '../../components/common/EmailVerificationBanner';
-import FolderOpenIcon from '@mui/icons-material/FolderOpen';
-import ChatIcon from '@mui/icons-material/Chat';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import AddIcon from '@mui/icons-material/Add';
 import { PROJECT_DOMAINS } from '../../utils/constants';
 
@@ -40,8 +33,6 @@ export const DevDashboard = () => {
   const { projects, setProjects, setActiveProject } = useProjectStore();
 
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ total_projects: 0, total_sessions: 0, total_contradictions: 0 });
-  const [portfolio, setPortfolio] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
   
   // Create Project form state
@@ -55,22 +46,8 @@ export const DevDashboard = () => {
       setLoading(true);
       const projData = await listProjects();
       setProjects(projData);
-
-      try {
-        const statsData = await getOverviewAnalytics();
-        setStats(statsData);
-      } catch (err) {
-        console.warn('Analytics endpoint unavailable or empty:', err);
-      }
-
-      try {
-        const portfolioData = await getDeveloperPortfolio();
-        setPortfolio(portfolioData);
-      } catch (err) {
-        console.warn('Portfolio analytics unavailable:', err);
-      }
     } catch (err) {
-      showToast('Error loading developer dashboard.', 'error');
+      showToast('Error loading developer projects.', 'error');
     } finally {
       setLoading(false);
     }
@@ -89,7 +66,7 @@ export const DevDashboard = () => {
 
     setSubmitting(true);
     try {
-      const newProj = await createProject({
+      await createProject({
         name,
         description,
         domain,
@@ -121,10 +98,10 @@ export const DevDashboard = () => {
       <Box sx={{ mb: 4, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
         <Box>
           <Typography variant="h3" sx={{ fontWeight: 800, mb: 1 }}>
-            Developer Dashboard
+            Developer Projects
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Manage your clients' requirements gathering, view contradiction logs, and tracking system features.
+            Select a project to access its dashboard, requirements sessions, feature statuses, and SRS specifications.
           </Typography>
         </Box>
         <Button
@@ -137,59 +114,8 @@ export const DevDashboard = () => {
         </Button>
       </Box>
 
-      {/* Stats row */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={4}>
-          <StatsCard title="Total Projects" value={stats.total_projects} icon={FolderOpenIcon} color="primary.main" />
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <StatsCard title="Chat Sessions" value={stats.total_sessions} icon={ChatIcon} color="secondary.main" />
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <StatsCard title="Pending Contradictions" value={stats.total_contradictions} icon={WarningAmberIcon} color="warning.main" />
-        </Grid>
-      </Grid>
-
-      {portfolio && (
-        <Paper variant="outlined" sx={{ p: 2.5, mb: 4, borderRadius: 2 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-            Portfolio
-          </Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={4}>
-              <Typography variant="caption" color="text.secondary">Contradictions resolved</Typography>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                {portfolio.contradictions_resolved_rate != null
-                  ? `${Math.round(portfolio.contradictions_resolved_rate * 100)}%`
-                  : '—'}
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <Typography variant="caption" color="text.secondary">Avg SRS turnaround (hrs)</Typography>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                {portfolio.avg_srs_turnaround_hours != null
-                  ? portfolio.avg_srs_turnaround_hours.toFixed(1)
-                  : '—'}
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <Typography variant="caption" color="text.secondary">Change-request approval rate</Typography>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                {portfolio.change_request_approval_rate != null
-                  ? `${Math.round(portfolio.change_request_approval_rate * 100)}%`
-                  : '—'}
-              </Typography>
-            </Grid>
-          </Grid>
-        </Paper>
-      )}
-
       {/* Projects list */}
       <Box sx={{ mb: 2 }}>
-        <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
-          Active Projects
-        </Typography>
-
         {loading ? (
           <Grid container spacing={3}>
             {Array.from(new Array(3)).map((_, idx) => (

@@ -35,7 +35,7 @@ import { createChangeRequest } from '../../api/changeRequests';
 import { useToastStore } from '../../store/toastStore';
 import { useProjectStore } from '../../store/projectStore';
 import { formatDateTime } from '../../utils/helpers';
-import { SEVERITIES } from '../../utils/constants';
+import { SEVERITIES, PROJECT_DOMAIN_LABELS } from '../../utils/constants';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ChatIcon from '@mui/icons-material/Chat';
 import AddIcon from '@mui/icons-material/Add';
@@ -43,6 +43,46 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import RateReviewIcon from '@mui/icons-material/RateReview';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+
+// ── Project Overview Tab ──────────────────────────────────────────────────────
+const ProjectOverviewTab = ({ project, sessions }) => {
+  return (
+    <Box>
+      <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+        Project Overview & Status
+      </Typography>
+
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={6}>
+          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+            <Typography variant="caption" color="text.secondary">System Domain</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700, mt: 0.5 }}>
+              {PROJECT_DOMAIN_LABELS[project?.domain] || project?.domain || 'Web App'}
+            </Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+            <Typography variant="caption" color="text.secondary">Gathering Sessions</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700, mt: 0.5 }}>
+              {sessions.length} Recorded Sessions
+            </Typography>
+          </Paper>
+        </Grid>
+      </Grid>
+
+      <Paper variant="outlined" sx={{ p: 3, borderRadius: 3 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+          Project Description
+        </Typography>
+        <Typography variant="body1" color="text.secondary">
+          {project?.description || 'No detailed description provided for this project.'}
+        </Typography>
+      </Paper>
+    </Box>
+  );
+};
 
 // ── Chat Sessions Tab ─────────────────────────────────────────────────────────
 const ChatSessionsTab = ({ projectId, project, sessions, loadingSessions, onRefresh }) => {
@@ -344,6 +384,7 @@ export const ClientProjectHub = () => {
   }
 
   const menuItems = [
+    { text: 'Project Overview', icon: <DashboardIcon /> },
     { text: 'Chat Sessions', icon: <ChatIcon />, badge: sessions.length },
     { text: 'Submit Change Request', icon: <RateReviewIcon /> },
   ];
@@ -434,7 +475,8 @@ export const ClientProjectHub = () => {
         {/* Right Side: Main Content Area */}
         <Grid item xs={12} md={9}>
           <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, minHeight: '100%' }}>
-            {tabValue === 0 && (
+            {tabValue === 0 && <ProjectOverviewTab project={project} sessions={sessions} />}
+            {tabValue === 1 && (
               <ChatSessionsTab
                 projectId={projectId}
                 project={project}
@@ -443,7 +485,7 @@ export const ClientProjectHub = () => {
                 onRefresh={loadSessions}
               />
             )}
-            {tabValue === 1 && <ChangeRequestTab projectId={projectId} project={project} />}
+            {tabValue === 2 && <ChangeRequestTab projectId={projectId} project={project} />}
           </Paper>
         </Grid>
       </Grid>

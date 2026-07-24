@@ -51,6 +51,7 @@ import {
 } from '../../api/projects';
 import { listSessionsForProject } from '../../api/sessions';
 import { resolveContradiction } from '../../api/contradictions';
+import { getProjectSummary } from '../../api/analytics';
 import { listFeaturesForProject, updateFeatureStatus, createFeatureStatus } from '../../api/featureStatus';
 import { listChangeRequests, reviewChangeRequest } from '../../api/changeRequests';
 import { getLatestSrs, listSrsVersions, generateProjectSrs, getSrsVersionDetails } from '../../api/srs';
@@ -58,7 +59,7 @@ import { getLatestSrs, listSrsVersions, generateProjectSrs, getSrsVersionDetails
 import { useToastStore } from '../../store/toastStore';
 import { useProjectStore } from '../../store/projectStore';
 import { formatDateTime } from '../../utils/helpers';
-import { FEATURE_STATUS, CHANGE_REQUEST_STATUS } from '../../utils/constants';
+import { FEATURE_STATUS, CHANGE_REQUEST_STATUS, PROJECT_DOMAIN_LABELS } from '../../utils/constants';
 
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ListAltIcon from '@mui/icons-material/ListAlt';
@@ -70,6 +71,7 @@ import AddIcon from '@mui/icons-material/Add';
 import RateReviewIcon from '@mui/icons-material/RateReview';
 import DescriptionIcon from '@mui/icons-material/Description';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import DashboardIcon from '@mui/icons-material/Dashboard';
 import axios from '../../api/axios';
 
 // ── Tab 4: Project Feature Tracker ───────────────────────────────────────────
@@ -643,6 +645,76 @@ const ProjectSRSTab = ({ projectId }) => {
   );
 };
 
+// ── Tab 0: Project Dashboard Overview ─────────────────────────────────────────
+const ProjectDashboardTab = ({ project, sessions, contradictions, atoms, engagement }) => {
+  return (
+    <Box>
+      <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+        Project Overview & Analytics
+      </Typography>
+      
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={4}>
+          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+            <Typography variant="caption" color="text.secondary">System Domain</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700, mt: 0.5 }}>
+              {PROJECT_DOMAIN_LABELS[project?.domain] || project?.domain || 'Web App'}
+            </Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+            <Typography variant="caption" color="text.secondary">Total Gathering Sessions</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700, mt: 0.5 }}>
+              {sessions.length}
+            </Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+            <Typography variant="caption" color="text.secondary">Extracted Requirements</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700, mt: 0.5 }}>
+              {atoms.length} Atoms
+            </Typography>
+          </Paper>
+        </Grid>
+      </Grid>
+
+      {engagement && (
+        <Paper variant="outlined" sx={{ p: 3, borderRadius: 3 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2 }}>
+            Client Engagement Overview
+          </Typography>
+          <Grid container spacing={3}>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary">Messages sent</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>{engagement.messages_sent ?? 0}</Typography>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary">Avg response (s)</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                {engagement.avg_response_time_seconds != null
+                  ? Math.round(engagement.avg_response_time_seconds)
+                  : '—'}
+              </Typography>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary">Sessions completed</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>{engagement.sessions_completed ?? 0}</Typography>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary">Last active</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600, mt: 0.5 }}>
+                {engagement.last_active ? formatDateTime(engagement.last_active) : '—'}
+              </Typography>
+            </Grid>
+          </Grid>
+        </Paper>
+      )}
+    </Box>
+  );
+};
+
 // ── Main ProjectDetail Component ──────────────────────────────────────────────
 export const ProjectDetail = () => {
   const { projectId } = useParams();
@@ -654,6 +726,7 @@ export const ProjectDetail = () => {
   const [sessions, setSessions] = useState([]);
   const [contradictions, setContradictions] = useState([]);
   const [atoms, setAtoms] = useState([]);
+  const [engagement, setEngagement] = useState(null);
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(true);
 
@@ -675,6 +748,13 @@ export const ProjectDetail = () => {
 
       const sessList = await listSessionsForProject(projectId);
       setSessions(sessList);
+
+      try {
+        const summary = await getProjectSummary(projectId);
+        setEngagement(summary);
+      } catch {
+        setEngagement(null);
+      }
 
       try {
         const contradictionsRes = await axios.get(`/contradictions/project/${projectId}`);
@@ -814,9 +894,10 @@ export const ProjectDetail = () => {
   }
 
   const menuItems = [
+    { text: 'Project Dashboard', icon: <DashboardIcon /> },
     { text: 'Chat Sessions', icon: <ChatIcon />, badge: sessions.length },
-    { text: `Contradictions`, icon: <WarningIcon />, badge: contradictions.length },
-    { text: `Extracted Atoms`, icon: <ListAltIcon />, badge: atoms.length },
+    { text: 'Contradictions', icon: <WarningIcon />, badge: contradictions.length },
+    { text: 'Extracted Atoms', icon: <ListAltIcon />, badge: atoms.length },
     { text: 'Feature Status', icon: <CheckCircleOutlineIcon /> },
     { text: 'Change Requests', icon: <RateReviewIcon /> },
     { text: 'SRS Document', icon: <DescriptionIcon /> },
@@ -917,6 +998,16 @@ export const ProjectDetail = () => {
         <Grid item xs={12} md={9}>
           <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, minHeight: '100%' }}>
             {tabValue === 0 && (
+              <ProjectDashboardTab
+                project={project}
+                sessions={sessions}
+                contradictions={contradictions}
+                atoms={atoms}
+                engagement={engagement}
+              />
+            )}
+
+            {tabValue === 1 && (
               <Box>
                 <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
                   Gathering Sessions History
@@ -965,7 +1056,7 @@ export const ProjectDetail = () => {
               </Box>
             )}
 
-            {tabValue === 1 && (
+            {tabValue === 2 && (
               <Box>
                 <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
                   Detected Requirement Contradictions
@@ -1025,7 +1116,7 @@ export const ProjectDetail = () => {
               </Box>
             )}
 
-            {tabValue === 2 && (
+            {tabValue === 3 && (
               <Box>
                 <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
                   Extracted Requirement Atoms
@@ -1068,9 +1159,9 @@ export const ProjectDetail = () => {
               </Box>
             )}
 
-            {tabValue === 3 && <ProjectFeatureTrackerTab projectId={projectId} />}
-            {tabValue === 4 && <ProjectChangeRequestsTab projectId={projectId} />}
-            {tabValue === 5 && <ProjectSRSTab projectId={projectId} />}
+            {tabValue === 4 && <ProjectFeatureTrackerTab projectId={projectId} />}
+            {tabValue === 5 && <ProjectChangeRequestsTab projectId={projectId} />}
+            {tabValue === 6 && <ProjectSRSTab projectId={projectId} />}
           </Paper>
         </Grid>
       </Grid>
