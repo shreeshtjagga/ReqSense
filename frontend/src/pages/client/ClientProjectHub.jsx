@@ -5,8 +5,11 @@ import {
   Grid,
   Stack,
   Paper,
-  Tabs,
-  Tab,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
   Table,
   TableBody,
   TableCell,
@@ -15,7 +18,6 @@ import {
   TableRow,
   Chip,
   Skeleton,
-  Alert,
   TextField,
   FormControl,
   InputLabel,
@@ -42,10 +44,6 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import RateReviewIcon from '@mui/icons-material/RateReview';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 
-// ── Tab panel helper ──────────────────────────────────────────────────────────
-const TabPanel = ({ children, value, index }) =>
-  value === index ? <Box sx={{ pt: 3 }}>{children}</Box> : null;
-
 // ── Chat Sessions Tab ─────────────────────────────────────────────────────────
 const ChatSessionsTab = ({ projectId, project, sessions, loadingSessions, onRefresh }) => {
   const navigate = useNavigate();
@@ -55,7 +53,6 @@ const ChatSessionsTab = ({ projectId, project, sessions, loadingSessions, onRefr
   const handleStartSession = async () => {
     setStarting(true);
     try {
-      // Check for an already active session
       const activeSession = sessions.find((s) => s.status === 'active');
       if (activeSession) {
         showToast('Resuming your active session…', 'info');
@@ -80,7 +77,7 @@ const ChatSessionsTab = ({ projectId, project, sessions, loadingSessions, onRefr
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
         <Typography variant="h6" sx={{ fontWeight: 700 }}>
-          Your Sessions
+          Your Gathering Sessions
         </Typography>
         <Button
           variant="contained"
@@ -103,12 +100,12 @@ const ChatSessionsTab = ({ projectId, project, sessions, loadingSessions, onRefr
       ) : (
         <TableContainer
           component={Paper}
-          elevation={0}
-          sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 3 }}
+          variant="outlined"
+          sx={{ borderRadius: 2 }}
         >
           <Table>
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'action.hover' }}>
+            <TableHead sx={{ bgcolor: 'action.hover' }}>
+              <TableRow>
                 <TableCell sx={{ fontWeight: 700 }}>#</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Started At</TableCell>
@@ -203,7 +200,6 @@ const ChangeRequestTab = ({ projectId, project }) => {
       });
 
       showToast('Change request submitted! Impact analysis has been queued.', 'success');
-      // Reset form
       setTitle('');
       setDescription('');
       setSeverity('medium');
@@ -222,12 +218,11 @@ const ChangeRequestTab = ({ projectId, project }) => {
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         Request modifications to the requirements for <strong>{project?.name || 'this project'}</strong>.
-        The system will automatically analyze scope and impact.
       </Typography>
 
       <Paper
         variant="outlined"
-        sx={{ p: 4, borderRadius: 3, maxWidth: 640, border: '1px solid', borderColor: 'divider' }}
+        sx={{ p: 4, borderRadius: 3, maxWidth: 640 }}
       >
         <Box component="form" onSubmit={handleSubmit}>
           <Stack spacing={3}>
@@ -321,7 +316,6 @@ export const ClientProjectHub = () => {
     try {
       setLoadingSessions(true);
       const data = await listSessionsForProject(projectId);
-      // Sort newest first
       const sorted = (data || []).sort(
         (a, b) => new Date(b.started_at || b.created_at) - new Date(a.started_at || a.created_at)
       );
@@ -338,72 +332,121 @@ export const ClientProjectHub = () => {
     loadSessions();
   }, [projectId]);
 
+  if (loadingProject && !project) {
+    return (
+      <Layout>
+        <Box sx={{ py: 4 }}>
+          <Skeleton variant="text" height={40} width="30%" />
+          <Skeleton variant="rectangular" height={250} sx={{ mt: 2, borderRadius: 2 }} />
+        </Box>
+      </Layout>
+    );
+  }
+
+  const menuItems = [
+    { text: 'Chat Sessions', icon: <ChatIcon />, badge: sessions.length },
+    { text: 'Submit Change Request', icon: <RateReviewIcon /> },
+  ];
+
   return (
     <Layout>
-      {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Button
-          variant="outlined"
-          color="inherit"
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/')}
-          sx={{ mb: 2 }}
-        >
-          Back to Dashboard
-        </Button>
+      <Grid container spacing={3} sx={{ minHeight: 'calc(100vh - 120px)' }}>
+        {/* Left Side: Internal Navigation Side Panel */}
+        <Grid item xs={12} md={3} sx={{ display: 'flex', flexDirection: 'column' }}>
+          <Stack spacing={2} sx={{ height: '100%' }}>
+            <Button
+              variant="outlined"
+              color="inherit"
+              startIcon={<ArrowBackIcon />}
+              onClick={() => navigate('/')}
+              sx={{ alignSelf: 'flex-start' }}
+            >
+              Back to Dashboard
+            </Button>
 
-        {loadingProject ? (
-          <Skeleton variant="text" height={48} width="40%" />
-        ) : (
-          <Stack direction="row" spacing={2} alignItems="center">
-            <Typography variant="h3" sx={{ fontWeight: 800 }}>
-              {project?.name || 'Project'}
-            </Typography>
-            {project?.status && (
-              <Chip
-                label={project.status}
-                size="small"
-                color={project.status === 'active' ? 'success' : 'default'}
-                sx={{ fontWeight: 700, textTransform: 'capitalize' }}
+            <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, flexGrow: 1, overflowY: 'auto' }}>
+              <Box sx={{ mb: 2 }}>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                  <Typography variant="h5" sx={{ fontWeight: 800 }}>
+                    {project?.name || 'Project'}
+                  </Typography>
+                  {project?.status && (
+                    <Chip
+                      label={project.status}
+                      size="small"
+                      color={project.status === 'active' ? 'success' : 'default'}
+                      sx={{ fontWeight: 700, textTransform: 'capitalize' }}
+                    />
+                  )}
+                </Stack>
+                {project?.description && (
+                  <Typography variant="caption" color="text.secondary">
+                    {project.description}
+                  </Typography>
+                )}
+              </Box>
+
+              <Divider sx={{ my: 2 }} />
+
+              <List component="nav" disablePadding>
+                {menuItems.map((item, idx) => {
+                  const isSelected = tabValue === idx;
+                  return (
+                    <ListItem key={item.text} disablePadding sx={{ mb: 1 }}>
+                      <ListItemButton
+                        selected={isSelected}
+                        onClick={() => setTabValue(idx)}
+                        sx={{
+                          borderRadius: 2,
+                          color: isSelected ? 'secondary.main' : 'text.primary',
+                          '&.Mui-selected': {
+                            bgcolor: 'action.selected',
+                            color: 'secondary.main',
+                            fontWeight: 700,
+                            '& .MuiListItemIcon-root': { color: 'secondary.main' },
+                          },
+                        }}
+                      >
+                        <ListItemIcon sx={{ minWidth: 36, color: isSelected ? 'secondary.main' : 'text.secondary' }}>
+                          {item.icon}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={item.text}
+                          primaryTypographyProps={{
+                            fontSize: '0.9rem',
+                            fontWeight: isSelected ? 700 : 500,
+                          }}
+                        />
+                        {item.badge !== undefined && (
+                          <Typography variant="caption" sx={{ ml: 1, fontWeight: 700, color: 'text.secondary' }}>
+                            ({item.badge})
+                          </Typography>
+                        )}
+                      </ListItemButton>
+                    </ListItem>
+                  );
+                })}
+              </List>
+            </Paper>
+          </Stack>
+        </Grid>
+
+        {/* Right Side: Main Content Area */}
+        <Grid item xs={12} md={9}>
+          <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, minHeight: '100%' }}>
+            {tabValue === 0 && (
+              <ChatSessionsTab
+                projectId={projectId}
+                project={project}
+                sessions={sessions}
+                loadingSessions={loadingSessions}
+                onRefresh={loadSessions}
               />
             )}
-          </Stack>
-        )}
-
-        {!loadingProject && project?.description && (
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-            {project.description}
-          </Typography>
-        )}
-      </Box>
-
-      {/* Tabs */}
-      <Box sx={{ width: '100%' }}>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs
-            value={tabValue}
-            onChange={(_, v) => setTabValue(v)}
-            aria-label="project-hub-tabs"
-          >
-            <Tab icon={<ChatIcon />} label="Chat Sessions" iconPosition="start" />
-            <Tab icon={<RateReviewIcon />} label="Change Request" iconPosition="start" />
-          </Tabs>
-        </Box>
-
-        <TabPanel value={tabValue} index={0}>
-          <ChatSessionsTab
-            projectId={projectId}
-            project={project}
-            sessions={sessions}
-            loadingSessions={loadingSessions}
-            onRefresh={loadSessions}
-          />
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={1}>
-          <ChangeRequestTab projectId={projectId} project={project} />
-        </TabPanel>
-      </Box>
+            {tabValue === 1 && <ChangeRequestTab projectId={projectId} project={project} />}
+          </Paper>
+        </Grid>
+      </Grid>
     </Layout>
   );
 };
