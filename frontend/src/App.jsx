@@ -12,17 +12,11 @@ import AcceptInvite from './pages/auth/AcceptInvite';
 // Client Pages
 import ClientDashboard from './pages/client/ClientDashboard';
 import ClientProjectHub from './pages/client/ClientProjectHub';
-import ClientSessions from './pages/client/ClientSessions';
-import ClientProjectSessions from './pages/client/ClientProjectSessions';
 import ChatSession from './pages/client/ChatSession';
-import ChangeRequestForm from './pages/client/ChangeRequestForm';
 
 // Developer Pages
 import DevDashboard from './pages/developer/DevDashboard';
 import ProjectDetail from './pages/developer/ProjectDetail';
-import FeatureTracker from './pages/developer/FeatureTracker';
-import ChangeRequests from './pages/developer/ChangeRequests';
-import SRSPage from './pages/developer/SRSPage';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -94,34 +88,10 @@ export const App = () => {
           }
         />
         <Route
-          path="/client/sessions"
-          element={
-            <PrivateRoute allowedRoles={['client']}>
-              <ClientSessions />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/client/projects/:projectId/sessions"
-          element={
-            <PrivateRoute allowedRoles={['client', 'developer', 'admin']}>
-              <ClientProjectSessions />
-            </PrivateRoute>
-          }
-        />
-        <Route
           path="/client/sessions/:sessionId"
           element={
             <PrivateRoute allowedRoles={['client', 'developer', 'admin']}>
               <ChatSession />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/client/change-request/new"
-          element={
-            <PrivateRoute allowedRoles={['client']}>
-              <ChangeRequestForm />
             </PrivateRoute>
           }
         />
@@ -132,30 +102,6 @@ export const App = () => {
           element={
             <PrivateRoute allowedRoles={['developer', 'admin']}>
               <ProjectDetail />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/dev/features"
-          element={
-            <PrivateRoute allowedRoles={['developer', 'admin']}>
-              <FeatureTracker />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/dev/change-requests"
-          element={
-            <PrivateRoute allowedRoles={['developer', 'admin']}>
-              <ChangeRequests />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/dev/srs"
-          element={
-            <PrivateRoute allowedRoles={['developer', 'admin']}>
-              <SRSPage />
             </PrivateRoute>
           }
         />

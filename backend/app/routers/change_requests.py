@@ -13,11 +13,11 @@ from app.models.change_request import ChangeRequest
 from app.models.user import User
 from app.schemas.change_request import ChangeRequestCreate, ChangeRequestRead, ChangeRequestReview
 from app.tasks.impact_tasks import run_impact_analysis_task
-from app.services.impact_analyser import ImpactAnalyser
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/change-requests", tags=["change-requests"])
+
 
 @router.post("", response_model=ChangeRequestRead, status_code=status.HTTP_201_CREATED)
 async def create_change_request(
@@ -27,7 +27,9 @@ async def create_change_request(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Create a new change request and enqueue impact analysis background task.
+    Create a new change request and enqueue impact analysis as a background task.
+    The endpoint always returns immediately after persisting the CR — impact
+    analysis is fire-and-forget via Celery (best-effort; never blocks the response).
     """
     pid = body.project_id or project_id
     if not pid:
@@ -36,10 +38,10 @@ async def create_change_request(
             detail="Must provide project_id either in request body or as a query parameter."
         )
 
-    # Scoped access check
+    # Scoped access check — raises 403 if user has no access to this project
     await get_scoped_project(pid, current_user, db)
 
-    # Serialize list to JSON string
+    # Serialize affected_features list to a JSON string for storage
     serialized_features = json.dumps(body.affected_features)
 
     cr = ChangeRequest(
@@ -56,30 +58,13 @@ async def create_change_request(
     await db.commit()
     await db.refresh(cr)
 
-    # Perform impact analysis inline to guarantee instant analysis for dev & client
-    try:
-        analysis_result = await ImpactAnalyser.analyze_impact(
-            title=cr.title,
-            description=cr.description,
-            project_id=cr.project_id,
-            db=db
-        )
-        if analysis_result:
-            cr.severity = analysis_result.get("severity", cr.severity or "medium")
-            cr.impact_report = analysis_result.get("impact_report", "Impact analysis completed.")
-            if analysis_result.get("affected_features"):
-                cr.affected_features = json.dumps(analysis_result.get("affected_features"))
-            db.add(cr)
-            await db.commit()
-            await db.refresh(cr)
-    except Exception as e:
-        logger.warning(f"Impact analysis failed for change request {cr.id}: {e}")
-
-    # Enqueue background task as fallback
+    # Enqueue Celery background task for impact analysis (best-effort — never crashes)
+    # If Celery/Redis is not running locally, this is silently skipped.
     try:
         run_impact_analysis_task.delay(str(cr.id))
+        logger.info(f"Impact analysis task queued for change request {cr.id}")
     except Exception as e:
-        logger.debug(f"Celery dispatch skipped/failed: {e}")
+        logger.debug(f"Celery dispatch skipped (non-fatal — Celery may not be running): {e}")
 
     return cr
 

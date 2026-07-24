@@ -187,12 +187,11 @@ async def create_message(
         request_id=request_id,
     )
 
-    # ── 2. Fetch session history from Redis — pre-transaction ────────────────
-    try:
-        history = await SessionMemory.get_messages(session_id, db=db)
-    except Exception as exc:
-        logger.warning("Redis unavailable; proceeding with empty history: %s", exc)
-        history = []
+    # ── 2. Fetch session history (Redis → DB fallback) — pre-transaction ────
+    # SessionMemory.get_messages() handles Redis unavailability internally:
+    # it falls back to the DB and re-seeds Redis. History is always populated
+    # from actual client/ARIA conversation turns (no conflict_alert blobs).
+    history = await SessionMemory.get_messages(session_id, db=db)
 
     # ── 3. Call ARIA (Groq) — pre-transaction ────────────────────────────────
     # Build project context so ARIA knows exactly which project it is in
