@@ -8,6 +8,7 @@ from app.models.user import User
 from app.models.refresh_token import RefreshToken
 from app.models.password_reset_token import PasswordResetToken
 from app.models.project import Project, ProjectClient
+from app.models.project_invite_token import ProjectInviteToken
 from app.models.session import Session
 from app.models.message import Message
 from app.models.requirement_atom import RequirementAtom
@@ -26,6 +27,7 @@ __all__ = [
     "PasswordResetToken",
     "Project",
     "ProjectClient",
+    "ProjectInviteToken",
     "Session",
     "Message",
     "RequirementAtom",

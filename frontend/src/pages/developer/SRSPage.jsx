@@ -5,7 +5,10 @@ import SRSViewer from '../../components/srs/SRSViewer';
 import VersionHistory from '../../components/srs/VersionHistory';
 import EmptyState from '../../components/common/EmptyState';
 import { listProjects } from '../../api/projects';
-import { getLatestSrs, listSrsVersions } from '../../api/srs';
+import { getLatestSrs, listSrsVersions, generateProjectSrs, getSrsVersionDetails } from '../../api/srs';
+import Button from '../../components/common/Button';
+import DescriptionIcon from '@mui/icons-material/Description';
+import { formatDateTime } from '../../utils/helpers';
 import { useToastStore } from '../../store/toastStore';
 
 export const SRSPage = () => {
@@ -18,6 +21,7 @@ export const SRSPage = () => {
   const [versions, setVersions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [srsLoading, setSrsLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -62,19 +66,37 @@ export const SRSPage = () => {
     }
   };
 
+  const handleGenerateSrs = async () => {
+    if (!projectId) return;
+    setGenerating(true);
+    try {
+      await generateProjectSrs(projectId);
+      showToast('SRS document generated successfully!', 'success');
+      await fetchSrsData(projectId);
+    } catch (err) {
+      showToast('Failed to generate SRS document.', 'error');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   useEffect(() => {
     fetchSrsData(projectId);
   }, [projectId]);
 
-  const handleSelectVersion = (versionItem) => {
-    // If it's a historical version, display it as active
-    // Presigned download url is in file_url
-    setActiveSrs({
-      id: versionItem.id,
-      version: versionItem.version,
-      created_at: versionItem.created_at,
-      download_url: versionItem.file_url,
-    });
+  const handleSelectVersion = async (versionItem) => {
+    if (!versionItem) return;
+    try {
+      const details = await getSrsVersionDetails(versionItem.id);
+      setActiveSrs(details);
+    } catch (err) {
+      setActiveSrs({
+        id: versionItem.id,
+        version: versionItem.version,
+        created_at: versionItem.created_at,
+        download_url: versionItem.file_url,
+      });
+    }
   };
 
   return (
@@ -90,21 +112,52 @@ export const SRSPage = () => {
         </Box>
         
         {projects.length > 0 && (
-          <FormControl sx={{ minWidth: 200 }}>
-            <InputLabel id="project-select-label">Active Project</InputLabel>
-            <Select
-              labelId="project-select-label"
-              value={projectId}
-              label="Active Project"
-              onChange={(e) => setProjectId(e.target.value)}
+          <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+            {versions.length > 0 && (
+              <FormControl sx={{ minWidth: 160 }}>
+                <InputLabel id="version-select-label">Revision Version</InputLabel>
+                <Select
+                  labelId="version-select-label"
+                  value={activeSrs?.id || ''}
+                  label="Revision Version"
+                  onChange={(e) => {
+                    const sel = versions.find((v) => v.id === e.target.value);
+                    if (sel) handleSelectVersion(sel);
+                  }}
+                >
+                  {versions.map((v) => (
+                    <MenuItem key={v.id} value={v.id}>
+                      Version v{v.version} ({formatDateTime(v.created_at)})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+
+            <Button
+              variant="contained"
+              startIcon={<DescriptionIcon />}
+              onClick={handleGenerateSrs}
+              loading={generating}
             >
-              {projects.map((p) => (
-                <MenuItem key={p.id} value={p.id}>
-                  {p.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+              Generate SRS Document
+            </Button>
+            <FormControl sx={{ minWidth: 200 }}>
+              <InputLabel id="project-select-label">Active Project</InputLabel>
+              <Select
+                labelId="project-select-label"
+                value={projectId}
+                label="Active Project"
+                onChange={(e) => setProjectId(e.target.value)}
+              >
+                {projects.map((p) => (
+                  <MenuItem key={p.id} value={p.id}>
+                    {p.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Stack>
         )}
       </Box>
 
@@ -123,24 +176,21 @@ export const SRSPage = () => {
       ) : !activeSrs ? (
         <EmptyState
           title="No SRS Documents"
-          description="This project doesn't have any generated requirements specs yet. Complete a gathering session to generate the initial v1.0 draft!"
+          description="This project doesn't have any generated requirements specs yet. Click below to generate the initial v1.0 draft!"
+          actionLabel="Generate SRS Now"
+          onAction={handleGenerateSrs}
         />
       ) : (
-        <Grid container spacing={4}>
-          <Grid item xs={12} lg={8}>
-            <SRSViewer
-              srsData={activeSrs}
-              onShowHistory={null} // History list is already rendered on the right side
-            />
-          </Grid>
-          <Grid item xs={12} lg={4}>
+        <Stack spacing={4}>
+          <SRSViewer srsData={activeSrs} onShowHistory={null} />
+          {versions.length > 1 && (
             <VersionHistory
               versions={versions}
               onSelectVersion={handleSelectVersion}
               currentVersionId={activeSrs?.id}
             />
-          </Grid>
-        </Grid>
+          )}
+        </Stack>
       )}
     </Layout>
   );

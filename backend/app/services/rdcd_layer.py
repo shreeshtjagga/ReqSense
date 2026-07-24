@@ -53,7 +53,7 @@ class RDCDLayer:
                 user_id=user_id,
                 action="suspicious_input_flagged",
                 entity_type="message",
-                metadata={"original_content_snippet": content[:100]},
+                metadata_={"original_content_snippet": content[:100]},
                 request_id=request_id
             )
             db.add(audit_log)

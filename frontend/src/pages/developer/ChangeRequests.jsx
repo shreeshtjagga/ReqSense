@@ -111,7 +111,7 @@ export const ChangeRequests = () => {
       // Refresh list
       fetchChangeRequests(projectId);
     } catch (err) {
-      const isConflict = err.response?.status === 409 || err.response?.data?.detail === 'STALE_VERSION';
+      const isConflict = err.response?.status === 409 || err.response?.data?.code === 'STALE_VERSION';
       if (isConflict) {
         showToast('Someone else reviewed this request. Refreshing your list...', 'error');
         setReviewOpen(false);

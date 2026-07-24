@@ -262,37 +262,5 @@ async def test_request_id_header_present(client: AsyncClient):
     assert "x-request-id" in resp.headers
 
 
-@pytest.mark.asyncio
-async def test_email_verification_success(client: AsyncClient, test_db):
-    import uuid
-    from app.services.auth_service import create_email_verification_token
-    from app.models.user import User
-    from sqlalchemy import select
 
-    # Register user
-    email = unique_email()
-    register_payload = {
-        "name": "Verify User",
-        "email": email,
-        "password": "StrongPass1",
-        "role": "client",
-    }
-    resp = await client.post(REGISTER_URL, json=register_payload)
-    assert resp.status_code == 201
-    user_id = resp.json()["id"]
-
-    # Verify initially email_verified is False
-    res = await test_db.execute(select(User).where(User.id == uuid.UUID(user_id)))
-    user = res.scalar_one()
-    assert user.email_verified is False
-
-    # Generate token and verify
-    token = create_email_verification_token(uuid.UUID(user_id))
-    resp = await client.post("/api/v1/auth/verify-email", json={"token": token})
-    assert resp.status_code == 200
-    assert resp.json()["message"] == "Email verification successful."
-
-    # Verify db status updated
-    await test_db.refresh(user)
-    assert user.email_verified is True
 

@@ -7,6 +7,7 @@ export const Input = ({
   type = 'text',
   error = false,
   helperText = '',
+  startIcon = null,
   ...props
 }) => {
   const [showPassword, setShowPassword] = useState(false);
@@ -18,6 +19,23 @@ export const Input = ({
     setShowPassword((prev) => !prev);
   };
 
+  const startAdornment = startIcon ? (
+    <InputAdornment position="start">{startIcon}</InputAdornment>
+  ) : null;
+
+  const endAdornment = isPassword ? (
+    <InputAdornment position="end">
+      <IconButton
+        aria-label="toggle password visibility"
+        onClick={togglePasswordVisibility}
+        edge="end"
+        size="small"
+      >
+        {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+      </IconButton>
+    </InputAdornment>
+  ) : null;
+
   return (
     <TextField
       type={inputType}
@@ -25,20 +43,10 @@ export const Input = ({
       helperText={helperText}
       fullWidth
       slotProps={{
-        input: isPassword ? {
-          endAdornment: (
-            <InputAdornment position="end">
-              <IconButton
-                aria-label="toggle password visibility"
-                onClick={togglePasswordVisibility}
-                edge="end"
-                size="small"
-              >
-                {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
-              </IconButton>
-            </InputAdornment>
-          ),
-        } : undefined
+        input: {
+          startAdornment,
+          endAdornment,
+        },
       }}
       {...props}
     />

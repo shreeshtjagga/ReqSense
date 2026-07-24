@@ -180,20 +180,18 @@ async def test_list_messages_scoped(
 async def test_end_session_enqueues_srs_task(
     client: AsyncClient, dev_a, project_a, session_a
 ):
-    """PATCH /sessions/{id}/end returns 200 immediately (does not block on SRS)."""
+    """POST /sessions/{id}/generate-srs enqueues generate_srs_task for developer/admin."""
     headers_a = await get_auth_headers(client, dev_a.email)
 
     with patch("app.routers.sessions.generate_srs_task") as mock_task:
         mock_task.delay = MagicMock(return_value=None)
-        resp = await client.patch(
-            f"/api/v1/sessions/{session_a.id}/end",
+        resp = await client.post(
+            f"/api/v1/sessions/{session_a.id}/generate-srs",
             headers=headers_a,
-            json={"status": "completed"}
         )
 
     # Should return 200 immediately
     assert resp.status_code in (200, 201)
-    assert resp.json()["status"] == "completed"
     # Celery task should have been enqueued
     mock_task.delay.assert_called_once_with(str(session_a.id))
 

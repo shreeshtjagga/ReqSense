@@ -115,6 +115,7 @@ def send_email_task(to_email: str, template: str, context: Dict[str, Any]) -> No
     # Check if we are running in test / dummy mode
     is_dummy_key = (
         not settings.SENDGRID_API_KEY or
+        not settings.SENDGRID_API_KEY.startswith("SG.") or
         settings.SENDGRID_API_KEY.startswith("test") or
         settings.SENDGRID_API_KEY.startswith("mock")
     )

@@ -82,7 +82,11 @@ async def get_session(
     return await _get_scoped_session(session_id, current_user, db)
 
 
+import logging
 from app.tasks.srs_tasks import generate_srs_task
+from app.services.srs_generator import SRSGenerator
+
+logger = logging.getLogger(__name__)
 
 @router.patch("/{session_id}/end", response_model=SessionRead)
 async def end_session(
@@ -101,9 +105,37 @@ async def end_session(
     session.ended_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(session)
-    
-    # Enqueue background task
-    generate_srs_task.delay(str(session_id))
+
+    # Automatically generate SRS document on completion
+    if body.status == "completed":
+        try:
+            await SRSGenerator.generate_srs(session_id, db)
+            logger.info(f"SRS document generated inline for session {session_id}")
+        except Exception as e:
+            logger.error(f"Inline SRS generation failed for session {session_id}: {e}")
+            try:
+                generate_srs_task.delay(str(session_id))
+            except Exception as celery_err:
+                logger.error(f"Celery fallback failed for session {session_id}: {celery_err}")
+
+    return session
+
+
+@router.post("/{session_id}/generate-srs", response_model=SessionRead)
+async def trigger_srs_generation(
+    session_id: uuid.UUID,
+    current_user: User = Depends(require_roles("admin", "developer", "client")),
+    db: AsyncSession = Depends(get_db),
+):
+    session = await _get_scoped_session(session_id, current_user, db)
+    try:
+        await SRSGenerator.generate_srs(session_id, db)
+    except Exception as e:
+        logger.warning(f"Inline SRS generation failed for session {session_id}, queueing Celery task: {e}")
+        try:
+            generate_srs_task.delay(str(session_id))
+        except Exception as celery_err:
+            logger.error(f"Celery task dispatch failed: {celery_err}")
     return session
 
 

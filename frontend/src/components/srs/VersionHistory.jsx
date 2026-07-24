@@ -10,19 +10,34 @@ import {
   Button,
   Typography,
   Box,
+  Chip,
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { formatDateTime } from '../../utils/helpers';
 
+import { API_URL, API_PREFIX } from '../../utils/constants';
+
+export const getFullDownloadUrl = (url) => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+  if (cleanUrl.startsWith('/api/v1')) {
+    return `${API_URL}${cleanUrl}`;
+  }
+  return `${API_URL}${API_PREFIX}${cleanUrl}`;
+};
+
 export const VersionHistory = ({ versions = [], onSelectVersion, currentVersionId }) => {
+  const safeVersions = Array.isArray(versions) ? versions : [];
+
   return (
     <Box sx={{ mt: 2 }}>
       <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
         SRS Revision History
       </Typography>
       
-      {versions.length === 0 ? (
+      {safeVersions.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
           <Typography variant="body2" color="text.secondary">
             No revision history recorded for this project yet.
@@ -41,7 +56,7 @@ export const VersionHistory = ({ versions = [], onSelectVersion, currentVersionI
               </TableRow>
             </TableHead>
             <TableBody>
-              {versions.map((ver) => {
+              {safeVersions.map((ver) => {
                 const isActive = ver.id === currentVersionId;
                 
                 return (
@@ -59,22 +74,26 @@ export const VersionHistory = ({ versions = [], onSelectVersion, currentVersionI
                       {ver.change_summary || 'No changelog description.'}
                     </TableCell>
                     <TableCell align="right">
-                      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-                        <Button
-                          size="small"
-                          variant={isActive ? 'contained' : 'outlined'}
-                          startIcon={<VisibilityIcon />}
-                          onClick={() => onSelectVersion(ver)}
-                        >
-                          {isActive ? 'Active' : 'View'}
-                        </Button>
+                      <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 1 }}>
+                        {isActive ? (
+                          <Chip label="Viewing" size="small" color="primary" sx={{ fontWeight: 700 }} />
+                        ) : (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<VisibilityIcon />}
+                            onClick={() => onSelectVersion(ver)}
+                          >
+                            View Revision
+                          </Button>
+                        )}
                         {ver.file_url && (
                           <Button
                             size="small"
                             variant="outlined"
                             color="secondary"
                             startIcon={<DownloadIcon />}
-                            href={ver.file_url}
+                            href={getFullDownloadUrl(ver.file_url)}
                             target="_blank"
                             rel="noopener noreferrer"
                           >

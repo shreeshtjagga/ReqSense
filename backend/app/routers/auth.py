@@ -49,16 +49,7 @@ async def register(
         password=body.password,
         role=body.role,
         organization_id=body.organization_id,
-    )
-    
-    # Generate verification token
-    verification_token = auth_service.create_email_verification_token(user.id)
-    # Queue email task via notification service
-    from app.services.notification_service import send_verification_email
-    send_verification_email(
-        to_email=user.email,
-        token=verification_token,
-        verify_url=f"{settings.FRONTEND_URL}/verify-email?token={verification_token}"
+        invite_token=body.invite_token,
     )
 
     return RegisterResponse(id=user.id, email=user.email, role=user.role)
@@ -136,19 +127,4 @@ async def reset_password(
         db, raw_token=body.token, new_password=body.new_password
     )
     return JSONResponse(content={"message": "Password reset successful."})
-
-
-from app.schemas.auth import VerifyEmailRequest
-
-@router.post(
-    "/verify-email",
-    status_code=status.HTTP_200_OK,
-    summary="Consume email verification token",
-)
-async def verify_email(
-    body: VerifyEmailRequest,
-    db: AsyncSession = Depends(get_db),
-) -> JSONResponse:
-    await auth_service.verify_email_token(db, token=body.token)
-    return JSONResponse(content={"message": "Email verification successful."})
 

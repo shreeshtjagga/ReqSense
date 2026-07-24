@@ -1,4 +1,5 @@
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -12,6 +13,9 @@ from app.models.change_request import ChangeRequest
 from app.models.user import User
 from app.schemas.change_request import ChangeRequestCreate, ChangeRequestRead, ChangeRequestReview
 from app.tasks.impact_tasks import run_impact_analysis_task
+from app.services.impact_analyser import ImpactAnalyser
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/change-requests", tags=["change-requests"])
 
@@ -52,8 +56,30 @@ async def create_change_request(
     await db.commit()
     await db.refresh(cr)
 
-    # Enqueue Celery impact analysis task
-    run_impact_analysis_task.delay(str(cr.id))
+    # Perform impact analysis inline to guarantee instant analysis for dev & client
+    try:
+        analysis_result = await ImpactAnalyser.analyze_impact(
+            title=cr.title,
+            description=cr.description,
+            project_id=cr.project_id,
+            db=db
+        )
+        if analysis_result:
+            cr.severity = analysis_result.get("severity", cr.severity or "medium")
+            cr.impact_report = analysis_result.get("impact_report", "Impact analysis completed.")
+            if analysis_result.get("affected_features"):
+                cr.affected_features = json.dumps(analysis_result.get("affected_features"))
+            db.add(cr)
+            await db.commit()
+            await db.refresh(cr)
+    except Exception as e:
+        logger.warning(f"Impact analysis failed for change request {cr.id}: {e}")
+
+    # Enqueue background task as fallback
+    try:
+        run_impact_analysis_task.delay(str(cr.id))
+    except Exception as e:
+        logger.debug(f"Celery dispatch skipped/failed: {e}")
 
     return cr
 

@@ -19,3 +19,8 @@ export const endSession = async (sessionId, status = 'completed') => {
   const response = await api.patch(`/sessions/${sessionId}/end`, { status });
   return response.data;
 };
+
+export const generateSRS = async (sessionId) => {
+  const response = await api.post(`/sessions/${sessionId}/generate-srs`);
+  return response.data;
+};

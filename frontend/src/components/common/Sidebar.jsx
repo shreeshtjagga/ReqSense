@@ -36,11 +36,8 @@ export const Sidebar = ({ mobileOpen, onDrawerToggle }) => {
     const common = [{ text: 'Dashboard', icon: <DashboardIcon />, path: '/' }];
 
     if (role === ROLES.CLIENT) {
-      return [
-        ...common,
-        { text: 'Chat Sessions', icon: <ChatIcon />, path: '/client/sessions' },
-        { text: 'Submit Change Request', icon: <RateReviewIcon />, path: '/client/change-request/new' },
-      ];
+      // Chat Sessions and Change Requests are accessed via the project hub (/client/projects/:id)
+      return [...common];
     }
 
     if (role === ROLES.DEVELOPER) {

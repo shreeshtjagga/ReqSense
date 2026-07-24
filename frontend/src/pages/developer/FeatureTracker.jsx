@@ -20,6 +20,7 @@ import {
   DialogActions,
   TextField,
   Stack,
+  Divider,
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import Layout from '../../components/layout/Layout';
@@ -27,9 +28,10 @@ import Button from '../../components/common/Button';
 import EmptyState from '../../components/common/EmptyState';
 import Badge from '../../components/common/Badge';
 import { listProjects } from '../../api/projects';
-import { listFeaturesForProject, updateFeatureStatus } from '../../api/featureStatus';
+import { listFeaturesForProject, updateFeatureStatus, createFeatureStatus } from '../../api/featureStatus';
 import { useToastStore } from '../../store/toastStore';
 import { FEATURE_STATUS } from '../../utils/constants';
+import AddIcon from '@mui/icons-material/Add';
 
 export const FeatureTracker = () => {
   const showToast = useToastStore((state) => state.showToast);
@@ -39,6 +41,12 @@ export const FeatureTracker = () => {
   const [features, setFeatures] = useState([]);
   const [loading, setLoading] = useState(true);
   const [featuresLoading, setFeaturesLoading] = useState(false);
+
+  // Create modal state
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createTitle, setCreateTitle] = useState('');
+  const [createDescription, setCreateDescription] = useState('');
+  const [creating, setCreating] = useState(false);
 
   // Edit modal state
   const [editOpen, setEditOpen] = useState(false);
@@ -109,12 +117,11 @@ export const FeatureTracker = () => {
       // Refresh features from database
       fetchFeatures(projectId);
     } catch (err) {
-      const isConflict = err.response?.status === 409 || err.response?.data?.detail === 'STALE_VERSION';
+      const isConflict = err.response?.status === 409 || err.response?.data?.code === 'STALE_VERSION';
       if (isConflict) {
         // Handle STALE_VERSION 409 conflict
         showToast('Someone else updated this feature. Refreshing your layout...', 'error');
         setEditOpen(false);
-        // Refresh features immediately to get the latest version
         fetchFeatures(projectId);
       } else {
         showToast(err.response?.data?.detail || 'Failed to update feature.', 'error');
@@ -171,6 +178,29 @@ export const FeatureTracker = () => {
     );
   };
 
+  const handleCreateFeature = async (e) => {
+    e.preventDefault();
+    if (!createTitle.trim() || !projectId) return;
+
+    setCreating(true);
+    try {
+      await createFeatureStatus({
+        project_id: projectId,
+        title: createTitle.trim(),
+        description: createDescription.trim(),
+      });
+      showToast('New feature added successfully!', 'success');
+      setCreateOpen(false);
+      setCreateTitle('');
+      setCreateDescription('');
+      fetchFeatures(projectId);
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Failed to create feature.', 'error');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <Layout>
       <Box sx={{ mb: 4, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
@@ -184,21 +214,30 @@ export const FeatureTracker = () => {
         </Box>
         
         {projects.length > 0 && (
-          <FormControl sx={{ minWidth: 200 }}>
-            <InputLabel id="project-select-label">Active Project</InputLabel>
-            <Select
-              labelId="project-select-label"
-              value={projectId}
-              label="Active Project"
-              onChange={(e) => setProjectId(e.target.value)}
+          <Stack direction="row" spacing={2} alignItems="center">
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setCreateOpen(true)}
             >
-              {projects.map((p) => (
-                <MenuItem key={p.id} value={p.id}>
-                  {p.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+              Add Feature
+            </Button>
+            <FormControl sx={{ minWidth: 200 }}>
+              <InputLabel id="project-select-label">Active Project</InputLabel>
+              <Select
+                labelId="project-select-label"
+                value={projectId}
+                label="Active Project"
+                onChange={(e) => setProjectId(e.target.value)}
+              >
+                {projects.map((p) => (
+                  <MenuItem key={p.id} value={p.id}>
+                    {p.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Stack>
         )}
       </Box>
 
@@ -230,6 +269,42 @@ export const FeatureTracker = () => {
           </Grid>
         </Grid>
       )}
+
+      {/* Create Feature Dialog */}
+      <Dialog open={createOpen} onClose={() => !creating && setCreateOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Add New Feature</DialogTitle>
+        <Box component="form" onSubmit={handleCreateFeature}>
+          <DialogContent dividers>
+            <Stack spacing={3}>
+              <TextField
+                label="Feature Title"
+                value={createTitle}
+                onChange={(e) => setCreateTitle(e.target.value)}
+                required
+                fullWidth
+                placeholder="e.g. User Authentication & SSO"
+              />
+              <TextField
+                label="Description"
+                value={createDescription}
+                onChange={(e) => setCreateDescription(e.target.value)}
+                multiline
+                rows={3}
+                fullWidth
+                placeholder="Detailed description of functional requirements..."
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <Button disabled={creating} onClick={() => setCreateOpen(false)} color="inherit">
+              Cancel
+            </Button>
+            <Button type="submit" variant="contained" color="primary" loading={creating}>
+              Create Feature
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
 
       {/* Edit Feature Status Dialog */}
       <Dialog open={editOpen} onClose={() => !updating && setEditOpen(false)} maxWidth="sm" fullWidth>

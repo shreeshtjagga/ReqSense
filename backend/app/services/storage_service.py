@@ -13,7 +13,9 @@ def get_s3_client():
     is_mock = (
         not settings.S3_ACCESS_KEY_ID or
         settings.S3_ACCESS_KEY_ID.startswith("test") or
-        settings.S3_ACCESS_KEY_ID.startswith("mock")
+        settings.S3_ACCESS_KEY_ID.startswith("mock") or
+        settings.S3_ACCESS_KEY_ID.startswith("dev") or
+        "placeholder" in settings.S3_ACCESS_KEY_ID.lower()
     )
     if is_mock:
         return None
@@ -38,23 +40,27 @@ def get_s3_client():
     return boto3.client("s3", **kwargs)
 
 
+import shutil
+from pathlib import Path
+
+_BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
 class StorageService:
     @staticmethod
     def upload_srs(local_file_path: str, project_id: str, version: str) -> str:
         """
-        Uploads local file to S3/R2.
+        Uploads local file to S3/R2 or stores in persistent local mock storage.
         Returns the object URL / S3 key.
         """
         s3_key = f"projects/{project_id}/srs_{version}.docx"
         s3 = get_s3_client()
 
         if s3 is None:
-            # Mock upload
-            logger.info(f"[MOCK STORAGE] Uploading {local_file_path} to {s3_key}")
-            # Ensure local mock storage directory exists
-            mock_dir = os.path.join(os.path.dirname(local_file_path), "..", "mock_s3")
-            os.makedirs(mock_dir, exist_ok=True)
-            # Just return the key as URL
+            # Mock upload — copy file persistently to storage_files/{s3_key}
+            logger.info(f"[MOCK STORAGE] Saving {local_file_path} to storage_files/{s3_key}")
+            target_path = _BASE_DIR / "storage_files" / s3_key
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(local_file_path, target_path)
             return s3_key
 
         try:
@@ -72,13 +78,12 @@ class StorageService:
     @staticmethod
     def get_download_url(s3_key: str, expires_in: int = 3600) -> str:
         """
-        Generates a presigned S3/R2 download URL for the document.
+        Generates a download URL for the document (presigned S3 or local download endpoint).
         """
         s3 = get_s3_client()
         if s3 is None:
-            logger.info(f"[MOCK STORAGE] Generating presigned URL for {s3_key}")
-            # Simulate a presigned URL
-            return f"{settings.FRONTEND_URL}/mock-download/{s3_key}?expires={expires_in}"
+            logger.info(f"[MOCK STORAGE] Returning download endpoint for {s3_key}")
+            return f"/api/v1/srs/download-file?key={s3_key}"
 
         try:
             url = s3.generate_presigned_url(
@@ -92,4 +97,4 @@ class StorageService:
             return url
         except ClientError as e:
             logger.error(f"Failed to generate presigned URL: {e}")
-            raise e
+            return f"/api/v1/srs/download-file?key={s3_key}"

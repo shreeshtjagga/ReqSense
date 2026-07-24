@@ -65,28 +65,102 @@ class SRSGenerator:
             else:
                 summary_text = "Mock executive summary for requirement atoms."
 
-        # 3. Create the Word document using python-docx
+        # 3. Create the Word document using python-docx with professional styling
         doc = docx.Document()
-        doc.add_heading("Software Requirements Specification (SRS)", 0)
-        doc.add_heading("1. Executive Summary", level=1)
-        doc.add_paragraph(summary_text)
+        from docx.shared import Inches, Pt, RGBColor
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.enum.table import WD_TABLE_ALIGNMENT
 
-        doc.add_heading("2. Functional Requirements", level=1)
+        # Title
+        title_p = doc.add_paragraph()
+        title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        title_run = title_p.add_run("SOFTWARE REQUIREMENTS SPECIFICATION")
+        title_run.font.name = "Arial"
+        title_run.font.size = Pt(22)
+        title_run.font.bold = True
+        title_run.font.color.rgb = RGBColor(30, 58, 138)  # Navy Blue
+
+        subtitle_p = doc.add_paragraph()
+        subtitle_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        sub_run = subtitle_p.add_run("ReqSense AI Auto-Generated Document")
+        sub_run.font.size = Pt(11)
+        sub_run.font.italic = True
+        sub_run.font.color.rgb = RGBColor(100, 116, 139)
+
+        doc.add_paragraph()  # spacing
+
+        # Executive Metadata Table
+        meta_table = doc.add_table(rows=3, cols=2)
+        meta_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        meta_table.style = 'Table Grid'
+
+        headers_data = [
+            ("Project Reference", str(session.project_id)),
+            ("Generated Timestamp", time.strftime("%Y-%m-%d %H:%M:%S UTC")),
+            ("Specification Generator", "ARIA AI System"),
+        ]
+        for row_idx, (label, val) in enumerate(headers_data):
+            cell_lbl = meta_table.cell(row_idx, 0)
+            cell_val = meta_table.cell(row_idx, 1)
+            
+            p_lbl = cell_lbl.paragraphs[0]
+            r_lbl = p_lbl.add_run(label)
+            r_lbl.bold = True
+            r_lbl.font.color.rgb = RGBColor(30, 58, 138)
+            
+            p_val = cell_val.paragraphs[0]
+            p_val.add_run(val)
+
+        doc.add_paragraph()
+
+        # Section 1: Executive Summary
+        h1 = doc.add_heading("1. Executive Summary", level=1)
+        h1.runs[0].font.color.rgb = RGBColor(30, 58, 138)
+        p_sum = doc.add_paragraph(summary_text)
+        p_sum.paragraph_format.line_spacing = 1.25
+
+        # Section 2: Functional Requirements Table
+        h2 = doc.add_heading("2. Functional Requirements Table", level=1)
+        h2.runs[0].font.color.rgb = RGBColor(30, 58, 138)
+
         if not atoms:
             doc.add_paragraph("No requirements captured during this session.")
         else:
+            table = doc.add_table(rows=1, cols=4)
+            table.style = 'Table Grid'
+            table.alignment = WD_TABLE_ALIGNMENT.CENTER
+            
+            # Header Row
+            hdr_cells = table.rows[0].cells
+            hdr_titles = ["Ref #", "Subject Domain", "Action Statement", "Constraint Details"]
+            for idx, text in enumerate(hdr_titles):
+                p = hdr_cells[idx].paragraphs[0]
+                run = p.add_run(text)
+                run.bold = True
+                run.font.color.rgb = RGBColor(30, 58, 138)
+
+            # Data Rows
             for idx, atom in enumerate(atoms, start=1):
-                doc.add_heading(f"2.{idx} Requirement {idx}", level=2)
-                p = doc.add_paragraph()
-                p.add_run("Subject: ").bold = True
-                p.add_run(f"{atom.subject}\n")
-                p.add_run("Action: ").bold = True
-                p.add_run(f"{atom.action}\n")
-                if atom.constraint_text:
-                    p.add_run("Constraint: ").bold = True
-                    p.add_run(f"{atom.constraint_text}\n")
-                p.add_run("Raw statement: ").bold = True
-                p.add_run(f'"{atom.raw_text}"')
+                row_cells = table.add_row().cells
+                row_cells[0].paragraphs[0].add_run(f"REQ-{idx:03d}")
+                row_cells[1].paragraphs[0].add_run(atom.subject)
+                row_cells[2].paragraphs[0].add_run(atom.action)
+                row_cells[3].paragraphs[0].add_run(atom.constraint_text or "N/A")
+
+        doc.add_paragraph()
+
+        # Section 3: Raw Captured Client Statements
+        h3 = doc.add_heading("3. Raw Client Statements", level=1)
+        h3.runs[0].font.color.rgb = RGBColor(30, 58, 138)
+        if not atoms:
+            doc.add_paragraph("No raw statements recorded.")
+        else:
+            for idx, atom in enumerate(atoms, start=1):
+                p_raw = doc.add_paragraph(style='List Bullet')
+                r_num = p_raw.add_run(f"REQ-{idx:03d}: ")
+                r_num.bold = True
+                r_stmt = p_raw.add_run(f'"{atom.raw_text}"')
+                r_stmt.italic = True
 
         # 4. Save to a temporary file
         fd, temp_path = tempfile.mkstemp(suffix=".docx")

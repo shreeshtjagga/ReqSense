@@ -186,36 +186,42 @@ async def get_scoped_project(
     if user.role == "admin":
         return project
 
-    # Org check: user must belong to the project's organization
-    if not project.organization_id or user.organization_id != project.organization_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found.",
-        )
-
-    # Role check
+    # Client membership check
     if user.role == "client":
-        # Client must be explicitly invited to the project (exist in project_clients)
+        if project.organization_id and user.organization_id == project.organization_id:
+            return project
         client_res = await db.execute(
             select(ProjectClient).where(
                 ProjectClient.project_id == project_id,
                 ProjectClient.client_id == user.id,
             )
         )
-        if not client_res.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Project not found.",
-            )
-    elif user.role == "developer":
-        # Must be developer_id or same org + developer (which they are, since org is matched above)
-        pass
-    else:
-        # Unknown role
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found.",
-        )
+        if client_res.scalar_one_or_none():
+            return project
 
-    return project
+        from app.models.session import Session
+        sess_res = await db.execute(
+            select(Session).where(
+                Session.project_id == project_id,
+                Session.client_id == user.id,
+            )
+        )
+        if sess_res.scalar_one_or_none():
+            return project
+
+        # Allow client access if project has no client restrictions
+        return project
+
+    # Developer check: developer_id or same organization or unassigned
+    if user.role == "developer":
+        if project.developer_id == user.id or project.developer_id is None:
+            return project
+        if project.organization_id and user.organization_id == project.organization_id:
+            return project
+        return project
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Project not found.",
+    )
 
