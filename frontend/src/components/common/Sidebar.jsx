@@ -41,12 +41,8 @@ export const Sidebar = ({ mobileOpen, onDrawerToggle }) => {
     }
 
     if (role === ROLES.DEVELOPER) {
-      return [
-        ...common,
-        { text: 'Feature Status', icon: <ListAltIcon />, path: '/dev/features' },
-        { text: 'Change Requests', icon: <RateReviewIcon />, path: '/dev/change-requests' },
-        { text: 'SRS Documents', icon: <AssignmentIcon />, path: '/dev/srs' },
-      ];
+      // All project management options (Feature Status, Change Requests, SRS Documents) are accessed via the project detail page (/dev/projects/:id)
+      return [...common];
     }
 
     if (role === ROLES.ADMIN) {
