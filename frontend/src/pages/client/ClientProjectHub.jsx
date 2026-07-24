@@ -24,6 +24,11 @@ import {
   Select,
   MenuItem,
   Divider,
+  Card,
+  CardContent,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
@@ -31,7 +36,7 @@ import Button from '../../components/common/Button';
 import EmptyState from '../../components/common/EmptyState';
 import { getProject } from '../../api/projects';
 import { listSessionsForProject, createSession } from '../../api/sessions';
-import { createChangeRequest } from '../../api/changeRequests';
+import { createChangeRequest, listChangeRequests } from '../../api/changeRequests';
 import { useToastStore } from '../../store/toastStore';
 import { useProjectStore } from '../../store/projectStore';
 import { formatDateTime } from '../../utils/helpers';
@@ -44,6 +49,11 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import RateReviewIcon from '@mui/icons-material/RateReview';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import DashboardIcon from '@mui/icons-material/Dashboard';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CancelIcon from '@mui/icons-material/Cancel';
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import CommentIcon from '@mui/icons-material/Comment';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
 // ── Project Overview Tab ──────────────────────────────────────────────────────
 const ProjectOverviewTab = ({ project, sessions }) => {
@@ -214,11 +224,32 @@ const ChatSessionsTab = ({ projectId, project, sessions, loadingSessions, onRefr
 const ChangeRequestTab = ({ projectId, project, onCancel }) => {
   const showToast = useToastStore((s) => s.showToast);
 
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+
+  // Form states
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [severity, setSeverity] = useState('medium');
   const [features, setFeatures] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const fetchRequests = async () => {
+    setLoading(true);
+    try {
+      const data = await listChangeRequests(projectId);
+      setRequests(data || []);
+    } catch (err) {
+      showToast('Failed to load change requests.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRequests();
+  }, [projectId]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -246,6 +277,8 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
       setDescription('');
       setSeverity('medium');
       setFeatures('');
+      setShowForm(false);
+      fetchRequests();
     } catch (err) {
       console.error('[ChangeRequest] Submit error:', err);
       const detail = err.response?.data?.detail || 'Failed to submit change request. Please try again.';
@@ -255,77 +288,286 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
     }
   };
 
+  const getStatusChip = (status) => {
+    switch (status?.toLowerCase()) {
+      case 'approved':
+        return (
+          <Chip
+            icon={<CheckCircleIcon fontSize="small" />}
+            label="Approved"
+            color="success"
+            size="small"
+            sx={{ fontWeight: 700 }}
+          />
+        );
+      case 'rejected':
+        return (
+          <Chip
+            icon={<CancelIcon fontSize="small" />}
+            label="Rejected"
+            color="error"
+            size="small"
+            sx={{ fontWeight: 700 }}
+          />
+        );
+      case 'pending':
+      default:
+        return (
+          <Chip
+            icon={<HourglassEmptyIcon fontSize="small" />}
+            label="Pending Review"
+            color="warning"
+            size="small"
+            sx={{ fontWeight: 700 }}
+          />
+        );
+    }
+  };
+
+  const getSeverityChip = (sev) => {
+    switch (sev?.toLowerCase()) {
+      case 'high':
+        return <Chip label="High Severity" color="error" variant="outlined" size="small" sx={{ fontWeight: 600 }} />;
+      case 'medium':
+        return <Chip label="Medium Severity" color="warning" variant="outlined" size="small" sx={{ fontWeight: 600 }} />;
+      case 'low':
+      default:
+        return <Chip label="Low Severity" color="info" variant="outlined" size="small" sx={{ fontWeight: 600 }} />;
+    }
+  };
+
+  const parseFeatures = (raw) => {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    } catch (e) {}
+    return [raw];
+  };
+
   return (
     <Box>
-      <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
-        Submit a Change Request
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Request modifications to the requirements for <strong>{project?.name || 'this project'}</strong>.
-      </Typography>
-
-      <Paper
-        variant="outlined"
-        sx={{ p: 4, borderRadius: 3, maxWidth: 640 }}
-      >
-        <Box component="form" onSubmit={handleSubmit}>
-          <Stack spacing={3}>
-            <TextField
-              label="Request Title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-              fullWidth
-              placeholder="e.g. Add multi-factor authentication"
-            />
-
-            <TextField
-              label="Description of Change"
-              multiline
-              rows={4}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              required
-              fullWidth
-              placeholder="Describe what requirements should be updated and why…"
-            />
-
-            <FormControl fullWidth>
-              <InputLabel id="severity-label">Estimated Severity</InputLabel>
-              <Select
-                labelId="severity-label"
-                value={severity}
-                label="Estimated Severity"
-                onChange={(e) => setSeverity(e.target.value)}
-              >
-                <MenuItem value={SEVERITIES.LOW}>Low — Minor wording or UI change</MenuItem>
-                <MenuItem value={SEVERITIES.MEDIUM}>Medium — New rule or condition</MenuItem>
-                <MenuItem value={SEVERITIES.HIGH}>High — Core feature redesign</MenuItem>
-              </Select>
-            </FormControl>
-
-            <TextField
-              label="Affected Features (comma-separated)"
-              value={features}
-              onChange={(e) => setFeatures(e.target.value)}
-              fullWidth
-              placeholder="e.g. Login, Authentication Flow, User Profiles"
-              helperText="List the feature areas this change request impacts."
-            />
-
-            <Divider />
-
-            <Stack direction="row" spacing={2} justifyContent="flex-end">
-              <Button color="inherit" onClick={onCancel}>
-                Cancel
-              </Button>
-              <Button type="submit" variant="contained" color="primary" loading={submitting}>
-                Submit Request
-              </Button>
-            </Stack>
-          </Stack>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>
+            Change Requests ({requests.length})
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Track status, developer reviews, and submit new modification requests for <strong>{project?.name || 'this project'}</strong>.
+          </Typography>
         </Box>
-      </Paper>
+        <Button
+          variant={showForm ? 'outlined' : 'contained'}
+          color={showForm ? 'inherit' : 'primary'}
+          startIcon={showForm ? undefined : <AddIcon />}
+          onClick={() => setShowForm(!showForm)}
+        >
+          {showForm ? 'Close Form' : '+ Raise Change Request'}
+        </Button>
+      </Stack>
+
+      {/* ── Submission Form ────────────────────────────────────────────── */}
+      {showForm && (
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 3.5,
+            borderRadius: 3,
+            mb: 4,
+            borderColor: 'primary.main',
+            bgcolor: 'background.paper',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+          }}
+        >
+          <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2 }}>
+            Submit a New Change Request
+          </Typography>
+          <Box component="form" onSubmit={handleSubmit}>
+            <Stack spacing={2.5}>
+              <TextField
+                label="Request Title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+                fullWidth
+                placeholder="e.g. Add multi-factor authentication or support non-financial data"
+              />
+
+              <TextField
+                label="Description of Change"
+                multiline
+                rows={3}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                required
+                fullWidth
+                placeholder="Describe what requirements should be updated and why…"
+              />
+
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel id="severity-label">Estimated Severity</InputLabel>
+                    <Select
+                      labelId="severity-label"
+                      value={severity}
+                      label="Estimated Severity"
+                      onChange={(e) => setSeverity(e.target.value)}
+                    >
+                      <MenuItem value={SEVERITIES.LOW}>Low — Minor wording or UI tweak</MenuItem>
+                      <MenuItem value={SEVERITIES.MEDIUM}>Medium — New rule or condition</MenuItem>
+                      <MenuItem value={SEVERITIES.HIGH}>High — Core architectural change</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="Affected Features (comma-separated)"
+                    value={features}
+                    onChange={(e) => setFeatures(e.target.value)}
+                    fullWidth
+                    placeholder="e.g. Authentication, Billing, Dashboard"
+                  />
+                </Grid>
+              </Grid>
+
+              <Divider />
+
+              <Stack direction="row" spacing={2} justifyContent="flex-end">
+                <Button color="inherit" onClick={() => setShowForm(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="contained" color="primary" loading={submitting}>
+                  Submit Request
+                </Button>
+              </Stack>
+            </Stack>
+          </Box>
+        </Paper>
+      )}
+
+      {/* ── List / Cards of Submitted Requests ──────────────────────────── */}
+      {loading ? (
+        <Stack spacing={2}>
+          <Skeleton variant="rectangular" height={100} sx={{ borderRadius: 2 }} />
+          <Skeleton variant="rectangular" height={100} sx={{ borderRadius: 2 }} />
+        </Stack>
+      ) : requests.length === 0 ? (
+        !showForm && (
+          <Paper variant="outlined" sx={{ p: 5, textAlign: 'center', borderRadius: 3 }}>
+            <RateReviewIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1.5 }} />
+            <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
+              No Change Requests Yet
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
+              Need to adjust project requirements? Raise a change request for your developers to review.
+            </Typography>
+            <Button variant="contained" startIcon={<AddIcon />} onClick={() => setShowForm(true)}>
+              Raise First Change Request
+            </Button>
+          </Paper>
+        )
+      ) : (
+        <Stack spacing={2.5}>
+          {requests.map((cr) => {
+            const featList = parseFeatures(cr.affected_features);
+            const isApproved = cr.status === 'approved';
+            const isRejected = cr.status === 'rejected';
+
+            return (
+              <Card
+                key={cr.id}
+                variant="outlined"
+                sx={{
+                  borderRadius: 3,
+                  borderColor: isApproved ? 'success.light' : isRejected ? 'error.light' : 'divider',
+                  bgcolor: isApproved ? 'success.50' : isRejected ? 'error.50' : 'background.paper',
+                  transition: 'box-shadow 0.2s',
+                  '&:hover': { boxShadow: '0 4px 16px rgba(0,0,0,0.08)' },
+                }}
+              >
+                <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'flex-start' }} spacing={1.5} sx={{ mb: 1.5 }}>
+                    <Box>
+                      <Typography variant="h6" sx={{ fontWeight: 800, fontSize: '1.05rem', color: 'text.primary' }}>
+                        {cr.title}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Submitted on {formatDateTime(cr.created_at)}
+                      </Typography>
+                    </Box>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      {getSeverityChip(cr.severity)}
+                      {getStatusChip(cr.status)}
+                    </Stack>
+                  </Stack>
+
+                  <Typography variant="body2" color="text.primary" sx={{ mb: 2, whiteSpace: 'pre-line', lineHeight: 1.6 }}>
+                    {cr.description}
+                  </Typography>
+
+                  {/* Affected Features Tags */}
+                  {featList.length > 0 && (
+                    <Stack direction="row" spacing={0.8} alignItems="center" flexWrap="wrap" sx={{ mb: 2 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', mr: 0.5 }}>
+                        Affected Features:
+                      </Typography>
+                      {featList.map((f, i) => (
+                        <Chip key={i} label={f} size="small" variant="outlined" sx={{ fontSize: '0.75rem' }} />
+                      ))}
+                    </Stack>
+                  )}
+
+                  {/* Developer Note Callout (Approve/Reject Reason) */}
+                  {cr.developer_note && (
+                    <Paper
+                      elevation={0}
+                      sx={{
+                        p: 2,
+                        mt: 1.5,
+                        borderRadius: 2,
+                        bgcolor: isApproved ? '#E8F5E9' : isRejected ? '#FFEBEE' : '#FFF8E1',
+                        border: '1px solid',
+                        borderColor: isApproved ? '#A5D6A7' : isRejected ? '#EF9A9A' : '#FFE082',
+                      }}
+                    >
+                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                        <CommentIcon sx={{ fontSize: 18, color: isApproved ? 'success.main' : isRejected ? 'error.main' : 'warning.main' }} />
+                        <Typography variant="subtitle2" sx={{ fontWeight: 800, color: isApproved ? 'success.dark' : isRejected ? 'error.dark' : 'warning.dark' }}>
+                          Developer Feedback ({cr.reviewed_at ? formatDateTime(cr.reviewed_at) : 'Reviewed'})
+                        </Typography>
+                      </Stack>
+                      <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 500 }}>
+                        {cr.developer_note}
+                      </Typography>
+                    </Paper>
+                  )}
+
+                  {/* AI Impact Report (if available) */}
+                  {cr.impact_report && (
+                    <Accordion variant="outlined" sx={{ mt: 1.5, borderRadius: '8px !important', '&:before': { display: 'none' } }}>
+                      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <SmartToyIcon sx={{ fontSize: 18, color: 'primary.main' }} />
+                          <Typography variant="caption" sx={{ fontWeight: 700, color: 'primary.main' }}>
+                            AI Impact Analysis
+                          </Typography>
+                        </Stack>
+                      </AccordionSummary>
+                      <AccordionDetails sx={{ pt: 0 }}>
+                        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
+                          {cr.impact_report}
+                        </Typography>
+                      </AccordionDetails>
+                    </Accordion>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </Stack>
+      )}
     </Box>
   );
 };
