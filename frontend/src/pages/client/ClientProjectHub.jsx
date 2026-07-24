@@ -247,7 +247,9 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
       setSeverity('medium');
       setFeatures('');
     } catch (err) {
-      showToast('Failed to submit change request. Please try again.', 'error');
+      console.error('[ChangeRequest] Submit error:', err);
+      const detail = err.response?.data?.detail || 'Failed to submit change request. Please try again.';
+      showToast(detail, 'error');
     } finally {
       setSubmitting(false);
     }
