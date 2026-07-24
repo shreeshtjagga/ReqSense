@@ -195,14 +195,30 @@ async def create_message(
         history = []
 
     # ── 3. Call ARIA (Groq) — pre-transaction ────────────────────────────────
+    # Build project context so ARIA knows exactly which project it is in
+    project_context = {
+        "name": project.name if project else "",
+        "description": project.description if project else "",
+        "domain": project.domain if project else "",
+        # Provide a concise rolling summary of already-captured requirements (max 800 chars)
+        "atom_summary": atom_summary[:800] if atom_summary else "",
+    }
+
     aria_result: dict = {}
     prompt_tokens = 0
     completion_tokens = 0
     aria_content = ""
     try:
+        import functools as _functools
         loop = asyncio.get_event_loop()
         aria_result = await loop.run_in_executor(
-            None, AriaAgent.generate_response, history, sanitized_content
+            None,
+            _functools.partial(
+                AriaAgent.generate_response,
+                history,
+                sanitized_content,
+                project_context,
+            ),
         )
         aria_content = aria_result.get("content", "")
         prompt_tokens = aria_result.get("prompt_tokens", 0)
