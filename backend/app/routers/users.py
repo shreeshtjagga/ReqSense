@@ -93,7 +93,7 @@ async def admin_create_user(
         action="admin_create_user",
         entity_type="user",
         entity_id=user.id,
-        metadata={"email": user.email, "role": user.role},
+        metadata_={"email": user.email, "role": user.role},
     ))
     await db.commit()
     await db.refresh(user)
@@ -170,7 +170,7 @@ async def admin_update_user(
         action="admin_update_user",
         entity_type="user",
         entity_id=user.id,
-        metadata={"fields_changed": list(body.model_dump(exclude_unset=True).keys())},
+        metadata_={"fields_changed": list(body.model_dump(exclude_unset=True).keys())},
     ))
     await db.commit()
     await db.refresh(user)
@@ -204,7 +204,7 @@ async def admin_delete_user(
         action="admin_delete_user",
         entity_type="user",
         entity_id=user.id,
-        metadata={"email": user.email, "role": user.role},
+        metadata_={"email": user.email, "role": user.role},
     ))
     await db.delete(user)
     await db.commit()

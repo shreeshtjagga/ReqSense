@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -48,7 +48,7 @@ async def create_project(
         action="create_project",
         entity_type="project",
         entity_id=project.id,
-        metadata={"name": project.name, "domain": project.domain},
+        metadata_={"name": project.name, "domain": project.domain},
     ))
     await db.commit()
     await db.refresh(project)
@@ -63,8 +63,11 @@ async def list_projects(
     if current_user.role == "admin":
         result = await db.execute(select(Project))
     elif current_user.role == "developer":
+        conditions = [Project.developer_id == current_user.id, Project.developer_id.is_(None)]
+        if current_user.organization_id:
+            conditions.append(Project.organization_id == current_user.organization_id)
         result = await db.execute(
-            select(Project).where(Project.developer_id == current_user.id)
+            select(Project).where(or_(*conditions))
         )
     else:
         # client — projects where they are invited
@@ -98,7 +101,7 @@ async def update_project(
         action="update_project",
         entity_type="project",
         entity_id=project.id,
-        metadata={"fields_changed": list(updates.keys())},
+        metadata_={"fields_changed": list(updates.keys())},
     ))
     await db.commit()
     await db.refresh(project)
@@ -116,7 +119,7 @@ async def delete_project(
         action="delete_project",
         entity_type="project",
         entity_id=project.id,
-        metadata={"name": project.name},
+        metadata_={"name": project.name},
     ))
     await db.delete(project)
     await db.commit()
@@ -247,7 +250,7 @@ async def create_project_invite(
         action="create_project_invite",
         entity_type="project",
         entity_id=project.id,
-        metadata={"email": email, "role": body.role, "invite_id": str(invite.id), "token": token},
+        metadata_={"email": email, "role": body.role, "invite_id": str(invite.id), "token": token},
     ))
     await db.commit()
     await db.refresh(invite)

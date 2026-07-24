@@ -116,7 +116,7 @@ async def resolve_contradiction(
         action="resolve_contradiction",
         entity_type="contradiction",
         entity_id=c.id,
-        metadata={"action_taken": body.action, "resolution_note": body.resolution}
+        metadata_={"action_taken": body.action, "resolution_note": body.resolution}
     )
     db.add(audit)
     db.add(c)
