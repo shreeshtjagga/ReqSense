@@ -6,7 +6,6 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
 import ProjectCard from '../../components/dashboard/ProjectCard';
 import { listProjects } from '../../api/projects';
-import { createSession, listSessionsForProject } from '../../api/sessions';
 import { useProjectStore } from '../../store/projectStore';
 import { useToastStore } from '../../store/toastStore';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
@@ -170,22 +169,9 @@ export const ClientDashboard = () => {
     fetchProjects();
   }, [setProjects, showToast]);
 
-  const handleStartSession = async (project) => {
-    try {
-      setActiveProject(project);
-      const existingSessions = await listSessionsForProject(project.id);
-      const activeSession = existingSessions?.find((s) => s.status === 'active');
-      if (activeSession) {
-        showToast('Resuming active session...', 'info');
-        navigate(`/client/sessions/${activeSession.id}`);
-        return;
-      }
-      const session = await createSession({ project_id: project.id });
-      showToast('New requirement session started!', 'success');
-      navigate(`/client/sessions/${session.id}`);
-    } catch (err) {
-      showToast('Failed to start a session. Try again later.', 'error');
-    }
+  const handleOpenProject = (project) => {
+    setActiveProject(project);
+    navigate(`/client/projects/${project.id}`);
   };
 
   return (
@@ -239,7 +225,7 @@ export const ClientDashboard = () => {
               <Grid item xs={12} sm={6} md={4} key={proj.id}>
                 <ProjectCard
                   project={proj}
-                  onClick={() => handleStartSession(proj)}
+                  onClick={() => handleOpenProject(proj)}
                 />
               </Grid>
             ))}

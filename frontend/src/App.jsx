@@ -11,6 +11,7 @@ import AcceptInvite from './pages/auth/AcceptInvite';
 
 // Client Pages
 import ClientDashboard from './pages/client/ClientDashboard';
+import ClientProjectHub from './pages/client/ClientProjectHub';
 import ClientSessions from './pages/client/ClientSessions';
 import ClientProjectSessions from './pages/client/ClientProjectSessions';
 import ChatSession from './pages/client/ChatSession';
@@ -32,6 +33,7 @@ import AdminAuditLogs from './pages/admin/AdminAuditLogs';
 // Common Components
 import ToastNotification from './components/common/Alert';
 import ErrorBoundary from './components/common/ErrorBoundary';
+import NotFound from './pages/NotFound';
 
 // Scoped Route Guards
 const PrivateRoute = ({ children, allowedRoles }) => {
@@ -83,6 +85,14 @@ export const App = () => {
         />
 
         {/* Client Routes */}
+        <Route
+          path="/client/projects/:projectId"
+          element={
+            <PrivateRoute allowedRoles={['client']}>
+              <ClientProjectHub />
+            </PrivateRoute>
+          }
+        />
         <Route
           path="/client/sessions"
           element={

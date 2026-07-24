@@ -105,8 +105,13 @@ export const ChatSession = () => {
     try {
       setLoading(true);
       await endSession(sessionId, 'completed');
-      showToast('Session ended successfully! Generating SRS...', 'success');
-      navigate('/');
+      showToast('Session ended. Your requirements are being processed!', 'success');
+      // Navigate to project hub if we have the project id, else dashboard
+      if (session?.project_id) {
+        navigate(`/client/projects/${session.project_id}`);
+      } else {
+        navigate('/');
+      }
     } catch (err) {
       showToast('Failed to end the session.', 'error');
     } finally {
@@ -206,7 +211,7 @@ export const ChatSession = () => {
                 fullWidth
                 size="large"
               >
-                End & Generate SRS
+                End Chat
               </Button>
             )}
           </Stack>
