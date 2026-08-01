@@ -1,6 +1,6 @@
 """Projects router — full Phase 2 CRUD with scoped access."""
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,7 +8,7 @@ from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import CurrentUser, get_current_user, get_scoped_project, require_roles
+from app.dependencies import CurrentUser, get_scoped_project, require_roles
 from app.models.audit_log import AuditLog
 from app.models.project import Project, ProjectClient
 from app.models.project_invite_token import ProjectInviteToken

@@ -21,10 +21,9 @@ import json
 import logging
 import re
 import uuid
-from typing import AsyncGenerator, List, Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
