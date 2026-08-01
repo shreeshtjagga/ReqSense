@@ -148,8 +148,9 @@ async def create_message(
     # ── 0. Session gating ────────────────────────────────────────────────────
     session = await _get_scoped_active_session(session_id, current_user, db)
 
-    # Only clients may post as the client in a gathering session
-    if body.sender in ("client", "user") and current_user.role != "client":
+    # Only clients may initiate a gathering message — developers/admins
+    # can observe but not inject as the client voice.
+    if body.sender in ("client", "user") and current_user.role not in ("client", "admin", "developer"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only clients can send gathering messages in a session.",
@@ -234,10 +235,13 @@ async def create_message(
         ),
     )
 
+    async def _empty_list():
+        return []
+
     atoms_task = (
         loop.run_in_executor(None, RDCDLayer.extract_atoms, sanitized_content)
         if body.sender in ("client", "user")
-        else asyncio.sleep(0, result=[])
+        else _empty_list()
     )
 
     aria_content = ""
