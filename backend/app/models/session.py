@@ -5,13 +5,18 @@ Tracks drift/contradiction stats and stability score in real time.
 
 import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, func
 from sqlalchemy import Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.message import Message
+    from app.models.project import Project
+    from app.models.user import User
 
 
 class Session(Base):

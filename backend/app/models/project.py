@@ -8,13 +8,18 @@ the model it extends.
 
 import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import DateTime, Float, ForeignKey, String, Text, func
 from sqlalchemy import Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.organization import Organization
+    from app.models.session import Session
+    from app.models.user import User
 
 
 class ProjectClient(Base):
@@ -80,10 +85,10 @@ class Project(Base):
 
     organization: Mapped[Optional["Organization"]] = relationship(back_populates="projects")
     developer: Mapped[Optional["User"]] = relationship(
-        foreign_keys="Project.developer_id"
+        foreign_keys=[developer_id]
     )
     closure_requested_user: Mapped[Optional["User"]] = relationship(
-        foreign_keys="Project.closure_requested_by"
+        foreign_keys=[closure_requested_by]
     )
     sessions: Mapped[List["Session"]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
