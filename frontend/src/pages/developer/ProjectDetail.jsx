@@ -56,7 +56,7 @@ import {
 } from '../../api/projects';
 import { listSessionsForProject } from '../../api/sessions';
 import { resolveContradiction } from '../../api/contradictions';
-import { getProjectSummary, getLLMUsage } from '../../api/analytics';
+import { getProjectSummary } from '../../api/analytics';
 import { listFeaturesForProject, updateFeatureStatus, createFeatureStatus } from '../../api/featureStatus';
 import { listChangeRequests, reviewChangeRequest } from '../../api/changeRequests';
 import { getLatestSrs, listSrsVersions, generateProjectSrs, getSrsVersionDetails } from '../../api/srs';
@@ -654,91 +654,6 @@ const ProjectSRSTab = ({ projectId }) => {
   );
 };
 
-// ── Tab 7: LLM Cost Governance ────────────────────────────────────────────────
-const LLMCostTab = ({ projectId }) => {
-  const [usage, setUsage] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!projectId) return;
-    getLLMUsage(projectId)
-      .then((data) => setUsage(data))
-      .catch(() => setUsage(null))
-      .finally(() => setLoading(false));
-  }, [projectId]);
-
-  if (loading) return <Skeleton variant="rectangular" height={240} sx={{ borderRadius: 3 }} />;
-
-  if (!usage || !usage.breakdown?.length) {
-    return (
-      <EmptyState
-        title="No LLM Usage Recorded"
-        description="Token and cost data will appear here once ARIA processes messages in this project."
-      />
-    );
-  }
-
-  const { breakdown, summary } = usage;
-
-  return (
-    <Box>
-      <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>LLM Cost &amp; Token Governance</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Breakdown of Groq API usage by endpoint. Costs are estimated based on per-token pricing.
-      </Typography>
-
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={4}>
-          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
-            <Typography variant="caption" color="text.secondary">Total Prompt Tokens</Typography>
-            <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>{summary.total_prompt_tokens.toLocaleString()}</Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
-            <Typography variant="caption" color="text.secondary">Total Completion Tokens</Typography>
-            <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>{summary.total_completion_tokens.toLocaleString()}</Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, bgcolor: '#F0FDF4' }}>
-            <Typography variant="caption" color="text.secondary">Estimated Total Cost</Typography>
-            <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5, color: '#16a34a' }}>
-              ${summary.total_estimated_cost_usd?.toFixed(4) ?? '0.0000'}
-            </Typography>
-          </Paper>
-        </Grid>
-      </Grid>
-
-      <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
-        <Table aria-label="llm-usage-table">
-          <TableHead sx={{ bgcolor: 'action.hover' }}>
-            <TableRow>
-              <TableCell><strong>Endpoint</strong></TableCell>
-              <TableCell align="right"><strong>Calls</strong></TableCell>
-              <TableCell align="right"><strong>Prompt Tokens</strong></TableCell>
-              <TableCell align="right"><strong>Completion Tokens</strong></TableCell>
-              <TableCell align="right"><strong>Est. Cost (USD)</strong></TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {breakdown.map((row) => (
-              <TableRow key={row.endpoint}>
-                <TableCell sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.82rem' }}>{row.endpoint}</TableCell>
-                <TableCell align="right">{row.total_calls}</TableCell>
-                <TableCell align="right">{row.total_prompt_tokens.toLocaleString()}</TableCell>
-                <TableCell align="right">{row.total_completion_tokens.toLocaleString()}</TableCell>
-                <TableCell align="right" sx={{ color: '#16a34a', fontWeight: 600 }}>
-                  ${row.estimated_cost_usd.toFixed(6)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    </Box>
-  );
-};
 
 // ── Tab 0: Project Dashboard Overview ─────────────────────────────────────────
 const ProjectDashboardTab = ({ project, sessions, contradictions, atoms, engagement }) => {
@@ -1008,7 +923,7 @@ export const ProjectDetail = () => {
     { text: 'Feature Status', icon: <CheckCircleOutlineIcon /> },
     { text: 'Change Requests', icon: <RateReviewIcon /> },
     { text: 'SRS Document', icon: <DescriptionIcon /> },
-    { text: 'LLM Cost & Usage', icon: <ListAltIcon /> },
+
   ];
 
   return (
@@ -1331,7 +1246,7 @@ export const ProjectDetail = () => {
             {tabValue === 4 && <ProjectFeatureTrackerTab projectId={projectId} />}
             {tabValue === 5 && <ProjectChangeRequestsTab projectId={projectId} />}
             {tabValue === 6 && <ProjectSRSTab projectId={projectId} />}
-            {tabValue === 7 && <LLMCostTab projectId={projectId} />}
+
           </Paper>
         </Grid>
       </Grid>
