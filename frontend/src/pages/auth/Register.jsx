@@ -303,7 +303,7 @@ const SpinnerIcon = () => (
 // ── Main Register Component ──────────────────────────────────────────────────
 export const Register = () => {
   const [searchParams] = useSearchParams();
-  const inviteToken = searchParams.get('invite') || '';
+  const inviteToken = searchParams.get('invite_token') || searchParams.get('invite') || '';
   const inviteOrg   = searchParams.get('org')    || '';
   const inviteRole  = searchParams.get('role')   || 'client';
   const inviteEmail = searchParams.get('email')  || '';

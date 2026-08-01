@@ -11,8 +11,8 @@ def get_model():
     global _model
     if _model is None:
         from sentence_transformers import SentenceTransformer
-        logger.info(f"Loading embedding model: {settings.embedding_model}")
-        _model = SentenceTransformer(settings.embedding_model)
+        logger.info(f"Loading embedding model: {settings.EMBEDDING_MODEL}")
+        _model = SentenceTransformer(settings.EMBEDDING_MODEL)
     return _model
 
 from functools import lru_cache
@@ -47,6 +47,6 @@ class EmbeddingService:
     def get_model_info() -> dict:
         """Get the model metadata."""
         return {
-            "embedding_model": settings.embedding_model,
-            "embedding_version": settings.embedding_version
+            "embedding_model": settings.EMBEDDING_MODEL,
+            "embedding_version": settings.EMBEDDING_VERSION
         }

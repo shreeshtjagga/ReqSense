@@ -107,7 +107,7 @@ async def register_user(
     password: str,
     role: str,
     organization_id: Optional[uuid.UUID],
-    invite_token: Optional[uuid.UUID] = None,
+    invite_token: Optional[str] = None,
 ) -> User:
     from app.models.project import ProjectClient
     from app.models.project_invite_token import ProjectInviteToken
@@ -115,7 +115,7 @@ async def register_user(
     invite = None
     if invite_token:
         invite_res = await db.execute(
-            select(ProjectInviteToken).where(ProjectInviteToken.id == invite_token)
+            select(ProjectInviteToken).where(ProjectInviteToken.token == invite_token)
         )
         invite = invite_res.scalar_one_or_none()
         if not invite:
