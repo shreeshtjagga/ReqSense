@@ -42,7 +42,8 @@ import Badge from '../../components/common/Badge';
 import Button from '../../components/common/Button';
 import EmptyState from '../../components/common/EmptyState';
 import ConflictOverridePanel from '../../components/chat/ConflictOverridePanel';
-import EmailVerificationBanner from '../../components/common/EmailVerificationBanner';
+import ClosureBanner from '../../components/common/ClosureBanner';
+import ProjectClientsList from '../../components/dashboard/ProjectClientsList';
 import SRSViewer from '../../components/srs/SRSViewer';
 import VersionHistory from '../../components/srs/VersionHistory';
 
@@ -870,33 +871,12 @@ export const ProjectDetail = () => {
         setEngagement(null);
       }
 
-      try {
-        const contradictionsRes = await axios.get(`/contradictions/project/${projectId}`);
-        setContradictions(contradictionsRes.data || []);
-      } catch (err) {
-        const allContradictions = [];
-        for (const s of sessList) {
-          try {
-            const res = await axios.get(`/contradictions/session/${s.id}`);
-            if (res.data) allContradictions.push(...res.data);
-          } catch (e) {}
-        }
-        setContradictions(allContradictions);
-      }
-
-      try {
-        const atomsRes = await axios.get(`/requirement-atoms/project/${projectId}`);
-        setAtoms(atomsRes.data || []);
-      } catch (err) {
-        const allAtoms = [];
-        for (const s of sessList) {
-          try {
-            const res = await axios.get(`/requirement-atoms/session/${s.id}`);
-            if (res.data) allAtoms.push(...res.data);
-          } catch (e) {}
-        }
-        setAtoms(allAtoms);
-      }
+      const [contradictionsRes, atomsRes] = await Promise.all([
+        axios.get(`/contradictions/project/${projectId}`).catch(() => ({ data: [] })),
+        axios.get(`/requirement-atoms/project/${projectId}`).catch(() => ({ data: [] })),
+      ]);
+      setContradictions(contradictionsRes.data || []);
+      setAtoms(atomsRes.data || []);
     } catch (err) {
       showToast('Error loading project details.', 'error');
     } finally {
@@ -1033,7 +1013,7 @@ export const ProjectDetail = () => {
 
   return (
     <Layout>
-      <EmailVerificationBanner />
+      <ClosureBanner project={project} onUpdated={setProject} />
       
       <Grid container spacing={3} sx={{ minHeight: 'calc(100vh - 120px)' }}>
         {/* Left Side: Internal Project Navigation Panel */}
@@ -1139,6 +1119,13 @@ export const ProjectDetail = () => {
                   Current: {(chromaThreshold * 100).toFixed(0)}% — changes auto-save
                 </Typography>
               </Box>
+
+              <Divider sx={{ my: 2 }} />
+
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                Invited Clients
+              </Typography>
+              <ProjectClientsList projectId={projectId} refreshKey={sessions.length} />
 
               <Divider sx={{ my: 1 }} />
 

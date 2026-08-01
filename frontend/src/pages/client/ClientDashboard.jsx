@@ -12,7 +12,6 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import LockIcon from '@mui/icons-material/Lock';
 import FolderOffIcon from '@mui/icons-material/FolderOff';
 import SendIcon from '@mui/icons-material/Send';
-import EmailVerificationBanner from '../../components/common/EmailVerificationBanner';
 
 // ── Demo preview messages shown when no project is assigned ──────────────────
 const DEMO_MESSAGES = [

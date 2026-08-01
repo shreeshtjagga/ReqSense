@@ -81,21 +81,6 @@ def create_access_token(user: User) -> "tuple[str, int]":
     return token, settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
 
-def create_stream_token(user: User) -> str:
-    """Short-lived one-time token for SSE stream authentication."""
-    expire = datetime.now(timezone.utc) + timedelta(
-        seconds=settings.STREAM_TOKEN_EXPIRE_SECONDS
-    )
-    payload = {
-        "sub": str(user.id),
-        "role": user.role,
-        "org": str(user.organization_id) if user.organization_id else None,
-        "type": "stream",
-        "exp": expire,
-    }
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-
-
 def decode_token(token: str) -> dict:
     """Decode and verify a JWT. Raises HTTPException on failure."""
     try:

@@ -17,7 +17,6 @@ from app.models.srs_version import SRSVersion
 from app.models.feature_status import FeatureStatus
 from app.models.change_request import ChangeRequest
 from app.models.audit_log import AuditLog
-from app.models.llm_usage_log import LLMUsageLog
 from app.models.email_log import EmailLog
 
 __all__ = [
@@ -36,6 +35,5 @@ __all__ = [
     "FeatureStatus",
     "ChangeRequest",
     "AuditLog",
-    "LLMUsageLog",
     "EmailLog",
 ]

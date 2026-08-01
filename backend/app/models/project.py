@@ -61,6 +61,12 @@ class Project(Base):
     status: Mapped[str] = mapped_column(
         String(50), default="active", nullable=False
     )  # 'active', 'completed', 'on_hold', 'archived'
+    closure_requested_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    closure_requested_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Chroma distance threshold for contradiction recall (lower = stricter)
     chroma_similarity_threshold: Mapped[float] = mapped_column(
         Float, default=0.3, nullable=False

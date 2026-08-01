@@ -3,7 +3,7 @@ import { Typography, Box, Alert, Button, Grid, Stack, Divider, Paper, Skeleton }
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
 import ChatWindow from '../../components/chat/ChatWindow';
-import { getSession, endSession } from '../../api/sessions';
+import { getSession, endSession, listAllProjectMessages } from '../../api/sessions';
 import { listMessages, createMessage } from '../../api/messages';
 import { getProject } from '../../api/projects';
 import { resolveContradiction } from '../../api/contradictions';
@@ -38,7 +38,14 @@ export const ChatSession = () => {
       const sessionData = await getSession(sessionId);
       setSession(sessionData);
 
-      const msgs = await listMessages(sessionId);
+      let msgs;
+      try {
+        msgs = sessionData?.project_id
+          ? await listAllProjectMessages(sessionData.project_id)
+          : await listMessages(sessionId);
+      } catch {
+        msgs = await listMessages(sessionId);
+      }
       setMessages(msgs);
 
       // Fetch project details
@@ -58,15 +65,17 @@ export const ChatSession = () => {
     fetchSessionAndMessages();
 
     // Set up polling for new messages (e.g. system warnings or external changes).
-    // Uses sessionRef.current to avoid the stale-closure bug where session is null
-    // at mount time and never updates inside the setInterval callback.
+    // Gated on tab visibility and raised to 8s interval.
     pollingIntervalRef.current = setInterval(() => {
-      if (sessionRef.current?.status === 'active') {
-        listMessages(sessionId)
+      if (sessionRef.current?.status === 'active' && document.visibilityState === 'visible') {
+        const fetchFn = sessionRef.current?.project_id
+          ? () => listAllProjectMessages(sessionRef.current.project_id)
+          : () => listMessages(sessionId);
+        fetchFn()
           .then((msgs) => setMessages(msgs))
           .catch((e) => console.error('Error polling messages:', e));
       }
-    }, 5000);
+    }, 8000);
 
     return () => {
       if (pollingIntervalRef.current) {

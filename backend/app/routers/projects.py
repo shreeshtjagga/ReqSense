@@ -21,7 +21,7 @@ from app.schemas.project import (
     ProjectRead,
     ProjectUpdate,
 )
-
+from app.schemas.user import UserResponse
 from app.models.user import User
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -196,6 +196,95 @@ async def remove_client_from_project(
         raise HTTPException(status_code=404, detail="Client not on project")
     await db.delete(pc)
     await db.commit()
+
+
+@router.post("/{project_id}/request-close", response_model=ProjectRead)
+async def request_close_project(
+    project: Project = Depends(get_scoped_project),
+    current_user: User = Depends(require_roles("admin", "developer", "client")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Either party (client or developer) can request to close a project.
+    The OTHER party must confirm via /approve-close before status changes."""
+    if project.closure_requested_by:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A closure request is already pending for this project.",
+        )
+    project.closure_requested_by = current_user.id
+    project.closure_requested_at = datetime.now(timezone.utc)
+    db.add(AuditLog(
+        user_id=current_user.id,
+        action="request_close_project",
+        entity_type="project",
+        entity_id=project.id,
+    ))
+    await db.commit()
+    await db.refresh(project)
+    return project
+
+
+@router.post("/{project_id}/approve-close", response_model=ProjectRead)
+async def approve_close_project(
+    project: Project = Depends(get_scoped_project),
+    current_user: User = Depends(require_roles("admin", "developer", "client")),
+    db: AsyncSession = Depends(get_db),
+):
+    """The counterpart confirms closure. The original requester cannot
+    self-approve their own request."""
+    if not project.closure_requested_by:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No pending closure request for this project.",
+        )
+    if project.closure_requested_by == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The other party must confirm closure — you already requested it.",
+        )
+    project.status = "completed"
+    project.closure_requested_by = None
+    project.closure_requested_at = None
+    db.add(AuditLog(
+        user_id=current_user.id,
+        action="approve_close_project",
+        entity_type="project",
+        entity_id=project.id,
+    ))
+    await db.commit()
+    await db.refresh(project)
+    return project
+
+
+@router.post("/{project_id}/cancel-close", response_model=ProjectRead)
+async def cancel_close_project(
+    project: Project = Depends(get_scoped_project),
+    current_user: User = Depends(require_roles("admin", "developer", "client")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Either party can cancel a pending closure request."""
+    project.closure_requested_by = None
+    project.closure_requested_at = None
+    await db.commit()
+    await db.refresh(project)
+    return project
+
+
+@router.get("/{project_id}/clients", response_model=List[UserResponse])
+async def list_project_clients(
+    project: Project = Depends(get_scoped_project),
+    current_user: User = Depends(require_roles("admin", "developer")),
+    db: AsyncSession = Depends(get_db),
+):
+    """List every client currently invited to this project."""
+    from app.models.user import User as UserModel
+    result = await db.execute(
+        select(UserModel)
+        .join(ProjectClient, ProjectClient.client_id == UserModel.id)
+        .where(ProjectClient.project_id == project.id)
+        .order_by(UserModel.name)
+    )
+    return result.scalars().all()
 
 
 @router.post(

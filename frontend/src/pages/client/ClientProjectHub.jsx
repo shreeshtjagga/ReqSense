@@ -599,6 +599,8 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
   );
 };
 
+import ClosureBanner from '../../components/common/ClosureBanner';
+
 // ── Main ClientProjectHub page ────────────────────────────────────────────────
 export const ClientProjectHub = () => {
   const { projectId } = useParams();
@@ -684,6 +686,7 @@ export const ClientProjectHub = () => {
 
   return (
     <Layout>
+      <ClosureBanner project={project} onUpdated={setProject} />
       <Grid container spacing={3} sx={{ minHeight: 'calc(100vh - 120px)' }}>
         {/* Left Side: Internal Navigation Side Panel */}
         <Grid item xs={12} md={3} sx={{ display: 'flex', flexDirection: 'column' }}>

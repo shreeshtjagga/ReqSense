@@ -31,6 +31,8 @@ class ProjectRead(BaseModel):
     domain: Optional[str]
     developer_id: Optional[uuid.UUID]
     status: str
+    closure_requested_by: Optional[uuid.UUID] = None
+    closure_requested_at: Optional[datetime] = None
     chroma_similarity_threshold: float = 0.3
     created_at: datetime
     updated_at: datetime

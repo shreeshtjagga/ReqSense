@@ -294,8 +294,6 @@ async def developer_portfolio(
     }
 
 
-from app.models.llm_usage_log import LLMUsageLog
-
 @router.get(
     "/conflict-types",
     summary="Org-wide conflict_type distribution for ARIA tuning",
@@ -321,7 +319,7 @@ async def conflict_type_distribution(
 
 @router.get(
     "/llm-usage",
-    summary="Cost governance & LLM token usage breakdown",
+    summary="Cost governance & LLM token usage breakdown (Deprecated)",
 )
 async def llm_usage_analytics(
     project_id: Optional[str] = None,
@@ -329,55 +327,16 @@ async def llm_usage_analytics(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Summarize prompt/completion tokens and estimated USD costs by endpoint.
+    Returns empty summary as LLM usage logging has been removed.
     """
-    query = (
-        select(
-            LLMUsageLog.endpoint,
-            func.sum(LLMUsageLog.prompt_tokens).label("total_prompt_tokens"),
-            func.sum(LLMUsageLog.completion_tokens).label("total_completion_tokens"),
-            func.sum(LLMUsageLog.estimated_cost_usd).label("total_estimated_cost_usd"),
-            func.count(LLMUsageLog.id).label("total_calls"),
-        )
-        .join(Project, Project.id == LLMUsageLog.project_id)
-        .where(Project.organization_id == current_user.organization_id)
-        .group_by(LLMUsageLog.endpoint)
-    )
-
-    if project_id:
-        import uuid as _uuid
-        query = query.where(LLMUsageLog.project_id == _uuid.UUID(project_id))
-
-    rows = (await db.execute(query)).all()
-
-    breakdown = []
-    grand_prompt = 0
-    grand_completion = 0
-    grand_cost = 0.0
-
-    for r in rows:
-        p_tokens = r.total_prompt_tokens or 0
-        c_tokens = r.total_completion_tokens or 0
-        cost = float(r.total_estimated_cost_usd or 0.0)
-        breakdown.append({
-            "endpoint": r.endpoint,
-            "total_prompt_tokens": p_tokens,
-            "total_completion_tokens": c_tokens,
-            "total_tokens": p_tokens + c_tokens,
-            "estimated_cost_usd": round(cost, 6),
-            "total_calls": r.total_calls,
-        })
-        grand_prompt += p_tokens
-        grand_completion += c_tokens
-        grand_cost += cost
-
     return {
-        "breakdown": breakdown,
+        "breakdown": [],
         "summary": {
-            "total_prompt_tokens": grand_prompt,
-            "total_completion_tokens": grand_completion,
-            "total_tokens": grand_prompt + grand_completion,
-            "total_estimated_cost_usd": round(grand_cost, 6),
+            "total_prompt_tokens": 0,
+            "total_completion_tokens": 0,
+            "total_tokens": 0,
+            "total_estimated_cost_usd": 0.0,
         }
     }
+
 

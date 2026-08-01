@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import List, Dict, Any, AsyncGenerator, Optional
+from typing import List, Dict, Any, Optional
 import groq
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from app.config import get_settings
@@ -103,57 +103,4 @@ class AriaAgent:
         except groq.APIStatusError as ase:
             logger.error(f"Groq APIStatusError (status {ase.status_code}): {ase.message}")
             raise
-
-    @classmethod
-    async def stream_aria_response(
-        cls,
-        history: List[Dict[str, Any]],
-        user_message: str,
-        project_context: Optional[Dict[str, Any]] = None,
-    ) -> AsyncGenerator[str, None]:
-        """
-        Asynchronously streams the ARIA response token-by-token.
-        """
-        if settings.groq_is_mocked:
-            logger.info("[MOCK GROQ] Streaming mock response")
-            project_name = (project_context or {}).get("name", "this project")
-            words = f"ARIA mock streaming reply for {project_name}: {user_message}".split(" ")
-            for word in words:
-                yield word + " "
-                await asyncio.sleep(0.05)
-            return
-
-        client = get_groq_client()
-        messages = cls._build_messages(history, user_message, project_context)
-
-        loop = asyncio.get_running_loop()
-
-        @retry(
-            stop=stop_after_attempt(3),
-            wait=wait_exponential(multiplier=1, min=2, max=10),
-            retry=retry_if_exception_type((groq.APIConnectionError, groq.APITimeoutError)),
-            reraise=True
-        )
-        def get_stream():
-            try:
-                return client.chat.completions.create(
-                    model=settings.GROQ_MODEL,
-                    messages=messages,
-                    max_tokens=300,
-                    stream=True,
-                    stream_options={"include_usage": True},
-                    timeout=settings.GROQ_TIMEOUT_SECONDS
-                )
-            except groq.RateLimitError as rle:
-                logger.warning(f"Groq RateLimitError during stream creation: {rle}")
-                raise
-            except groq.APIStatusError as ase:
-                logger.error(f"Groq APIStatusError during stream creation (status {ase.status_code}): {ase.message}")
-                raise
-
-        stream = await loop.run_in_executor(None, get_stream)
-
-        for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
 

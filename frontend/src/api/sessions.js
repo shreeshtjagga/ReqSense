@@ -24,3 +24,8 @@ export const generateSRS = async (sessionId) => {
   const response = await api.post(`/sessions/${sessionId}/generate-srs`);
   return response.data;
 };
+
+export const listAllProjectMessages = async (projectId) => {
+  const response = await api.get(`/sessions/project/${projectId}/messages`);
+  return response.data;
+};

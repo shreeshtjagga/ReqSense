@@ -23,7 +23,6 @@ import Button from '../../components/common/Button';
 import { listProjects, createProject } from '../../api/projects';
 import { useProjectStore } from '../../store/projectStore';
 import { useToastStore } from '../../store/toastStore';
-import EmailVerificationBanner from '../../components/common/EmailVerificationBanner';
 import AddIcon from '@mui/icons-material/Add';
 import { PROJECT_DOMAINS } from '../../utils/constants';
 
@@ -94,7 +93,6 @@ export const DevDashboard = () => {
 
   return (
     <Layout>
-      <EmailVerificationBanner />
       <Box sx={{ mb: 4, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
         <Box>
           <Typography variant="h3" sx={{ fontWeight: 800, mb: 1 }}>

@@ -37,7 +37,6 @@ class Settings(BaseSettings):
     ALGORITHM: str = Field(default="HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30)
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=14)
-    STREAM_TOKEN_EXPIRE_SECONDS: int = Field(default=60)
 
     # ── Groq ─────────────────────────────────────────────────────────────────
     GROQ_API_KEY: str = Field(..., description="Groq API key")

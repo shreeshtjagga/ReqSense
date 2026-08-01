@@ -29,9 +29,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import CurrentUser, get_scoped_project, require_roles, get_current_user_or_stream_token
+from app.dependencies import CurrentUser, get_scoped_project, require_roles
 from app.models.contradiction import Contradiction
-from app.models.llm_usage_log import LLMUsageLog
 from app.models.message import Message
 from app.models.project import Project
 from app.models.requirement_atom import RequirementAtom
@@ -367,19 +366,7 @@ async def create_message(
         session.total_messages = (session.total_messages or 0) + 2
         db.add(session)
 
-        # Write LLM usage log
-        if prompt_tokens or completion_tokens:
-            usage_log = LLMUsageLog(
-                session_id=session_id,
-                project_id=session.project_id,
-                endpoint="aria_response",
-                prompt_version=settings.GROQ_MODEL,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-            )
-            db.add(usage_log)
 
-        # Write requirement atoms + contradictions
         persisted_atoms = []
         for atom_dict, evaluations in atom_contradiction_pairs:
             ra = RequirementAtom(
@@ -395,6 +382,21 @@ async def create_message(
             await db.flush()
             ra.embedding_id = str(ra.id)
             persisted_atoms.append((atom_dict, ra))
+
+            # ── Auto-create a tracked feature so developers see it on the
+            #    Kanban board without manual entry ──
+            if ra.subject and ra.action:
+                feature_title = f"{ra.subject}: {ra.action}"[:255]
+                db.add(FeatureStatus(
+                    project_id=session.project_id,
+                    atom_id=ra.id,
+                    title=feature_title,
+                    description=ra.raw_text,
+                    status="planned",
+                    version=1,
+                    created_by=current_user.id,
+                    updated_by=current_user.id,
+                ))
 
             for chroma_match, contradiction_result in evaluations:
                 conf = contradiction_result.get("confidence") or 0.0
@@ -442,15 +444,7 @@ async def create_message(
                         0.0, (session.stability_score if session.stability_score is not None else 100.0) - 10.0
                     )
                 else:
-                    # Log low-confidence or non-interrupting evaluation to LLMUsageLog for tuning
-                    db.add(LLMUsageLog(
-                        session_id=session_id,
-                        project_id=session.project_id,
-                        endpoint="contradiction_eval_low_conf",
-                        prompt_version=f"{conflict_type}:{conf:.2f}"[:20],
-                        prompt_tokens=0,
-                        completion_tokens=0,
-                    ))
+                    pass  # Low-confidence evaluation — no action needed
 
         await db.commit()
         await db.refresh(user_msg)
@@ -581,36 +575,4 @@ async def list_messages(
 
     return response
 
-
-@router.get("/stream")
-async def stream_messages(
-    session_id: uuid.UUID,
-    user_prompt: str,
-    current_user: User = Depends(get_current_user_or_stream_token),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    SSE streaming endpoint for token-by-token ARIA responses.
-    Accepts both access Bearer token and short-lived ?stream_token= query param.
-    """
-    session = await _get_scoped_active_session(session_id, current_user, db)
-    project = await db.scalar(select(Project).where(Project.id == session.project_id))
-    history = await SessionMemory.get_messages(session_id, db=db)
-
-    project_context = {
-        "name": project.name if project else "",
-        "description": project.description if project else "",
-        "domain": project.domain if project else "",
-    }
-
-    async def event_generator():
-        try:
-            async for token in AriaAgent.stream_aria_response(history, user_prompt, project_context):
-                yield f"data: {json.dumps({'token': token})}\n\n"
-            yield "data: [DONE]\n\n"
-        except Exception as exc:
-            logger.error("SSE stream error: %s", exc)
-            yield f"data: {json.dumps({'error': 'Stream interrupted'})}\n\n"
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
 

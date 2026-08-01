@@ -44,3 +44,24 @@ export const lookupUserByEmail = async (email) => {
   const response = await api.get('/users/lookup', { params: { email } });
   return response.data;
 };
+
+export const requestCloseProject = async (projectId) => {
+  const response = await api.post(`/projects/${projectId}/request-close`);
+  return response.data;
+};
+
+export const approveCloseProject = async (projectId) => {
+  const response = await api.post(`/projects/${projectId}/approve-close`);
+  return response.data;
+};
+
+export const cancelCloseProject = async (projectId) => {
+  const response = await api.post(`/projects/${projectId}/cancel-close`);
+  return response.data;
+};
+
+export const listProjectClients = async (projectId) => {
+  const response = await api.get(`/projects/${projectId}/clients`);
+  return response.data;
+};
+
