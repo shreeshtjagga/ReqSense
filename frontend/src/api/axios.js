@@ -29,9 +29,10 @@ instance.interceptors.response.use(
   (r) => r,
   (error) => {
     if (error.response?.data?.error) {
-      // Hoist message to .detail and code to .code at the top level
+      // Hoist message to .detail, code to .code, and request_id to .request_id
       error.response.data.detail = error.response.data.error.message;
       error.response.data.code = error.response.data.error.code;
+      error.response.data.request_id = error.response.data.error.request_id;
     }
     return Promise.reject(error);
   }

@@ -26,6 +26,7 @@ from app.schemas.auth import (
     TokenResponse,
 )
 from app.services import auth_service
+from app.services.rate_limit_service import limiter
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -38,7 +39,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     status_code=status.HTTP_201_CREATED,
     summary="Register a new user",
 )
+@limiter.limit("10/minute")
 async def register(
+    request: Request,
     body: RegisterRequest,
     db: AsyncSession = Depends(get_db),
 ) -> RegisterResponse:
@@ -60,7 +63,9 @@ async def register(
     response_model=TokenResponse,
     summary="Login and receive JWT + refresh token",
 )
+@limiter.limit(f"{settings.RATE_LIMIT_LOGIN_PER_MINUTE}/minute")
 async def login(
+    request: Request,
     body: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:

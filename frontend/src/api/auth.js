@@ -25,16 +25,6 @@ export const resetPassword = async (token, newPassword) => {
   return response.data;
 };
 
-export const verifyEmail = async (token) => {
-  const response = await api.post('/auth/verify-email', { token });
-  return response.data;
-};
-
-export const resendVerificationEmail = async () => {
-  const response = await api.post('/auth/resend-verification');
-  return response.data;
-};
-
 export const getCurrentUser = async () => {
   const response = await api.get('/users/me');
   return response.data;
@@ -44,3 +34,4 @@ export const acceptInvite = async (token) => {
   const response = await api.post('/projects/invites/accept', { token });
   return response.data;
 };
+

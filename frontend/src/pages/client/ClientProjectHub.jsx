@@ -249,6 +249,8 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
 
   useEffect(() => {
     fetchRequests();
+    const interval = setInterval(fetchRequests, 15000);
+    return () => clearInterval(interval);
   }, [projectId]);
 
   const handleSubmit = async (e) => {
@@ -282,7 +284,8 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
     } catch (err) {
       console.error('[ChangeRequest] Submit error:', err);
       const detail = err.response?.data?.detail || 'Failed to submit change request. Please try again.';
-      showToast(detail, 'error');
+      const reqId = err.response?.data?.request_id;
+      showToast(reqId ? `${detail} (ref: ${reqId.slice(0, 8)})` : detail, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -549,16 +552,40 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
                     <Accordion variant="outlined" sx={{ mt: 1.5, borderRadius: '8px !important', '&:before': { display: 'none' } }}>
                       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                         <Stack direction="row" spacing={1} alignItems="center">
-                          <SmartToyIcon sx={{ fontSize: 18, color: 'primary.main' }} />
-                          <Typography variant="caption" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                            AI Impact Analysis
+                          <SmartToyIcon sx={{ fontSize: 18, color: cr.impact_report.includes('Requirement Conflicts Detected') ? 'warning.main' : 'primary.main' }} />
+                          <Typography variant="caption" sx={{ fontWeight: 700, color: cr.impact_report.includes('Requirement Conflicts Detected') ? 'warning.dark' : 'primary.main' }}>
+                            {cr.impact_report.includes('Requirement Conflicts Detected') ? 'AI Impact & Requirement Conflict Analysis' : 'AI Impact Analysis'}
                           </Typography>
                         </Stack>
                       </AccordionSummary>
                       <AccordionDetails sx={{ pt: 0 }}>
-                        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
-                          {cr.impact_report}
-                        </Typography>
+                        {cr.impact_report.includes('Requirement Conflicts Detected') ? (
+                          <Box>
+                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem', mb: 1.5 }}>
+                              {cr.impact_report.split('⚠ Requirement Conflicts Detected')[0].trim()}
+                            </Typography>
+                            <Paper
+                              elevation={0}
+                              sx={{
+                                p: 1.5,
+                                bgcolor: '#FFFBEB',
+                                border: '1px solid #FCD34D',
+                                borderRadius: 2,
+                              }}
+                            >
+                              <Typography variant="caption" sx={{ fontWeight: 700, color: '#92400E', display: 'block', mb: 0.5 }}>
+                                ⚠ Requirement Conflicts Detected:
+                              </Typography>
+                              <Typography variant="body2" sx={{ fontSize: '0.82rem', color: '#78350F', whiteSpace: 'pre-line' }}>
+                                {cr.impact_report.split('⚠ Requirement Conflicts Detected')[1]?.replace(/^ by RDCD:\n?|^:\n?/, '').trim()}
+                              </Typography>
+                            </Paper>
+                          </Box>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
+                            {cr.impact_report}
+                          </Typography>
+                        )}
                       </AccordionDetails>
                     </Accordion>
                   )}

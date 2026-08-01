@@ -15,20 +15,33 @@ def get_model():
         _model = SentenceTransformer(settings.embedding_model)
     return _model
 
+from functools import lru_cache
+
+@lru_cache(maxsize=1024)
+def _cached_encode(text: str) -> List[float]:
+    model = get_model()
+    embedding = model.encode(text)
+    return embedding.tolist()
+
 class EmbeddingService:
     @staticmethod
     def get_embedding(text: str) -> List[float]:
-        """Generate embedding vector for a given text."""
-        model = get_model()
-        embedding = model.encode(text)
-        return embedding.tolist()
+        """Generate embedding vector for a given text (cached)."""
+        return _cached_encode(text)
 
     @staticmethod
     def embed(text: str) -> List[float]:
         """Alias for get_embedding — use this for consistency across callers."""
-        model = get_model()
-        embedding = model.encode(text)
-        return embedding.tolist()
+        return _cached_encode(text)
+
+    @staticmethod
+    def preload_model() -> None:
+        """Pre-warm SentenceTransformer model during app startup so cold-start delay is zero."""
+        try:
+            get_model()
+            logger.info("SentenceTransformer embedding model pre-loaded successfully.")
+        except Exception as e:
+            logger.warning(f"Could not preload embedding model: {e}")
 
     @staticmethod
     def get_model_info() -> dict:

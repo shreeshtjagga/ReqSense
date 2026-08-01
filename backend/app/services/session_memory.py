@@ -134,3 +134,76 @@ class SessionMemory:
             await r.delete(key)
         except Exception as exc:
             logger.warning("Redis clear_memory failed: %s", exc)
+
+    @classmethod
+    async def seed_from_prior_session(
+        cls,
+        current_session_id: uuid.UUID,
+        project_id: uuid.UUID,
+        db: Any,
+    ) -> None:
+        """
+        Seed the current session's Redis key with the last 10 conversational turns
+        from the most recently completed prior session on the same project.
+
+        Call this when a new session has no Redis history and no DB history —
+        it prevents ARIA from starting cold on session #2+ by providing continuity.
+        The seeded messages are clearly marked so ARIA can reference prior context.
+        """
+        try:
+            from sqlalchemy import select
+            from app.models.message import Message
+            from app.models.session import Session
+
+            # Find the most recent completed prior session (not the current one)
+            prior_session_res = await db.execute(
+                select(Session)
+                .where(
+                    Session.project_id == project_id,
+                    Session.id != current_session_id,
+                    Session.status == "completed",
+                )
+                .order_by(Session.started_at.desc())
+                .limit(1)
+            )
+            prior_session = prior_session_res.scalar_one_or_none()
+            if not prior_session:
+                return
+
+            # Pull last 10 conversational turns from that session
+            msgs_res = await db.execute(
+                select(Message)
+                .where(
+                    Message.session_id == prior_session.id,
+                    Message.sender.in_(list(_CONVERSATIONAL_SENDERS)),
+                    Message.message_type != "conflict_alert",
+                )
+                .order_by(Message.created_at.desc())
+                .limit(10)
+            )
+            prior_msgs = list(reversed(msgs_res.scalars().all()))
+            if not prior_msgs:
+                return
+
+            # Seed into Redis under the current session's key
+            r = get_redis_client()
+            key = cls._get_key(current_session_id)
+            seeded = [{"sender": m.sender, "content": m.content} for m in prior_msgs]
+            try:
+                async with r.pipeline(transaction=True) as pipe:
+                    for m in seeded:
+                        pipe.rpush(key, json.dumps(m))
+                    pipe.ltrim(key, -40, -1)
+                    pipe.expire(key, 86400)
+                    await pipe.execute()
+                logger.info(
+                    "Seeded %d prior-session turns into session %s from session %s",
+                    len(seeded),
+                    current_session_id,
+                    prior_session.id,
+                )
+            except Exception as redis_exc:
+                logger.warning("Failed to seed prior session into Redis: %s", redis_exc)
+        except Exception as exc:
+            logger.warning("seed_from_prior_session failed: %s", exc)
+

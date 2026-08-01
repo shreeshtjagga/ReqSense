@@ -6,11 +6,9 @@ These GET endpoints are used by ProjectDetail.jsx (Extracted Atoms tab)
 and potentially by analytics views.
 """
 import uuid
-from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,24 +17,9 @@ from app.dependencies import require_roles, get_scoped_project
 from app.models.requirement_atom import RequirementAtom
 from app.models.session import Session
 from app.models.user import User
+from app.schemas.requirement_atom import RequirementAtomRead
 
 router = APIRouter(prefix="/requirement-atoms", tags=["requirement-atoms"])
-
-
-class RequirementAtomRead(BaseModel):
-    id: uuid.UUID
-    session_id: Optional[uuid.UUID]
-    project_id: Optional[uuid.UUID]
-    subject: Optional[str]
-    action: Optional[str]
-    constraint_text: Optional[str]
-    raw_text: str
-    embedding_id: Optional[str]
-    status: str
-    turn_number: Optional[int]
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
 
 
 @router.get("/project/{project_id}", response_model=List[RequirementAtomRead])

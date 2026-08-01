@@ -36,8 +36,9 @@ class SRSGenerator:
 
         atoms_result = await db.execute(
             select(RequirementAtom)
-            .where(RequirementAtom.session_id == session_id)
+            .where(RequirementAtom.project_id == session.project_id)
             .where(RequirementAtom.status == "active")
+            .order_by(RequirementAtom.created_at)
         )
         atoms = atoms_result.scalars().all()
 
@@ -46,7 +47,7 @@ class SRSGenerator:
         llm_model = settings.GROQ_MODEL
         if atoms:
             client = get_groq_client()
-            if not (settings.GROQ_API_KEY.startswith("test") or settings.GROQ_API_KEY.startswith("mock")):
+            if not settings.groq_is_mocked:
                 try:
                     prompt = (
                         "Write a short, professional executive summary (max 300 words) for a Software Requirements "

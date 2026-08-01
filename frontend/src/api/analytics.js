@@ -24,3 +24,9 @@ export const getConflictTypeDistribution = async () => {
   const response = await api.get('/analytics/conflict-types');
   return response.data;
 };
+
+export const getLLMUsage = async (projectId = null) => {
+  const params = projectId ? { project_id: projectId } : {};
+  const response = await api.get('/analytics/llm-usage', { params });
+  return response.data;
+};

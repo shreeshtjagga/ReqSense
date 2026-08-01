@@ -358,31 +358,27 @@ export const Register = () => {
     <div style={s.root}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
+      {/* ── TOP HEADER (Logo on left, Help/Support on right) ─────────────── */}
+      <div style={s.topHeader}>
+        <div style={s.logoRow}>
+          <ReqSenseLogo size={38} />
+          <span style={s.logoText}>ReqSense <span style={s.aiText}>AI</span></span>
+        </div>
+        <div style={s.helpRow}>
+          <button style={s.helpBtn} onClick={() => showToast('Help documentation available in your dashboard.', 'info')}>
+            <HelpIcon /> Help
+          </button>
+          <span style={s.divider}>|</span>
+          <button style={s.helpBtn} onClick={() => showToast('Contact support at support@reqsense.ai', 'info')}>
+            <HeadsetIcon /> Contact Us
+          </button>
+        </div>
+      </div>
+
       {/* ── LEFT PANEL ───────────────────────────────────────────────────── */}
       <div style={s.left}>
-        <div style={s.header}>
-          <div style={s.logoRow}>
-            <ReqSenseLogo size={38} />
-            <span style={s.logoText}>ReqSense <span style={s.aiText}>AI</span></span>
-          </div>
-          <div style={s.helpRow}>
-            <button style={s.helpBtn} onClick={() => showToast('Help documentation available in your dashboard.', 'info')}>
-              <HelpIcon /> Help
-            </button>
-            <span style={s.divider}>|</span>
-            <button style={s.helpBtn} onClick={() => showToast('Contact support at support@reqsense.ai', 'info')}>
-              <HeadsetIcon /> Contact Us
-            </button>
-          </div>
-        </div>
-
         <div style={s.cubeWrap}>
           <AnimatedCube />
-        </div>
-
-        <div style={s.trustRow}>
-          <ShieldIcon />
-          <span style={s.trustText}>Trusted by developers, teams and businesses<br />worldwide to build better software.</span>
         </div>
       </div>
 
@@ -451,13 +447,13 @@ export const Register = () => {
                 <div style={s.inputWrap}>
                   <span style={s.inputIcon}><LockIcon /></span>
                   <input
-                    id="reg-password"
+                    id="reg-pw"
                     type={showPw ? 'text' : 'password'}
                     autoComplete="new-password"
-                    placeholder="Min. 8 chars"
+                    placeholder="Min 8 chars"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    style={{ ...s.input, paddingRight: 44 }}
+                    style={{ ...s.input, paddingRight: 40 }}
                     onFocus={(e) => Object.assign(e.target.style, s.inputFocused)}
                     onBlur={(e)  => Object.assign(e.target.style, s.inputBlurred)}
                   />
@@ -471,13 +467,13 @@ export const Register = () => {
                 <div style={s.inputWrap}>
                   <span style={s.inputIcon}><LockIcon /></span>
                   <input
-                    id="reg-confirm-password"
+                    id="reg-confirm-pw"
                     type={showConfirmPw ? 'text' : 'password'}
                     autoComplete="new-password"
-                    placeholder="Re-enter password"
+                    placeholder="Repeat password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    style={{ ...s.input, paddingRight: 44 }}
+                    style={{ ...s.input, paddingRight: 40 }}
                     onFocus={(e) => Object.assign(e.target.style, s.inputFocused)}
                     onBlur={(e)  => Object.assign(e.target.style, s.inputBlurred)}
                   />
@@ -488,13 +484,19 @@ export const Register = () => {
               </div>
             </div>
 
-            {/* Role Selector */}
+            {/* Role Radio Group */}
             {!isInviteFlow && (
               <div style={s.fieldGroup}>
-                <label style={s.label}>Account Type</label>
-                <div style={s.roleRow}>
-                  {['client', 'developer', 'admin'].map((r) => (
-                    <label key={r} style={{ ...s.roleOption, ...(role === r ? s.roleSelected : {}) }}>
+                <label style={s.label}>I am joining as a...</label>
+                <div style={s.roleGrid}>
+                  {['client', 'developer'].map((r) => (
+                    <label
+                      key={r}
+                      style={{
+                        ...s.roleOption,
+                        ...(role === r ? s.roleSelected : {}),
+                      }}
+                    >
                       <input
                         type="radio"
                         name="role"
@@ -564,12 +566,6 @@ export const Register = () => {
           </p>
         </div>
       </div>
-
-      {/* ── Bottom security bar ───────────────────────────────────────────── */}
-      <div style={s.secBar}>
-        <LockSmallIcon />
-        <span style={s.secText}>Your data is secure with enterprise-grade encryption.</span>
-      </div>
     </div>
   );
 };
@@ -586,12 +582,24 @@ const s = {
     position: 'relative',
     fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
   },
+  topHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '24px 36px',
+    zIndex: 10,
+  },
   left: {
     flex: '0 0 52%',
     display: 'flex',
     flexDirection: 'column',
-    justifyContent: 'space-between',
-    padding: '28px 36px 28px 36px',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: '80px 36px 28px 36px',
     position: 'relative',
     overflow: 'hidden',
     color: '#fff',

@@ -1,12 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { Alert, Button, Stack } from '@mui/material';
-import { getCurrentUser, resendVerificationEmail } from '../../api/auth';
-import { useAuthStore } from '../../store/authStore';
-import { useToastStore } from '../../store/toastStore';
+import React from 'react';
 
 /**
- * Persistent banner when the signed-in user's email is unverified.
- * Fetches /users/me so email_verified is available (JWT alone does not carry it).
+ * EmailVerificationBanner — deprecated.
+ * email_verified column was dropped in migration 005. This component is
+ * retained as an import-safe stub so existing consumers don't break.
+ * Remove all usages and this file in a future cleanup pass.
  */
 export const EmailVerificationBanner = () => {
   return null;

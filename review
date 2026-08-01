@@ -564,4 +564,4 @@ RATE_LIMIT_ANALYTICS_PER_MINUTE=100
 RATE_LIMIT_DOWNLOADS_PER_MINUTE=20
 
 PROMPT_VERSION=v1.0
-ENV=development   # 'development' | 'production' — gates /docs,
+ENV=development  

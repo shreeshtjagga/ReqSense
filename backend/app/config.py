@@ -87,6 +87,28 @@ class Settings(BaseSettings):
     ENV: Literal["development", "production"] = Field(default="development")
 
     # ── Derived helpers ───────────────────────────────────────────────────────
+    CONTRADICTION_CONFIDENCE_THRESHOLD: float = Field(default=0.5, description="Minimum confidence required to surface a contradiction")
+
+    @property
+    def groq_is_mocked(self) -> bool:
+        """Returns True if Groq API key is empty or starts with test/mock."""
+        return not self.GROQ_API_KEY or self.GROQ_API_KEY.startswith("test") or self.GROQ_API_KEY.startswith("mock")
+
+    @property
+    def chroma_is_mocked(self) -> bool:
+        """Returns True if Chroma API key is empty or starts with test/mock when hosted."""
+        return not self.CHROMA_API_KEY or self.CHROMA_API_KEY.startswith("test") or self.CHROMA_API_KEY.startswith("mock")
+
+    @property
+    def s3_is_mocked(self) -> bool:
+        """Returns True if S3 credentials are dummy/mock."""
+        return not self.S3_ACCESS_KEY_ID or self.S3_ACCESS_KEY_ID.startswith("test") or self.S3_ACCESS_KEY_ID.startswith("mock")
+
+    @property
+    def sendgrid_is_mocked(self) -> bool:
+        """Returns True if SendGrid API key is dummy/mock."""
+        return not self.SENDGRID_API_KEY or self.SENDGRID_API_KEY.startswith("test") or self.SENDGRID_API_KEY.startswith("mock")
+
     @property
     def allowed_origins_list(self) -> list[str]:
         """Split comma-separated ALLOWED_ORIGINS into a list for FastAPI CORS."""

@@ -25,3 +25,17 @@ def truncate(text: str, max_len: int, suffix: str = "…") -> str:
     if len(text) <= max_len:
         return text
     return text[: max_len - len(suffix)] + suffix
+
+
+def strip_json_fences(text: str) -> str:
+    """Strip markdown code fences (```json ... ```) from raw LLM responses."""
+    text = (text or "").strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    return text
+

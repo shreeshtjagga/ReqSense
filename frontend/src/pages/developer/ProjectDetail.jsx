@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Typography,
   Grid,
   Box,
   Alert,
+  Slider,
+  Tooltip,
   Skeleton,
   List,
   ListItem,
@@ -32,6 +34,7 @@ import {
   CardActions,
   IconButton,
   Divider,
+  Chip,
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
@@ -48,10 +51,11 @@ import {
   addClientToProject,
   createProjectInvite,
   lookupUserByEmail,
+  updateProject,
 } from '../../api/projects';
 import { listSessionsForProject } from '../../api/sessions';
 import { resolveContradiction } from '../../api/contradictions';
-import { getProjectSummary } from '../../api/analytics';
+import { getProjectSummary, getLLMUsage } from '../../api/analytics';
 import { listFeaturesForProject, updateFeatureStatus, createFeatureStatus } from '../../api/featureStatus';
 import { listChangeRequests, reviewChangeRequest } from '../../api/changeRequests';
 import { getLatestSrs, listSrsVersions, generateProjectSrs, getSrsVersionDetails } from '../../api/srs';
@@ -341,7 +345,11 @@ const ProjectChangeRequestsTab = ({ projectId }) => {
   };
 
   useEffect(() => {
-    if (projectId) fetchChangeRequests();
+    if (projectId) {
+      fetchChangeRequests();
+      const interval = setInterval(fetchChangeRequests, 15000);
+      return () => clearInterval(interval);
+    }
   }, [projectId]);
 
   const handleReviewClick = (cr) => {
@@ -645,6 +653,92 @@ const ProjectSRSTab = ({ projectId }) => {
   );
 };
 
+// ── Tab 7: LLM Cost Governance ────────────────────────────────────────────────
+const LLMCostTab = ({ projectId }) => {
+  const [usage, setUsage] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!projectId) return;
+    getLLMUsage(projectId)
+      .then((data) => setUsage(data))
+      .catch(() => setUsage(null))
+      .finally(() => setLoading(false));
+  }, [projectId]);
+
+  if (loading) return <Skeleton variant="rectangular" height={240} sx={{ borderRadius: 3 }} />;
+
+  if (!usage || !usage.breakdown?.length) {
+    return (
+      <EmptyState
+        title="No LLM Usage Recorded"
+        description="Token and cost data will appear here once ARIA processes messages in this project."
+      />
+    );
+  }
+
+  const { breakdown, summary } = usage;
+
+  return (
+    <Box>
+      <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>LLM Cost &amp; Token Governance</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Breakdown of Groq API usage by endpoint. Costs are estimated based on per-token pricing.
+      </Typography>
+
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={4}>
+          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+            <Typography variant="caption" color="text.secondary">Total Prompt Tokens</Typography>
+            <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>{summary.total_prompt_tokens.toLocaleString()}</Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+            <Typography variant="caption" color="text.secondary">Total Completion Tokens</Typography>
+            <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>{summary.total_completion_tokens.toLocaleString()}</Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, bgcolor: '#F0FDF4' }}>
+            <Typography variant="caption" color="text.secondary">Estimated Total Cost</Typography>
+            <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5, color: '#16a34a' }}>
+              ${summary.total_estimated_cost_usd?.toFixed(4) ?? '0.0000'}
+            </Typography>
+          </Paper>
+        </Grid>
+      </Grid>
+
+      <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+        <Table aria-label="llm-usage-table">
+          <TableHead sx={{ bgcolor: 'action.hover' }}>
+            <TableRow>
+              <TableCell><strong>Endpoint</strong></TableCell>
+              <TableCell align="right"><strong>Calls</strong></TableCell>
+              <TableCell align="right"><strong>Prompt Tokens</strong></TableCell>
+              <TableCell align="right"><strong>Completion Tokens</strong></TableCell>
+              <TableCell align="right"><strong>Est. Cost (USD)</strong></TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {breakdown.map((row) => (
+              <TableRow key={row.endpoint}>
+                <TableCell sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.82rem' }}>{row.endpoint}</TableCell>
+                <TableCell align="right">{row.total_calls}</TableCell>
+                <TableCell align="right">{row.total_prompt_tokens.toLocaleString()}</TableCell>
+                <TableCell align="right">{row.total_completion_tokens.toLocaleString()}</TableCell>
+                <TableCell align="right" sx={{ color: '#16a34a', fontWeight: 600 }}>
+                  ${row.estimated_cost_usd.toFixed(6)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
+  );
+};
+
 // ── Tab 0: Project Dashboard Overview ─────────────────────────────────────────
 const ProjectDashboardTab = ({ project, sessions, contradictions, atoms, engagement }) => {
   return (
@@ -730,6 +824,22 @@ export const ProjectDetail = () => {
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  // Chroma similarity threshold (tunable by developer)
+  const [chromaThreshold, setChromaThreshold] = useState(0.3);
+  const [savingThreshold, setSavingThreshold] = useState(false);
+
+  const handleSaveThreshold = useCallback(async (newValue) => {
+    setSavingThreshold(true);
+    try {
+      await updateProject(projectId, { chroma_similarity_threshold: newValue });
+      showToast(`Similarity threshold updated to ${newValue}`, 'success');
+    } catch {
+      showToast('Failed to update similarity threshold.', 'error');
+    } finally {
+      setSavingThreshold(false);
+    }
+  }, [projectId, showToast]);
+
   const [selectedContradiction, setSelectedContradiction] = useState(null);
   const [resolving, setResolving] = useState(false);
 
@@ -745,6 +855,10 @@ export const ProjectDetail = () => {
       const proj = await getProject(projectId);
       setProject(proj);
       setActiveProject(proj);
+      // Sync local chroma threshold from project
+      if (proj?.chroma_similarity_threshold != null) {
+        setChromaThreshold(proj.chroma_similarity_threshold);
+      }
 
       const sessList = await listSessionsForProject(projectId);
       setSessions(sessList);
@@ -792,6 +906,19 @@ export const ProjectDetail = () => {
 
   useEffect(() => {
     fetchProjectDetails();
+
+    const interval = setInterval(() => {
+      if (projectId) {
+        axios.get(`/contradictions/project/${projectId}`)
+          .then((res) => setContradictions(res.data || []))
+          .catch(() => {});
+        axios.get(`/requirement-atoms/project/${projectId}`)
+          .then((res) => setAtoms(res.data || []))
+          .catch(() => {});
+      }
+    }, 15000);
+
+    return () => clearInterval(interval);
   }, [projectId]);
 
   const handleResolveContradiction = (contradiction) => {
@@ -901,6 +1028,7 @@ export const ProjectDetail = () => {
     { text: 'Feature Status', icon: <CheckCircleOutlineIcon /> },
     { text: 'Change Requests', icon: <RateReviewIcon /> },
     { text: 'SRS Document', icon: <DescriptionIcon /> },
+    { text: 'LLM Cost & Usage', icon: <ListAltIcon /> },
   ];
 
   return (
@@ -977,6 +1105,42 @@ export const ProjectDetail = () => {
               </List>
 
               <Divider sx={{ my: 2 }} />
+
+              {/* Chroma Similarity Threshold Tuning */}
+              <Box sx={{ px: 1, pb: 2 }}>
+                <Tooltip
+                  title="Controls how similar two requirements must be before ARIA checks for contradiction. Lower = stricter matching, fewer false positives. Higher = catches more potential conflicts."
+                  placement="right"
+                  arrow
+                >
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 1, cursor: 'help', textDecoration: 'underline dotted' }}>
+                    Contradiction Sensitivity
+                  </Typography>
+                </Tooltip>
+                <Slider
+                  value={chromaThreshold}
+                  onChange={(_, val) => setChromaThreshold(val)}
+                  onChangeCommitted={(_, val) => handleSaveThreshold(val)}
+                  min={0.1}
+                  max={0.9}
+                  step={0.05}
+                  valueLabelDisplay="auto"
+                  valueLabelFormat={(v) => `${(v * 100).toFixed(0)}%`}
+                  marks={[
+                    { value: 0.1, label: 'Strict' },
+                    { value: 0.5, label: 'Balanced' },
+                    { value: 0.9, label: 'Loose' },
+                  ]}
+                  disabled={savingThreshold}
+                  color="secondary"
+                  size="small"
+                />
+                <Typography variant="caption" color="text.secondary">
+                  Current: {(chromaThreshold * 100).toFixed(0)}% — changes auto-save
+                </Typography>
+              </Box>
+
+              <Divider sx={{ my: 1 }} />
 
               <Button
                 variant="contained"
@@ -1071,24 +1235,42 @@ export const ProjectDetail = () => {
                     <Table aria-label="contradictions-table">
                       <TableHead sx={{ bgcolor: 'action.hover' }}>
                         <TableRow>
+                          <TableCell><strong>Source</strong></TableCell>
                           <TableCell><strong>Conflict Type</strong></TableCell>
                           <TableCell><strong>Confidence</strong></TableCell>
                           <TableCell><strong>Aria Warning Message</strong></TableCell>
                           <TableCell><strong>Status</strong></TableCell>
+                          <TableCell><strong>False +ve</strong></TableCell>
                           <TableCell><strong>Detected Date</strong></TableCell>
                           <TableCell align="right"><strong>Override</strong></TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
                         {contradictions.map((c) => (
-                          <TableRow key={c.id}>
-                            <TableCell sx={{ textTransform: 'capitalize', fontWeight: 600 }}>
-                              {c.conflict_type?.replace('_', ' ') || 'direct_contradiction'}
+                          <TableRow key={c.id} sx={c.is_false_positive ? { opacity: 0.6 } : {}}>
+                            <TableCell>
+                              <Chip
+                                size="small"
+                                label={c.source === 'change_request' ? 'Change Request' : 'Live Chat'}
+                                color={c.source === 'change_request' ? 'secondary' : 'default'}
+                                variant="outlined"
+                                sx={{ fontWeight: 600, fontSize: '0.72rem' }}
+                              />
                             </TableCell>
-                            <TableCell>{c.confidence ? `${Math.round(c.confidence * 100)}%` : 'N/A'}</TableCell>
-                            <TableCell sx={{ maxWidth: 300 }}>{c.aria_message}</TableCell>
+                            <TableCell sx={{ textTransform: 'capitalize', fontWeight: 600 }}>
+                              {c.conflict_type?.replace(/_/g, ' ') || 'direct contradiction'}
+                            </TableCell>
+                            <TableCell>{c.confidence != null ? `${Math.round(c.confidence * 100)}%` : 'N/A'}</TableCell>
+                            <TableCell sx={{ maxWidth: 280 }}>{c.aria_message}</TableCell>
                             <TableCell>
                               <Badge label={c.status} type="conflict" />
+                            </TableCell>
+                            <TableCell>
+                              {c.is_false_positive ? (
+                                <Tooltip title="Tagged as AI False Positive" arrow>
+                                  <Typography variant="caption" color="warning.main" sx={{ fontWeight: 700 }}>FP</Typography>
+                                </Tooltip>
+                              ) : '—'}
                             </TableCell>
                             <TableCell>{formatDateTime(c.detected_at)}</TableCell>
                             <TableCell align="right">
@@ -1103,7 +1285,7 @@ export const ProjectDetail = () => {
                                 </Button>
                               ) : (
                                 <Typography variant="caption" color="text.secondary">
-                                  Resolved by developer
+                                  {c.is_false_positive ? 'False Positive' : 'Resolved'}
                                 </Typography>
                               )}
                             </TableCell>
@@ -1162,6 +1344,7 @@ export const ProjectDetail = () => {
             {tabValue === 4 && <ProjectFeatureTrackerTab projectId={projectId} />}
             {tabValue === 5 && <ProjectChangeRequestsTab projectId={projectId} />}
             {tabValue === 6 && <ProjectSRSTab projectId={projectId} />}
+            {tabValue === 7 && <LLMCostTab projectId={projectId} />}
           </Paper>
         </Grid>
       </Grid>

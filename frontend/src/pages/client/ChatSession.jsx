@@ -27,6 +27,11 @@ export const ChatSession = () => {
   const [error, setError] = useState(null);
 
   const pollingIntervalRef = useRef(null);
+  // Mirror session into a ref so the polling interval callback always reads
+  // the latest status — avoids stale closure where session is null at mount time.
+  const sessionRef = useRef(session);
+  useEffect(() => { sessionRef.current = session; }, [session]);
+
 
   const fetchSessionAndMessages = async () => {
     try {
@@ -52,9 +57,11 @@ export const ChatSession = () => {
   useEffect(() => {
     fetchSessionAndMessages();
 
-    // Set up polling for new messages (e.g. system warnings or external changes)
+    // Set up polling for new messages (e.g. system warnings or external changes).
+    // Uses sessionRef.current to avoid the stale-closure bug where session is null
+    // at mount time and never updates inside the setInterval callback.
     pollingIntervalRef.current = setInterval(() => {
-      if (session?.status === 'active') {
+      if (sessionRef.current?.status === 'active') {
         listMessages(sessionId)
           .then((msgs) => setMessages(msgs))
           .catch((e) => console.error('Error polling messages:', e));
