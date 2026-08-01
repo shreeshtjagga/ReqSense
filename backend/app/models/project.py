@@ -78,8 +78,15 @@ class Project(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    organization: Mapped["Organization"] = relationship(back_populates="projects")
-    developer: Mapped["User"] = relationship(foreign_keys=[developer_id])
+    organization: Mapped[Optional["Organization"]] = relationship(
+        back_populates="projects", foreign_keys=[organization_id]
+    )
+    developer: Mapped[Optional["User"]] = relationship(
+        foreign_keys=[developer_id]
+    )
+    closure_requested_user: Mapped[Optional["User"]] = relationship(
+        foreign_keys=[closure_requested_by]
+    )
     sessions: Mapped[List["Session"]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
