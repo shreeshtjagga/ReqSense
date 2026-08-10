@@ -103,25 +103,52 @@ class VectorStore:
     ) -> List[Dict[str, Any]]:
         """
         Query the project collection for active atoms similar to the query embedding.
-        Passes where={"status": status_filter} to filter out superseded/resolved atoms natively in Chroma.
+        Guards against ChromaDB InvalidArgumentError when the collection has fewer
+        items than requested — caps n_results to the actual collection count.
+        Returns empty list immediately when no atoms are stored yet.
         """
-        collection = cls.get_or_create_collection(session_id)
-        where_clause = {"status": status_filter} if status_filter else None
-        
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=limit,
-            where=where_clause
-        )
+        try:
+            collection = cls.get_or_create_collection(session_id)
+            # ChromaDB raises InvalidArgumentError if n_results > index size.
+            # Count only once and bail early when nothing is stored yet.
+            count = collection.count()
+            if count == 0:
+                logger.debug("Chroma collection for %s is empty — skipping query.", session_id)
+                return []
 
-        formatted_results = []
-        if results and results.get("ids") and len(results["ids"][0]) > 0:
-            for i in range(len(results["ids"][0])):
-                formatted_results.append({
-                    "id": uuid.UUID(results["ids"][0][i]),
-                    "document": results["documents"][0][i] if results.get("documents") else "",
-                    "metadata": results["metadatas"][0][i] if results.get("metadatas") else {},
-                    "distance": results["distances"][0][i] if results.get("distances") else 0.0
-                })
-        return formatted_results
+            safe_limit = min(limit, count)
+            where_clause = {"status": status_filter} if status_filter else None
 
+            def _do_query(n: int, where):
+                return collection.query(
+                    query_embeddings=[query_embedding],
+                    n_results=n,
+                    where=where,
+                )
+
+            try:
+                results = _do_query(safe_limit, where_clause)
+            except Exception as inner_exc:
+                # Filtered count may be lower than safe_limit (status mismatch).
+                # Retry with limit=1 and no where-filter as a last resort.
+                logger.debug(
+                    "Chroma filtered query failed (%s) — retrying without where-filter.", inner_exc
+                )
+                try:
+                    results = _do_query(1, None)
+                except Exception:
+                    return []
+
+            formatted_results = []
+            if results and results.get("ids") and len(results["ids"][0]) > 0:
+                for i in range(len(results["ids"][0])):
+                    formatted_results.append({
+                        "id": uuid.UUID(results["ids"][0][i]),
+                        "document": results["documents"][0][i] if results.get("documents") else "",
+                        "metadata": results["metadatas"][0][i] if results.get("metadatas") else {},
+                        "distance": results["distances"][0][i] if results.get("distances") else 0.0,
+                    })
+            return formatted_results
+        except Exception as exc:
+            logger.warning("VectorStore.query_similar_atoms failed for collection %s: %s", session_id, exc)
+            return []

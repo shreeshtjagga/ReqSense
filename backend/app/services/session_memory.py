@@ -143,34 +143,37 @@ class SessionMemory:
         db: Any,
     ) -> None:
         """
-        Seed the current session's Redis key with the last 10 conversational turns
-        from the most recently completed prior session on the same project.
+        Seed the current session's Redis key with the last 20 conversational turns
+        from the most recently active/completed prior session on the same project.
 
-        Call this when a new session has no Redis history and no DB history —
-        it prevents ARIA from starting cold on session #2+ by providing continuity.
-        The seeded messages are clearly marked so ARIA can reference prior context.
+        Seeds from ANY prior session status (not just 'completed') so ARIA retains
+        context even when a client abandons a session mid-way and starts a new one.
+        A lightweight context-marker message is prepended so ARIA knows it already
+        has history and should acknowledge it at the start of the new conversation.
         """
         try:
             from sqlalchemy import select
             from app.models.message import Message
             from app.models.session import Session
 
-            # Find the most recent completed prior session (not the current one)
+            # Find the most recent prior session on this project (any status)
             prior_session_res = await db.execute(
                 select(Session)
                 .where(
                     Session.project_id == project_id,
                     Session.id != current_session_id,
-                    Session.status == "completed",
                 )
                 .order_by(Session.started_at.desc())
                 .limit(1)
             )
             prior_session = prior_session_res.scalar_one_or_none()
             if not prior_session:
+                logger.info(
+                    "No prior session found for project %s — ARIA starts fresh.", project_id
+                )
                 return
 
-            # Pull last 10 conversational turns from that session
+            # Pull last 20 conversational turns from that session
             msgs_res = await db.execute(
                 select(Message)
                 .where(
@@ -179,16 +182,26 @@ class SessionMemory:
                     Message.message_type != "conflict_alert",
                 )
                 .order_by(Message.created_at.desc())
-                .limit(10)
+                .limit(20)
             )
             prior_msgs = list(reversed(msgs_res.scalars().all()))
             if not prior_msgs:
                 return
 
+            # Prepend a lightweight system-style marker so ARIA knows it has prior context.
+            # This appears as an aria turn so it fits naturally into the conversation flow.
+            marker = {
+                "sender": "aria",
+                "content": (
+                    "[Context from prior session — these requirements have already been captured "
+                    "and do not need to be asked again.]"
+                ),
+            }
+            seeded = [marker] + [{"sender": m.sender, "content": m.content} for m in prior_msgs]
+
             # Seed into Redis under the current session's key
             r = get_redis_client()
             key = cls._get_key(current_session_id)
-            seeded = [{"sender": m.sender, "content": m.content} for m in prior_msgs]
             try:
                 async with r.pipeline(transaction=True) as pipe:
                     for m in seeded:

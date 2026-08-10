@@ -70,42 +70,6 @@ async def analytics_overview(
     }
 
 
-@router.get(
-    "/projects/{project_id}/stability",
-    summary="Stability score trend for a project",
-)
-async def project_stability(
-    project_id: str,
-    current_user: User = Depends(require_roles("admin", "developer")),
-    db: AsyncSession = Depends(get_db),
-):
-    """Return stability_score and contradiction_events per session for a project."""
-    result = await db.execute(
-        select(
-            Session.id,
-            Session.started_at,
-            Session.stability_score,
-            Session.contradiction_events,
-            Session.total_messages,
-        )
-        .join(Project, Project.id == Session.project_id)
-        .where(
-            Session.project_id == project_id,
-            Project.organization_id == current_user.organization_id,
-        )
-        .order_by(Session.started_at)
-    )
-    rows = result.all()
-    return [
-        {
-            "session_id": str(r.id),
-            "started_at": r.started_at,
-            "stability_score": r.stability_score,
-            "contradiction_events": r.contradiction_events,
-            "total_messages": r.total_messages,
-        }
-        for r in rows
-    ]
 
 
 @router.get(

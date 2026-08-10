@@ -111,9 +111,14 @@ async def update_project(
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(
     project: Project = Depends(get_scoped_project),
-    current_user: User = Depends(require_roles("admin")),
+    current_user: User = Depends(require_roles("admin", "developer")),
     db: AsyncSession = Depends(get_db),
 ):
+    if current_user.role == "developer" and project.status not in ("completed", "archived"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only completed or archived projects can be deleted.",
+        )
     db.add(AuditLog(
         user_id=current_user.id,
         action="delete_project",

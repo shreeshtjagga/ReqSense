@@ -95,7 +95,12 @@ class Settings(BaseSettings):
 
     @property
     def chroma_is_mocked(self) -> bool:
-        """Returns True if Chroma API key is empty or starts with test/mock when hosted."""
+        """Returns True if Chroma is effectively unavailable.
+        - In 'local' mode: never mocked — local Chroma needs no API key.
+        - In 'hosted' mode: mocked if API key is empty or starts with test/mock.
+        """
+        if self.CHROMA_MODE == "local":
+            return False
         return not self.CHROMA_API_KEY or self.CHROMA_API_KEY.startswith("test") or self.CHROMA_API_KEY.startswith("mock")
 
     @property
@@ -121,7 +126,9 @@ class Settings(BaseSettings):
     # ── Fail-fast cross-field validation ──────────────────────────────────────
     @model_validator(mode="after")
     def _validate_chroma_hosted_credentials(self) -> "Settings":
-        if self.CHROMA_MODE == "hosted":
+        # Only enforce API key + tenant when using hosted Chroma cloud.
+        # In local mode these fields are intentionally empty.
+        if self.CHROMA_MODE == "hosted" and not self.chroma_is_mocked:
             missing = [
                 name
                 for name, val in [

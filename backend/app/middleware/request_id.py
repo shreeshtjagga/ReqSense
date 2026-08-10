@@ -54,8 +54,12 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
         # Tag every Sentry event on this request with the request_id so
         # support can search Sentry by ID reported in an API error response.
-        with sentry_sdk.configure_scope() as scope:
-            scope.set_tag("request_id", request_id)
+        # sentry_sdk.set_tag() is compatible with SDK v1 and v2 (configure_scope
+        # was removed in v2). Safe to call when Sentry is disabled — it's a no-op.
+        try:
+            sentry_sdk.set_tag("request_id", request_id)
+        except Exception:
+            pass  # Sentry not initialised or v1 compat issue — non-fatal
 
         try:
             response = await call_next(request)
@@ -70,6 +74,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
             response.headers[header] = value
 
         return response
+
 
 
 def get_request_id() -> str:

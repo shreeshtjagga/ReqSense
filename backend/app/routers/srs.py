@@ -59,7 +59,7 @@ async def get_latest_srs(
         {
             "title": "2. Functional Requirements",
             "content": "\n\n".join([
-                f"[{idx}] {atom.subject}: {atom.action}" + (f" (Constraint: {atom.constraint_text})" if atom.constraint_text else "")
+                f"[{idx}] {atom.subject or 'Unspecified'}: {atom.action or 'Unspecified'}" + (f" (Constraint: {atom.constraint_text})" if atom.constraint_text else "")
                 for idx, atom in enumerate(atoms, start=1)
             ]) if atoms else "No active functional requirements extracted yet."
         },
@@ -211,7 +211,7 @@ async def get_srs_version_details(
         {
             "title": "2. Functional Requirements",
             "content": "\n\n".join([
-                f"[{idx}] {atom.subject}: {atom.action}" + (f" (Constraint: {atom.constraint_text})" if atom.constraint_text else "")
+                f"[{idx}] {atom.subject or 'Unspecified'}: {atom.action or 'Unspecified'}" + (f" (Constraint: {atom.constraint_text})" if atom.constraint_text else "")
                 for idx, atom in enumerate(atoms, start=1)
             ]) if atoms else "No active functional requirements extracted yet."
         },

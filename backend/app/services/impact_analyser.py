@@ -38,7 +38,7 @@ class ImpactAnalyser:
             "affected_features": [...],
             "severity": "low" | "medium" | "high",
             "impact_report": "...",
-            "_conflict_hits": [...]   ← consumed by the router, not stored verbatim
+            "_conflict_hits": [...]   <- consumed by the router, not stored verbatim
           }
         """
         # ── Feature impact via LLM ────────────────────────────────────────────
@@ -98,6 +98,7 @@ class ImpactAnalyser:
                 title=title,
                 description=description,
                 project_id=project_id,
+                db=db,
             )
         except Exception as rdcd_err:
             # Non-fatal — feature impact analysis still succeeds
@@ -119,6 +120,12 @@ class ImpactAnalyser:
                 f"{existing_report}\n\n"
                 f"⚠ Requirement Conflicts Detected by RDCD:\n{conflict_lines}"
             ).strip()
+        else:
+            existing_report = llm_result.get("impact_report", "")
+            llm_result["impact_report"] = (
+                f"{existing_report}\n\n"
+                f"Requirement Conflicts Detected by RDCD: None"
+            ).strip()
 
         llm_result["_conflict_hits"] = conflict_hits
         return llm_result
@@ -129,42 +136,90 @@ class ImpactAnalyser:
         title: str,
         description: str,
         project_id: uuid.UUID,
+        db: AsyncSession,
     ) -> List[Dict[str, Any]]:
         """
         Run the RDCD atom-extraction + vector-similarity + contradiction-detection
         pipeline against a change request's text, scoped to the project's Chroma
-        collection. Returns a list of conflict hit dicts — empty if none found.
+        collection. When Chroma returns nothing (empty index or mocked), falls back
+        to keyword-overlap matching against DB-stored RequirementAtoms.
+        Returns a list of conflict hit dicts — empty if none found.
 
-        This is intentionally kept import-local to avoid a circular dependency
-        (ImpactAnalyser ← rdcd_layer ← aria_agent) at module load time.
+        Import-local to avoid circular dependency (ImpactAnalyser ← rdcd_layer ← aria_agent).
         """
-        # Local imports keep the top of this file clean and prevent circular imports
         from app.services.rdcd_layer import RDCDLayer
         from app.services.embedding_service import EmbeddingService
         from app.services.vector_store import VectorStore
+        from app.models.requirement_atom import RequirementAtom
+        from sqlalchemy import select as _select
+        import re
 
         atoms = RDCDLayer.extract_atoms(f"{title}. {description}")
         if not atoms:
             return []
 
+        # Fetch prior active atoms from DB for keyword fallback
+        prior_res = await db.execute(
+            _select(RequirementAtom)
+            .where(
+                RequirementAtom.project_id == project_id,
+                RequirementAtom.status == "active",
+            )
+            .order_by(RequirementAtom.created_at.desc())
+            .limit(200)
+        )
+        prior_atoms = prior_res.scalars().all()
+
+        _STOPWORDS = {"the", "and", "for", "with", "that", "this", "from", "have",
+                      "will", "should", "must", "can", "are", "was", "were"}
+
+        def _kw_overlap(a_text: str, b_text: str) -> float:
+            tok = lambda t: {w for w in re.findall(r"[a-z0-9]+", t.lower()) if len(w) > 2 and w not in _STOPWORDS}
+            a, b = tok(a_text), tok(b_text)
+            return len(a & b) / len(a | b) if (a and b) else 0.0
+
         hits: List[Dict[str, Any]] = []
         for atom_dict in atoms:
             raw_text = atom_dict.get("raw_text", description)
+            matches = []
 
-            # Embed + query Chroma for the closest active prior atoms
-            try:
-                embedding = EmbeddingService.embed(raw_text)
-                matches = VectorStore.query_similar_atoms(
-                    session_id=project_id,   # project_id IS the Chroma collection key
-                    query_embedding=embedding,
-                    limit=3,
-                    status_filter="active",
-                )
-            except Exception as vec_err:
-                logger.warning(
-                    f"Chroma/embedding lookup skipped for CR atom (non-fatal): {vec_err}"
-                )
-                continue
+            # ── Vector similarity via Chroma (best path) ──────────────────────
+            if not settings.chroma_is_mocked:
+                try:
+                    embedding = EmbeddingService.embed(raw_text)
+                    matches = VectorStore.query_similar_atoms(
+                        session_id=project_id,
+                        query_embedding=embedding,
+                        limit=3,
+                        status_filter="active",
+                    )
+                except Exception as vec_err:
+                    logger.warning(
+                        "Chroma/embedding lookup skipped for CR atom (non-fatal): %s", vec_err
+                    )
+
+            # ── Keyword-overlap fallback when Chroma finds nothing ─────────────
+            if not matches and prior_atoms:
+                for pa in prior_atoms:
+                    score = _kw_overlap(raw_text, pa.raw_text or "")
+                    if score >= 0.35:
+                        matches.append({
+                            "id": pa.id,
+                            "document": pa.raw_text,
+                            "distance": 1.0 - score,
+                            "metadata": {
+                                "atom_id": str(pa.id),
+                                "subject": pa.subject or "",
+                                "action": pa.action or "",
+                                "constraint_text": pa.constraint_text or "",
+                            },
+                            "source": "keyword_fallback",
+                        })
+                if matches:
+                    logger.debug(
+                        "CR RDCD: keyword fallback found %d candidate(s) for '%s...'",
+                        len(matches), raw_text[:60],
+                    )
 
             for match in matches:
                 existing_atom = {

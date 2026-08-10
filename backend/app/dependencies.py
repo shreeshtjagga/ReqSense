@@ -148,13 +148,12 @@ async def get_scoped_project(
         )
         if sess_res.scalar_one_or_none():
             return project
-
-        # Allow client access if project has no client restrictions
-        return project
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found.",
+        )
 
     # Developer check: must be assigned developer OR in same org
-    # Unassigned projects (developer_id is None) are only accessible to devs
-    # in the same org — never to cross-org developers.
     if user.role == "developer":
         if project.developer_id == user.id:
             return project

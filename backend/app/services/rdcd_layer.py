@@ -67,7 +67,10 @@ class RDCDLayer:
         try:
             response = client.chat.completions.create(
                 model=settings.GROQ_MODEL,
-                messages=[{"role": "user", "content": prompt}],
+                messages=[
+                    {"role": "system", "content": "You are a JSON requirements extraction engine. Respond ONLY with a valid raw JSON array. Do not include markdown code fences, introductory text, explanations, or code tutorials."},
+                    {"role": "user", "content": prompt}
+                ],
                 temperature=0.0,
                 timeout=settings.GROQ_TIMEOUT_SECONDS
             )
@@ -133,7 +136,10 @@ class RDCDLayer:
         try:
             response = client.chat.completions.create(
                 model=settings.GROQ_MODEL,
-                messages=[{"role": "user", "content": prompt}],
+                messages=[
+                    {"role": "system", "content": "You are an AI requirements conflict validator. Respond ONLY with a valid raw JSON object. Do not include markdown code fences, introductory text, explanations, or code tutorials."},
+                    {"role": "user", "content": prompt}
+                ],
                 temperature=0.0,
                 timeout=settings.GROQ_TIMEOUT_SECONDS
             )

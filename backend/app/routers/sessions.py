@@ -53,15 +53,40 @@ async def create_session(
             .limit(40)
         )
         prev_msgs = list(reversed(prev_res.scalars().all()))
-        for m in prev_msgs:
-            await SessionMemory.add_message(
-                session.id, {"sender": m.sender, "content": m.content}
-            )
+        if prev_msgs:
+            # Prepend context marker so ARIA acknowledges history without re-asking
+            marker = {
+                "sender": "aria",
+                "content": (
+                    "[Context carried forward from a prior session — these requirements "
+                    "were already captured and do not need to be asked again.]"
+                ),
+            }
+            all_msgs = [marker] + [{"sender": m.sender, "content": m.content} for m in prev_msgs]
+            # Single pipeline batch-write — far more efficient than N round-trips
+            from app.services.session_memory import get_redis_client
+            import json as _json
+            try:
+                r = get_redis_client()
+                key = f"session_memory:{session.id}"
+                async with r.pipeline(transaction=True) as pipe:
+                    for m in all_msgs:
+                        pipe.rpush(key, _json.dumps(m))
+                    pipe.ltrim(key, -40, -1)
+                    pipe.expire(key, 86400)
+                    await pipe.execute()
+            except Exception as redis_err:
+                # Non-fatal — worst case ARIA uses DB fallback on first message
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "Session pre-seed Redis write failed (non-fatal): %s", redis_err
+                )
     except Exception:
         # Non-fatal — worst case ARIA just starts with less context this time
         pass
 
     return session
+
 
 
 @router.get("/project/{project_id}", response_model=List[SessionRead])
@@ -151,6 +176,7 @@ async def end_session(
     await db.commit()
     await db.refresh(session)
 
+    srs_status = "generated"
     # Automatically generate SRS document on completion
     if body.status == "completed":
         try:
@@ -158,12 +184,16 @@ async def end_session(
             logger.info(f"SRS document generated inline for session {session_id}")
         except Exception as e:
             logger.error(f"Inline SRS generation failed for session {session_id}: {e}")
+            srs_status = "queued"
             try:
                 generate_srs_task.delay(str(session_id))
             except Exception as celery_err:
                 logger.error(f"Celery fallback failed for session {session_id}: {celery_err}")
+                srs_status = "failed"
 
-    return session
+    session_dict = SessionRead.model_validate(session).model_dump()
+    session_dict["srs_status"] = srs_status
+    return session_dict
 
 
 @router.post("/{session_id}/generate-srs", response_model=SessionRead)

@@ -74,7 +74,7 @@ def _keyword_overlap_score(text_a: str, text_b: str) -> float:
 def _find_keyword_match(
     atom_dict: dict,
     prior_atoms: list,
-    min_overlap: float = 0.35,
+    min_overlap: float = 0.10,
 ) -> Optional[dict]:
     """Fallback when Chroma is down: pick strongest keyword-overlap prior atom."""
     raw = atom_dict.get("raw_text", "")
@@ -161,7 +161,7 @@ async def create_message(
     chroma_threshold = (
         project.chroma_similarity_threshold
         if project and project.chroma_similarity_threshold is not None
-        else 0.3
+        else 0.85
     )
     prior_atoms = (
         await db.execute(
@@ -174,10 +174,24 @@ async def create_message(
             .limit(200)
         )
     ).scalars().all()
-    # Short rolling summary of prior atoms (used as contradiction context)
-    atom_summary = "; ".join(
-        (a.raw_text or "")[:120] for a in prior_atoms[:40] if a.raw_text
-    )
+    # Structured rolling summary of prior atoms for ARIA context.
+    # Format: "Subject: X | Action: Y | Constraint: Z" — more informative than raw_text alone.
+    def _fmt_atom(a) -> str:
+        parts = []
+        if a.subject:
+            parts.append(f"Subject: {a.subject}")
+        if a.action:
+            parts.append(f"Action: {a.action}")
+        if a.constraint_text:
+            parts.append(f"Constraint: {a.constraint_text}")
+        raw = (a.raw_text or "")[:150]
+        return " | ".join(parts) + (f" [{raw}]" if raw else "")
+
+    atom_summary_parts = [_fmt_atom(a) for a in prior_atoms[:60] if a.raw_text or a.action]
+    atom_summary = "\n".join(atom_summary_parts)
+    # Truncate to a generous but bounded size for the prompt window
+    if len(atom_summary) > 3000:
+        atom_summary = atom_summary[:3000] + "..."
 
     # Feature status summary — gives ARIA visibility into what devs have built
     feature_rows = (
@@ -218,8 +232,8 @@ async def create_message(
         "name": project.name if project else "",
         "description": project.description if project else "",
         "domain": project.domain if project else "",
-        "atom_summary": atom_summary[:800] if atom_summary else "",
-        "feature_summary": feature_summary[:600] if feature_summary else "",
+        "atom_summary": atom_summary[:3000] if atom_summary else "",
+        "feature_summary": feature_summary[:1500] if feature_summary else "",
     }
 
     loop = asyncio.get_event_loop()
@@ -297,29 +311,38 @@ async def create_message(
     async def _process_single_atom(atom_dict: dict):
         raw_text = atom_dict.get("raw_text", sanitized_content)
         matches = []
-        chroma_failed = False
         try:
-            if not _is_test_env():
+            # Use chroma_is_mocked flag (not _is_test_env) so real Chroma is
+            # always queried when properly configured, even during development.
+            if not settings.chroma_is_mocked:
                 embedding = await loop.run_in_executor(None, EmbeddingService.embed, raw_text)
                 results = await loop.run_in_executor(
                     None,
                     lambda: VectorStore.query_similar_atoms(
                         session_id=session.project_id,
                         query_embedding=embedding,
-                        limit=3,
-                        status_filter="active"
+                        limit=5,
+                        status_filter="active",
                     )
                 )
+                logger.debug(
+                    "Chroma returned %d candidates for atom '%s...' (threshold=%.2f)",
+                    len(results), raw_text[:60], chroma_threshold,
+                )
                 for res in results:
+                    logger.debug("  candidate distance=%.4f  doc='%s...'" , res["distance"], str(res.get("document", ""))[:60])
                     if res["distance"] < chroma_threshold:
                         matches.append(res)
+            else:
+                logger.debug("Chroma is mocked — skipping vector similarity for atom.")
         except Exception as exc:
-            logger.warning("Chroma/contradiction query failed: %s", exc)
-            chroma_failed = True
+            logger.warning("Chroma query failed for atom '%s...': %s", raw_text[:60], exc)
 
-        if not matches and chroma_failed:
+        # Keyword fallback: runs when Chroma finds nothing (new project, empty index, etc.)
+        if not matches and prior_atoms:
             fb = _find_keyword_match(atom_dict, prior_atoms)
             if fb:
+                logger.debug("Keyword fallback matched prior atom for contradiction check.")
                 matches.append(fb)
 
         # Run candidate evaluations concurrently in parallel
@@ -443,9 +466,7 @@ async def create_message(
                     db.add(conflict_msg)
 
                     session.contradiction_events = (session.contradiction_events or 0) + 1
-                    session.stability_score = max(
-                        0.0, (session.stability_score if session.stability_score is not None else 100.0) - 10.0
-                    )
+                    session.stability_score = max(0.0, (session.stability_score or 100.0) - 10.0)
                 else:
                     pass  # Low-confidence evaluation — no action needed
 
@@ -473,7 +494,7 @@ async def create_message(
         logger.warning("Failed to update Redis session memory: %s", exc)
 
     # ── 8. Embed new atoms into Chroma (best-effort, after commit) ───────────
-    if not _is_test_env():
+    if not settings.chroma_is_mocked:
         for atom_dict, ra in persisted_atoms:
             try:
                 raw_text = atom_dict.get("raw_text", sanitized_content)
