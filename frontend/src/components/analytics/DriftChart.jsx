@@ -15,14 +15,13 @@ import { formatDate } from '../../utils/helpers';
 export const DriftChart = ({ data = [] }) => {
   const chartData = data.map((d, index) => ({
     name: d.started_at ? formatDate(d.started_at) : `Sess ${index + 1}`,
-    Stability: d.stability_score ?? 100,
     Contradictions: d.contradiction_events ?? 0,
   }));
 
   return (
     <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
       <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-        Requirements Stability Trend
+        Contradictions Trend
       </Typography>
       
       {data.length === 0 ? (
@@ -45,17 +44,10 @@ export const DriftChart = ({ data = [] }) => {
             >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
-              <YAxis domain={[0, 100]} />
+              <YAxis />
               <Tooltip />
               <Legend />
-              <Line
-                type="monotone"
-                dataKey="Stability"
-                stroke="#1A2744"
-                strokeWidth={2}
-                activeDot={{ r: 8 }}
-              />
-              <Line type="monotone" dataKey="Contradictions" stroke="#EA580C" strokeWidth={2} />
+              <Line type="monotone" dataKey="Contradictions" stroke="#EA580C" strokeWidth={2} activeDot={{ r: 8 }} />
             </LineChart>
           </ResponsiveContainer>
         </Box>

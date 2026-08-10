@@ -120,8 +120,12 @@ export const ChatSession = () => {
   const handleEndSession = async () => {
     try {
       setLoading(true);
-      await endSession(sessionId, 'completed');
-      showToast('Session ended. Your requirements are being processed!', 'success');
+      const res = await endSession(sessionId, 'completed');
+      if (res?.srs_status === 'failed' || res?.srs_status === 'queued') {
+        showToast('Session ended. SRS generation is queued/delayed — generate manually in Project SRS tab.', 'warning');
+      } else {
+        showToast('Session ended. Your SRS document was generated successfully!', 'success');
+      }
       // Navigate to project hub if we have the project id, else dashboard
       if (session?.project_id) {
         navigate(`/client/projects/${session.project_id}`);
@@ -202,13 +206,6 @@ export const ChatSession = () => {
                   </Typography>
                 </Box>
 
-                <Box>
-                  <Typography variant="caption" color="text.secondary">Stability Index</Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {session?.stability_score ? `${Math.round(session.stability_score)}%` : '100%'}
-                  </Typography>
-                </Box>
-                
                 <Box>
                   <Typography variant="caption" color="text.secondary">Contradictions</Typography>
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>

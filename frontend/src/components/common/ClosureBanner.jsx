@@ -35,11 +35,12 @@ export const ClosureBanner = ({ project, onUpdated }) => {
         action={
           <Button
             size="small"
-            color="inherit"
+            variant="contained"
+            color="error"
             disabled={busy}
             onClick={() => run(requestCloseProject, 'Closure request sent. Waiting for the other party to confirm.')}
           >
-            Request to close project
+            Request to Close Project
           </Button>
         }
       >
@@ -61,7 +62,7 @@ export const ClosureBanner = ({ project, onUpdated }) => {
             <Button
               size="small"
               variant="contained"
-              color="warning"
+              color="error"
               disabled={busy}
               onClick={() => run(approveCloseProject, 'Project closed successfully.')}
             >

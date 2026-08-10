@@ -60,6 +60,7 @@ import { getProjectSummary } from '../../api/analytics';
 import { listFeaturesForProject, updateFeatureStatus, createFeatureStatus } from '../../api/featureStatus';
 import { listChangeRequests, reviewChangeRequest } from '../../api/changeRequests';
 import { getLatestSrs, listSrsVersions, generateProjectSrs, getSrsVersionDetails } from '../../api/srs';
+import { listAtomsForProject } from '../../api/requirementAtoms';
 
 import { useToastStore } from '../../store/toastStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -786,12 +787,11 @@ export const ProjectDetail = () => {
         setEngagement(null);
       }
 
-      const [contradictionsRes, atomsRes] = await Promise.all([
-        axios.get(`/contradictions/project/${projectId}`).catch(() => ({ data: [] })),
-        axios.get(`/requirement-atoms/project/${projectId}`).catch(() => ({ data: [] })),
-      ]);
+      const contradictionsRes = await axios.get(`/contradictions/project/${projectId}`).catch(() => ({ data: [] }));
       setContradictions(contradictionsRes.data || []);
-      setAtoms(atomsRes.data || []);
+
+      const atomsList = await listAtomsForProject(projectId).catch(() => []);
+      setAtoms(atomsList || []);
     } catch (err) {
       showToast('Error loading project details.', 'error');
     } finally {
@@ -806,9 +806,6 @@ export const ProjectDetail = () => {
       if (projectId) {
         axios.get(`/contradictions/project/${projectId}`)
           .then((res) => setContradictions(res.data || []))
-          .catch(() => {});
-        axios.get(`/requirement-atoms/project/${projectId}`)
-          .then((res) => setAtoms(res.data || []))
           .catch(() => {});
       }
     }, 15000);
@@ -916,162 +913,178 @@ export const ProjectDetail = () => {
   }
 
   const menuItems = [
-    { text: 'Project Dashboard', icon: <DashboardIcon /> },
+    { text: 'Dashboard', icon: <DashboardIcon /> },
     { text: 'Chat Sessions', icon: <ChatIcon />, badge: sessions.length },
     { text: 'Contradictions', icon: <WarningIcon />, badge: contradictions.length },
-    { text: 'Extracted Atoms', icon: <ListAltIcon />, badge: atoms.length },
-    { text: 'Feature Status', icon: <CheckCircleOutlineIcon /> },
+    { text: 'Feature Board', icon: <CheckCircleOutlineIcon /> },
     { text: 'Change Requests', icon: <RateReviewIcon /> },
     { text: 'SRS Document', icon: <DescriptionIcon /> },
-
   ];
 
   return (
     <Layout>
       <ClosureBanner project={project} onUpdated={setProject} />
-      
-      <Grid container spacing={3} sx={{ minHeight: 'calc(100vh - 120px)' }}>
-        {/* Left Side: Internal Project Navigation Panel */}
-        <Grid item xs={12} md={3} sx={{ display: 'flex', flexDirection: 'column' }}>
-          <Stack spacing={2} sx={{ height: '100%' }}>
+
+      {/* Top Header & Project Overview Hero */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: { xs: 2.5, md: 3.5 },
+          mb: 3,
+          borderRadius: 4,
+          background: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          boxShadow: '0 4px 20px -2px rgba(15, 23, 42, 0.04)',
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2, mb: 2 }}>
+          <Stack direction="row" spacing={2} alignItems="center">
             <Button
               variant="outlined"
               color="inherit"
               startIcon={<ArrowBackIcon />}
               onClick={() => navigate('/')}
-              sx={{ alignSelf: 'flex-start' }}
+              size="small"
+              sx={{ borderColor: '#E2E8F0', color: 'text.secondary' }}
             >
-              Back to Dashboard
+              Back
             </Button>
 
-            <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, flexGrow: 1, overflowY: 'auto' }}>
-              <Box sx={{ mb: 2 }}>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-                  <Typography variant="h5" sx={{ fontWeight: 800 }}>
-                    {project?.name}
-                  </Typography>
-                  <Badge label={project?.status || 'active'} type="feature" />
-                </Stack>
-                <Typography variant="caption" color="text.secondary">
-                  {project?.description || 'No description provided.'}
+            <Box>
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <Typography variant="h4" sx={{ fontWeight: 800, color: '#0F172A', letterSpacing: '-0.01em' }}>
+                  {project?.name}
                 </Typography>
-              </Box>
+                <Badge label={project?.status || 'active'} type="feature" />
+              </Stack>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                {project?.description || 'AI Requirements Gathering Workspace'}
+              </Typography>
+            </Box>
+          </Stack>
 
-              <Divider sx={{ my: 2 }} />
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<PersonAddIcon />}
+              onClick={() => {
+                resetInviteDialog();
+                setInviteOpen(true);
+              }}
+              size="medium"
+            >
+              Invite Client
+            </Button>
+          </Stack>
+        </Box>
 
-              <List component="nav" disablePadding>
-                {menuItems.map((item, idx) => {
-                  const isSelected = tabValue === idx;
-                  return (
-                    <ListItem key={item.text} disablePadding sx={{ mb: 1 }}>
-                      <ListItemButton
-                        selected={isSelected}
-                        onClick={() => setTabValue(idx)}
-                        sx={{
-                          borderRadius: 2,
-                          color: isSelected ? 'secondary.main' : 'text.primary',
-                          '&.Mui-selected': {
-                            bgcolor: 'action.selected',
-                            color: 'secondary.main',
-                            fontWeight: 700,
-                            '& .MuiListItemIcon-root': { color: 'secondary.main' },
-                          },
-                        }}
-                      >
-                        <ListItemIcon sx={{ minWidth: 36, color: isSelected ? 'secondary.main' : 'text.secondary' }}>
-                          {item.icon}
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={item.text}
-                          primaryTypographyProps={{
-                            fontSize: '0.9rem',
-                            fontWeight: isSelected ? 700 : 500,
-                          }}
-                        />
-                        {item.badge !== undefined && (
-                          <Typography variant="caption" sx={{ ml: 1, fontWeight: 700, color: 'text.secondary' }}>
-                            ({item.badge})
-                          </Typography>
-                        )}
-                      </ListItemButton>
-                    </ListItem>
-                  );
-                })}
-              </List>
+        <Divider sx={{ my: 2 }} />
 
-              <Divider sx={{ my: 2 }} />
-
-              {/* Chroma Similarity Threshold Tuning */}
-              <Box sx={{ px: 1, pb: 2 }}>
-                <Tooltip
-                  title="Controls how similar two requirements must be before ARIA checks for contradiction. Lower = stricter matching, fewer false positives. Higher = catches more potential conflicts."
-                  placement="right"
-                  arrow
-                >
-                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 1, cursor: 'help', textDecoration: 'underline dotted' }}>
-                    Contradiction Sensitivity
-                  </Typography>
-                </Tooltip>
-                <Slider
-                  value={chromaThreshold}
-                  onChange={(_, val) => setChromaThreshold(val)}
-                  onChangeCommitted={(_, val) => handleSaveThreshold(val)}
-                  min={0.1}
-                  max={0.9}
-                  step={0.05}
-                  valueLabelDisplay="auto"
-                  valueLabelFormat={(v) => `${(v * 100).toFixed(0)}%`}
-                  marks={[
-                    { value: 0.1, label: 'Strict' },
-                    { value: 0.5, label: 'Balanced' },
-                    { value: 0.9, label: 'Loose' },
-                  ]}
-                  disabled={savingThreshold}
-                  color="secondary"
-                  size="small"
-                />
-                <Typography variant="caption" color="text.secondary">
-                  Current: {(chromaThreshold * 100).toFixed(0)}% — changes auto-save
+        {/* Sensitivity & Clients Quick Bar */}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
+            <Box sx={{ minWidth: 240 }}>
+              <Tooltip
+                title="Controls how similar two requirements must be before ARIA checks for contradiction."
+                placement="top"
+                arrow
+              >
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.5, cursor: 'help' }}>
+                  Contradiction Sensitivity: <strong>{(chromaThreshold * 100).toFixed(0)}%</strong>
                 </Typography>
-              </Box>
+              </Tooltip>
+              <Slider
+                value={chromaThreshold}
+                onChange={(_, val) => setChromaThreshold(val)}
+                onChangeCommitted={(_, val) => handleSaveThreshold(val)}
+                min={0.1}
+                max={0.9}
+                step={0.05}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(v) => `${(v * 100).toFixed(0)}%`}
+                disabled={savingThreshold}
+                color="primary"
+                size="small"
+              />
+            </Box>
 
-              <Divider sx={{ my: 2 }} />
-
-              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-                Invited Clients
+            <Box sx={{ borderLeft: '1px solid #E2E8F0', pl: 3, display: { xs: 'none', sm: 'block' } }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+                Invited Clients:
               </Typography>
               <ProjectClientsList projectId={projectId} refreshKey={sessions.length} />
+            </Box>
+          </Box>
+        </Box>
+      </Paper>
 
-              <Divider sx={{ my: 1 }} />
-
+      {/* Pill Navigation Tabs Bar */}
+      <Paper
+        elevation={0}
+        sx={{
+          mb: 3,
+          p: 1,
+          borderRadius: 3,
+          background: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+        }}
+      >
+        <Stack direction="row" spacing={1} sx={{ overflowX: 'auto', pb: { xs: 1, sm: 0 } }}>
+          {menuItems.map((item, idx) => {
+            const isSelected = tabValue === idx;
+            return (
               <Button
-                variant="contained"
-                startIcon={<PersonAddIcon />}
-                onClick={() => {
-                  resetInviteDialog();
-                  setInviteOpen(true);
+                key={item.text}
+                onClick={() => setTabValue(idx)}
+                startIcon={item.icon}
+                sx={{
+                  borderRadius: 2.5,
+                  px: 2.5,
+                  py: 1,
+                  fontWeight: isSelected ? 700 : 500,
+                  fontSize: '0.875rem',
+                  whiteSpace: 'nowrap',
+                  color: isSelected ? 'primary.main' : 'text.secondary',
+                  background: isSelected ? '#EEF2FF' : 'transparent',
+                  border: isSelected ? '1px solid #C7D2FE' : '1px solid transparent',
+                  '&:hover': {
+                    background: isSelected ? '#EEF2FF' : '#F8FAFC',
+                  },
                 }}
-                fullWidth
-                size="medium"
               >
-                Invite Client
+                {item.text}
+                {item.badge !== undefined && (
+                  <Chip
+                    label={item.badge}
+                    size="small"
+                    sx={{
+                      ml: 1,
+                      height: 20,
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      background: isSelected ? '#4F46E5' : '#E2E8F0',
+                      color: isSelected ? '#FFFFFF' : '#64748B',
+                    }}
+                  />
+                )}
               </Button>
-            </Paper>
-          </Stack>
-        </Grid>
+            );
+          })}
+        </Stack>
+      </Paper>
 
-        {/* Right Side: Main Content Area */}
-        <Grid item xs={12} md={9}>
-          <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, minHeight: '100%' }}>
-            {tabValue === 0 && (
-              <ProjectDashboardTab
-                project={project}
-                sessions={sessions}
-                contradictions={contradictions}
-                atoms={atoms}
-                engagement={engagement}
-              />
-            )}
+      {/* Full-width Workspace Content Area */}
+      <Paper elevation={0} sx={{ p: { xs: 2.5, md: 4 }, borderRadius: 4, background: '#FFFFFF', border: '1px solid #E2E8F0', minHeight: 500 }}>
+        {tabValue === 0 && (
+          <ProjectDashboardTab
+            project={project}
+            sessions={sessions}
+            contradictions={contradictions}
+            atoms={atoms}
+            engagement={engagement}
+          />
+        )}
 
             {tabValue === 1 && (
               <Box>
@@ -1200,56 +1213,11 @@ export const ProjectDetail = () => {
               </Box>
             )}
 
-            {tabValue === 3 && (
-              <Box>
-                <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-                  Extracted Requirement Atoms
-                </Typography>
-                {atoms.length === 0 ? (
-                  <EmptyState
-                    title="No Extracted Atoms"
-                    description="No requirements atoms have been processed for this project yet."
-                  />
-                ) : (
-                  <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
-                    <Table aria-label="atoms-table">
-                      <TableHead sx={{ bgcolor: 'action.hover' }}>
-                        <TableRow>
-                          <TableCell><strong>Subject</strong></TableCell>
-                          <TableCell><strong>Action</strong></TableCell>
-                          <TableCell><strong>Constraints</strong></TableCell>
-                          <TableCell><strong>Raw Source Sentence</strong></TableCell>
-                          <TableCell><strong>Status</strong></TableCell>
-                          <TableCell><strong>Extracted At</strong></TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {atoms.map((atom) => (
-                          <TableRow key={atom.id}>
-                            <TableCell sx={{ fontWeight: 600 }}>{atom.subject || 'N/A'}</TableCell>
-                            <TableCell>{atom.action || 'N/A'}</TableCell>
-                            <TableCell>{atom.constraint_text || 'N/A'}</TableCell>
-                            <TableCell sx={{ maxWidth: 300 }}>{atom.raw_text}</TableCell>
-                            <TableCell>
-                              <Badge label={atom.status || 'active'} type="feature" />
-                            </TableCell>
-                            <TableCell>{formatDateTime(atom.created_at)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                )}
-              </Box>
-            )}
-
-            {tabValue === 4 && <ProjectFeatureTrackerTab projectId={projectId} />}
-            {tabValue === 5 && <ProjectChangeRequestsTab projectId={projectId} />}
-            {tabValue === 6 && <ProjectSRSTab projectId={projectId} />}
+            {tabValue === 3 && <ProjectFeatureTrackerTab projectId={projectId} />}
+            {tabValue === 4 && <ProjectChangeRequestsTab projectId={projectId} />}
+            {tabValue === 5 && <ProjectSRSTab projectId={projectId} />}
 
           </Paper>
-        </Grid>
-      </Grid>
 
       <ConflictOverridePanel
         open={Boolean(selectedContradiction)}

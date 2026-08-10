@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Typography, Box, Alert, Grid, FormControl, InputLabel, Select, MenuItem, Skeleton, Paper } from '@mui/material';
+import { Typography, Box, Grid, FormControl, InputLabel, Select, MenuItem, Skeleton, Paper } from '@mui/material';
 import Layout from '../../components/layout/Layout';
 import DriftChart from '../../components/analytics/DriftChart';
 import ResolutionChart from '../../components/analytics/ResolutionChart';
-import StabilityGauge from '../../components/analytics/StabilityGauge';
 import EmptyState from '../../components/common/EmptyState';
 import { listProjects } from '../../api/projects';
-import { getProjectStabilityTrend, getProjectSummary } from '../../api/analytics';
+import { getProjectSummary } from '../../api/analytics';
+import { listSessionsForProject } from '../../api/sessions';
 import { useToastStore } from '../../store/toastStore';
 import axios from '../../api/axios';
 
@@ -15,7 +15,7 @@ export const Analytics = () => {
 
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState('');
-  const [stabilityTrend, setStabilityTrend] = useState([]);
+  const [sessionTrend, setSessionTrend] = useState([]);
   const [loading, setLoading] = useState(true);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [stats, setStats] = useState({ pending: 0, resolved: 0, ignored: 0 });
@@ -43,8 +43,8 @@ export const Analytics = () => {
     if (!pid) return;
     setAnalyticsLoading(true);
     try {
-      const trend = await getProjectStabilityTrend(pid);
-      setStabilityTrend(trend);
+      const sessions = await listSessionsForProject(pid);
+      setSessionTrend(sessions || []);
 
       // Load counts of contradictions for the pie chart
       try {
@@ -76,20 +76,15 @@ export const Analytics = () => {
     fetchProjectAnalytics(projectId);
   }, [projectId]);
 
-  // Compute stability score from trend or fallback to 100%
-  const currentStability = stabilityTrend.length > 0 
-    ? stabilityTrend[stabilityTrend.length - 1].stability_score 
-    : 100;
-
   return (
     <Layout>
       <Box sx={{ mb: 4, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
         <Box sx={{ maxWidth: 600 }}>
           <Typography variant="h3" sx={{ fontWeight: 800, mb: 1 }}>
-            Stability Analytics
+            Requirements &amp; Contradictions Analytics
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Visualize requirement drift trends, contradiction frequency, and project specification stability.
+            Visualize contradiction frequency, session trends, and conflict type distribution across active projects.
           </Typography>
         </Box>
         
@@ -121,22 +116,14 @@ export const Analytics = () => {
         />
       ) : analyticsLoading ? (
         <Grid container spacing={3}>
-          <Grid item xs={12} md={8}>
-            <Skeleton variant="rectangular" height={300} sx={{ borderRadius: 3 }} />
-          </Grid>
-          <Grid item xs={12} md={4}>
+          <Grid item xs={12}>
             <Skeleton variant="rectangular" height={300} sx={{ borderRadius: 3 }} />
           </Grid>
         </Grid>
       ) : (
         <Grid container spacing={3}>
-          {/* Stability Gauge */}
-          <Grid item xs={12} md={4}>
-            <StabilityGauge value={currentStability} />
-          </Grid>
-          
           {/* Contradiction Pie Chart */}
-          <Grid item xs={12} md={8}>
+          <Grid item xs={12}>
             <ResolutionChart
               pending={stats.pending}
               resolved={stats.resolved}
@@ -146,7 +133,7 @@ export const Analytics = () => {
 
           {/* Drift Line Chart */}
           <Grid item xs={12}>
-            <DriftChart data={stabilityTrend} />
+            <DriftChart data={sessionTrend} />
           </Grid>
 
           <Grid item xs={12}>
