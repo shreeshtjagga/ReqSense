@@ -3,7 +3,7 @@ import { Typography, Box, Alert, Button, Grid, Stack, Divider, Paper, Skeleton }
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
 import ChatWindow from '../../components/chat/ChatWindow';
-import { getSession, endSession } from '../../api/sessions';
+import { getSession, endSession, listAllProjectMessages } from '../../api/sessions';
 import { listMessages, createMessage } from '../../api/messages';
 import { getProject } from '../../api/projects';
 import { resolveContradiction } from '../../api/contradictions';
@@ -27,13 +27,25 @@ export const ChatSession = () => {
   const [error, setError] = useState(null);
 
   const pollingIntervalRef = useRef(null);
+  // Mirror session into a ref so the polling interval callback always reads
+  // the latest status — avoids stale closure where session is null at mount time.
+  const sessionRef = useRef(session);
+  useEffect(() => { sessionRef.current = session; }, [session]);
+
 
   const fetchSessionAndMessages = async () => {
     try {
       const sessionData = await getSession(sessionId);
       setSession(sessionData);
 
-      const msgs = await listMessages(sessionId);
+      let msgs;
+      try {
+        msgs = sessionData?.project_id
+          ? await listAllProjectMessages(sessionData.project_id)
+          : await listMessages(sessionId);
+      } catch {
+        msgs = await listMessages(sessionId);
+      }
       setMessages(msgs);
 
       // Fetch project details
@@ -52,14 +64,18 @@ export const ChatSession = () => {
   useEffect(() => {
     fetchSessionAndMessages();
 
-    // Set up polling for new messages (e.g. system warnings or external changes)
+    // Set up polling for new messages (e.g. system warnings or external changes).
+    // Gated on tab visibility and raised to 8s interval.
     pollingIntervalRef.current = setInterval(() => {
-      if (session?.status === 'active') {
-        listMessages(sessionId)
+      if (sessionRef.current?.status === 'active' && document.visibilityState === 'visible') {
+        const fetchFn = sessionRef.current?.project_id
+          ? () => listAllProjectMessages(sessionRef.current.project_id)
+          : () => listMessages(sessionId);
+        fetchFn()
           .then((msgs) => setMessages(msgs))
           .catch((e) => console.error('Error polling messages:', e));
       }
-    }, 5000);
+    }, 8000);
 
     return () => {
       if (pollingIntervalRef.current) {
@@ -104,8 +120,12 @@ export const ChatSession = () => {
   const handleEndSession = async () => {
     try {
       setLoading(true);
-      await endSession(sessionId, 'completed');
-      showToast('Session ended. Your requirements are being processed!', 'success');
+      const res = await endSession(sessionId, 'completed');
+      if (res?.srs_status === 'failed' || res?.srs_status === 'queued') {
+        showToast('Session ended. SRS generation is queued/delayed — generate manually in Project SRS tab.', 'warning');
+      } else {
+        showToast('Session ended. Your SRS document was generated successfully!', 'success');
+      }
       // Navigate to project hub if we have the project id, else dashboard
       if (session?.project_id) {
         navigate(`/client/projects/${session.project_id}`);
@@ -186,13 +206,6 @@ export const ChatSession = () => {
                   </Typography>
                 </Box>
 
-                <Box>
-                  <Typography variant="caption" color="text.secondary">Stability Index</Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {session?.stability_score ? `${Math.round(session.stability_score)}%` : '100%'}
-                  </Typography>
-                </Box>
-                
                 <Box>
                   <Typography variant="caption" color="text.secondary">Contradictions</Typography>
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>

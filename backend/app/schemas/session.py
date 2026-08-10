@@ -22,6 +22,7 @@ class SessionRead(BaseModel):
     drift_events: int
     contradiction_events: int
     stability_score: float
+    srs_status: Optional[str] = "generated"
 
     model_config = {"from_attributes": True}
 

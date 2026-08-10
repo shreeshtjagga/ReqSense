@@ -1,12 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Typography,
   Grid,
   Box,
   Alert,
+  Slider,
+  Tooltip,
   Skeleton,
-  Tabs,
-  Tab,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
   Table,
   TableBody,
   TableCell,
@@ -20,6 +25,16 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Card,
+  CardContent,
+  CardActions,
+  IconButton,
+  Divider,
+  Chip,
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
@@ -27,26 +42,691 @@ import Badge from '../../components/common/Badge';
 import Button from '../../components/common/Button';
 import EmptyState from '../../components/common/EmptyState';
 import ConflictOverridePanel from '../../components/chat/ConflictOverridePanel';
-import EmailVerificationBanner from '../../components/common/EmailVerificationBanner';
+import ClosureBanner from '../../components/common/ClosureBanner';
+import ProjectClientsList from '../../components/dashboard/ProjectClientsList';
+import SRSViewer from '../../components/srs/SRSViewer';
+import VersionHistory from '../../components/srs/VersionHistory';
+
 import {
   getProject,
   addClientToProject,
   createProjectInvite,
   lookupUserByEmail,
+  updateProject,
 } from '../../api/projects';
 import { listSessionsForProject } from '../../api/sessions';
 import { resolveContradiction } from '../../api/contradictions';
 import { getProjectSummary } from '../../api/analytics';
+import { listFeaturesForProject, updateFeatureStatus, createFeatureStatus } from '../../api/featureStatus';
+import { listChangeRequests, reviewChangeRequest } from '../../api/changeRequests';
+import { getLatestSrs, listSrsVersions, generateProjectSrs, getSrsVersionDetails } from '../../api/srs';
+import { listAtomsForProject } from '../../api/requirementAtoms';
+
 import { useToastStore } from '../../store/toastStore';
 import { useProjectStore } from '../../store/projectStore';
 import { formatDateTime } from '../../utils/helpers';
+import { FEATURE_STATUS, CHANGE_REQUEST_STATUS, PROJECT_DOMAIN_LABELS } from '../../utils/constants';
+
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import WarningIcon from '@mui/icons-material/Warning';
 import ChatIcon from '@mui/icons-material/Chat';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import EditIcon from '@mui/icons-material/Edit';
+import AddIcon from '@mui/icons-material/Add';
+import RateReviewIcon from '@mui/icons-material/RateReview';
+import DescriptionIcon from '@mui/icons-material/Description';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import DashboardIcon from '@mui/icons-material/Dashboard';
 import axios from '../../api/axios';
 
+// ── Tab 4: Project Feature Tracker ───────────────────────────────────────────
+const ProjectFeatureTrackerTab = ({ projectId }) => {
+  const showToast = useToastStore((s) => s.showToast);
+  const [features, setFeatures] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Create Modal
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createTitle, setCreateTitle] = useState('');
+  const [createDescription, setCreateDescription] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  // Edit Modal
+  const [editOpen, setEditOpen] = useState(false);
+  const [selectedFeature, setSelectedFeature] = useState(null);
+  const [newStatus, setNewStatus] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+  const [updating, setUpdating] = useState(false);
+
+  const fetchFeatures = async () => {
+    setLoading(true);
+    try {
+      const data = await listFeaturesForProject(projectId);
+      setFeatures(data);
+    } catch (err) {
+      showToast('Failed to load project features.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (projectId) fetchFeatures();
+  }, [projectId]);
+
+  const handleEditClick = (feat) => {
+    setSelectedFeature(feat);
+    setNewStatus(feat.status);
+    setNewDescription(feat.description || '');
+    setEditOpen(true);
+  };
+
+  const handleUpdateFeature = async (e) => {
+    e.preventDefault();
+    if (!selectedFeature) return;
+    setUpdating(true);
+    try {
+      await updateFeatureStatus(selectedFeature.id, {
+        status: newStatus,
+        description: newDescription,
+        version: selectedFeature.version,
+      });
+      showToast('Feature updated successfully!', 'success');
+      setEditOpen(false);
+      fetchFeatures();
+    } catch (err) {
+      const isConflict = err.response?.status === 409 || err.response?.data?.code === 'STALE_VERSION';
+      if (isConflict) {
+        showToast('Someone else updated this feature. Refreshing data...', 'error');
+        setEditOpen(false);
+        fetchFeatures();
+      } else {
+        showToast(err.response?.data?.detail || 'Failed to update feature.', 'error');
+      }
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleCreateFeature = async (e) => {
+    e.preventDefault();
+    if (!createTitle.trim()) return;
+    setCreating(true);
+    try {
+      await createFeatureStatus({
+        project_id: projectId,
+        title: createTitle.trim(),
+        description: createDescription.trim(),
+      });
+      showToast('New feature added successfully!', 'success');
+      setCreateOpen(false);
+      setCreateTitle('');
+      setCreateDescription('');
+      fetchFeatures();
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Failed to create feature.', 'error');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const planned = features.filter((f) => f.status === FEATURE_STATUS.PLANNED);
+  const inProgress = features.filter((f) => f.status === FEATURE_STATUS.IN_PROGRESS);
+  const completed = features.filter((f) => f.status === FEATURE_STATUS.COMPLETED);
+
+  const renderColumn = (title, colFeatures) => (
+    <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, height: '100%', bgcolor: 'background.paper', minHeight: 360 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h6" sx={{ fontWeight: 700 }}>
+          {title}
+        </Typography>
+        <Badge label={colFeatures.length} type="info" />
+      </Box>
+      <Divider sx={{ mb: 2 }} />
+      <Stack spacing={2}>
+        {colFeatures.map((feat) => (
+          <Card key={feat.id} variant="outlined" sx={{ borderRadius: 2, position: 'relative' }}>
+            <CardContent sx={{ pr: 6, pb: 1.5 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                {feat.title}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {feat.description || 'No description provided.'}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
+                Version: v{feat.version}
+              </Typography>
+            </CardContent>
+            <CardActions sx={{ position: 'absolute', right: 8, top: 8 }}>
+              <IconButton onClick={() => handleEditClick(feat)} size="small" color="primary">
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </CardActions>
+          </Card>
+        ))}
+        {colFeatures.length === 0 && (
+          <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 4, fontStyle: 'italic' }}>
+            Empty column
+          </Typography>
+        )}
+      </Stack>
+    </Paper>
+  );
+
+  if (loading) return <Skeleton variant="rectangular" height={280} sx={{ borderRadius: 3 }} />;
+
+  return (
+    <Box>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+        <Typography variant="h6" sx={{ fontWeight: 700 }}>
+          Functional Features Kanban
+        </Typography>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
+          Add Feature
+        </Button>
+      </Stack>
+
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={4}>
+          {renderColumn('Planned', planned)}
+        </Grid>
+        <Grid item xs={12} md={4}>
+          {renderColumn('In Progress', inProgress)}
+        </Grid>
+        <Grid item xs={12} md={4}>
+          {renderColumn('Completed', completed)}
+        </Grid>
+      </Grid>
+
+      {/* Create Dialog */}
+      <Dialog open={createOpen} onClose={() => !creating && setCreateOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Add New Feature</DialogTitle>
+        <Box component="form" onSubmit={handleCreateFeature}>
+          <DialogContent dividers>
+            <Stack spacing={3}>
+              <TextField
+                label="Feature Title"
+                value={createTitle}
+                onChange={(e) => setCreateTitle(e.target.value)}
+                required
+                fullWidth
+                placeholder="e.g. User Authentication & SSO"
+              />
+              <TextField
+                label="Description"
+                value={createDescription}
+                onChange={(e) => setCreateDescription(e.target.value)}
+                multiline
+                rows={3}
+                fullWidth
+                placeholder="Detailed description of functional requirements..."
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <Button disabled={creating} onClick={() => setCreateOpen(false)} color="inherit">
+              Cancel
+            </Button>
+            <Button type="submit" variant="contained" color="primary" loading={creating}>
+              Create Feature
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={editOpen} onClose={() => !updating && setEditOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Edit Feature Status</DialogTitle>
+        <Box component="form" onSubmit={handleUpdateFeature}>
+          <DialogContent dividers>
+            <Stack spacing={3}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                {selectedFeature?.title}
+              </Typography>
+              <FormControl fullWidth>
+                <InputLabel id="status-label">Status</InputLabel>
+                <Select
+                  labelId="status-label"
+                  value={newStatus}
+                  label="Status"
+                  onChange={(e) => setNewStatus(e.target.value)}
+                >
+                  <MenuItem value={FEATURE_STATUS.PLANNED}>Planned</MenuItem>
+                  <MenuItem value={FEATURE_STATUS.IN_PROGRESS}>In Progress</MenuItem>
+                  <MenuItem value={FEATURE_STATUS.COMPLETED}>Completed</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                label="Description"
+                value={newDescription}
+                onChange={(e) => setNewDescription(e.target.value)}
+                multiline
+                rows={3}
+                fullWidth
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <Button disabled={updating} onClick={() => setEditOpen(false)} color="inherit">
+              Cancel
+            </Button>
+            <Button type="submit" variant="contained" color="primary" loading={updating}>
+              Save Changes
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+    </Box>
+  );
+};
+
+// ── Tab 5: Project Change Requests ───────────────────────────────────────────
+const ProjectChangeRequestsTab = ({ projectId }) => {
+  const showToast = useToastStore((s) => s.showToast);
+  const [changeRequests, setChangeRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Review Modal
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [selectedCr, setSelectedCr] = useState(null);
+  const [note, setNote] = useState('');
+  const [action, setAction] = useState('approved');
+  const [submitting, setSubmitting] = useState(false);
+
+  const fetchChangeRequests = async () => {
+    setLoading(true);
+    try {
+      const data = await listChangeRequests(projectId);
+      setChangeRequests(data);
+    } catch (err) {
+      showToast('Failed to load change requests.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (projectId) {
+      fetchChangeRequests();
+      const interval = setInterval(fetchChangeRequests, 15000);
+      return () => clearInterval(interval);
+    }
+  }, [projectId]);
+
+  const handleReviewClick = (cr) => {
+    setSelectedCr(cr);
+    setNote(cr.developer_note || '');
+    setAction('approved');
+    setReviewOpen(true);
+  };
+
+  const handleReviewSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedCr) return;
+    setSubmitting(true);
+    try {
+      await reviewChangeRequest(selectedCr.id, {
+        status: action,
+        developer_note: note.trim() || `Reviewed as ${action} by developer.`,
+        version: selectedCr.version,
+      });
+      showToast(`Change request ${action} successfully!`, 'success');
+      setReviewOpen(false);
+      fetchChangeRequests();
+    } catch (err) {
+      const isConflict = err.response?.status === 409 || err.response?.data?.code === 'STALE_VERSION';
+      if (isConflict) {
+        showToast('Someone else reviewed this request. Refreshing list...', 'error');
+        setReviewOpen(false);
+        fetchChangeRequests();
+      } else {
+        showToast(err.response?.data?.detail || 'Failed to submit review.', 'error');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) return <Skeleton variant="rectangular" height={240} sx={{ borderRadius: 3 }} />;
+
+  return (
+    <Box>
+      {changeRequests.length === 0 ? (
+        <EmptyState
+          title="No Change Requests"
+          description="No requirement modification requests have been submitted for this project yet."
+        />
+      ) : (
+        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+          <Table aria-label="project-cr-table">
+            <TableHead sx={{ bgcolor: 'action.hover' }}>
+              <TableRow>
+                <TableCell><strong>Title</strong></TableCell>
+                <TableCell><strong>Description</strong></TableCell>
+                <TableCell><strong>Severity</strong></TableCell>
+                <TableCell><strong>Status</strong></TableCell>
+                <TableCell><strong>Submitted At</strong></TableCell>
+                <TableCell align="right"><strong>Action</strong></TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {changeRequests.map((cr) => (
+                <TableRow key={cr.id}>
+                  <TableCell sx={{ fontWeight: 600 }}>{cr.title}</TableCell>
+                  <TableCell sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {cr.description}
+                  </TableCell>
+                  <TableCell>
+                    <Badge label={cr.severity} type="severity" />
+                  </TableCell>
+                  <TableCell>
+                    <Badge label={cr.status} type="change-request" />
+                  </TableCell>
+                  <TableCell>{formatDateTime(cr.created_at)}</TableCell>
+                  <TableCell align="right">
+                    {cr.status === 'pending' ? (
+                      <Button size="small" variant="contained" onClick={() => handleReviewClick(cr)}>
+                        Review & Impact
+                      </Button>
+                    ) : (
+                      <Button size="small" variant="outlined" color="inherit" onClick={() => handleReviewClick(cr)}>
+                        Details
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+
+      {/* Review Dialog */}
+      <Dialog open={reviewOpen} onClose={() => !submitting && setReviewOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Change Request Evaluation</DialogTitle>
+        <Box component="form" onSubmit={handleReviewSubmit}>
+          <DialogContent dividers>
+            <Stack spacing={3}>
+              <Box>
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+                  {selectedCr?.title}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Submitted on {formatDateTime(selectedCr?.created_at)} • Severity:{' '}
+                  <strong>{selectedCr?.severity?.toUpperCase()}</strong>
+                </Typography>
+              </Box>
+
+              <Box sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                  Client Description
+                </Typography>
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
+                  {selectedCr?.description}
+                </Typography>
+              </Box>
+
+              <Box sx={{ p: 2, bgcolor: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 2 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'primary.main', mb: 1 }}>
+                  ARIA AI Impact Analysis Report
+                </Typography>
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-line', color: 'text.primary' }}>
+                  {selectedCr?.impact_report || 'Impact analysis is currently being processed by background worker tasks...'}
+                </Typography>
+              </Box>
+
+              {selectedCr?.status === CHANGE_REQUEST_STATUS.PENDING ? (
+                <>
+                  <Divider />
+                  <FormControl fullWidth>
+                    <InputLabel id="cr-action-label">Review Action</InputLabel>
+                    <Select
+                      labelId="cr-action-label"
+                      value={action}
+                      label="Review Action"
+                      onChange={(e) => setAction(e.target.value)}
+                    >
+                      <MenuItem value="approved">Approve Change Request</MenuItem>
+                      <MenuItem value="rejected">Reject Change Request</MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  <TextField
+                    label="Developer Response Note"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    multiline
+                    rows={3}
+                    placeholder="Enter approval details, target release versions or rejection reasons..."
+                    fullWidth
+                    required
+                  />
+                </>
+              ) : (
+                <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                    Review Details (Historical)
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    Status: <Badge label={selectedCr?.status} type="change-request" />
+                  </Typography>
+                  <Typography variant="body2">
+                    Developer Note: {selectedCr?.developer_note || 'N/A'}
+                  </Typography>
+                </Box>
+              )}
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <Button disabled={submitting} onClick={() => setReviewOpen(false)} color="inherit">
+              Close
+            </Button>
+            {selectedCr?.status === CHANGE_REQUEST_STATUS.PENDING && (
+              <Button type="submit" variant="contained" color="primary" loading={submitting}>
+                Submit Decision
+              </Button>
+            )}
+          </DialogActions>
+        </Box>
+      </Dialog>
+    </Box>
+  );
+};
+
+// ── Tab 6: Project SRS Documents ──────────────────────────────────────────────
+const ProjectSRSTab = ({ projectId }) => {
+  const showToast = useToastStore((s) => s.showToast);
+  const [activeSrs, setActiveSrs] = useState(null);
+  const [versions, setVersions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+
+  const fetchSrsData = async () => {
+    setLoading(true);
+    try {
+      const latest = await getLatestSrs(projectId);
+      setActiveSrs(latest);
+      const list = await listSrsVersions(projectId);
+      setVersions(list);
+    } catch (err) {
+      setActiveSrs(null);
+      setVersions([]);
+      if (err.response?.status !== 404) {
+        showToast('Error loading SRS document versions.', 'error');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (projectId) fetchSrsData();
+  }, [projectId]);
+
+  const handleGenerateSrs = async () => {
+    setGenerating(true);
+    try {
+      await generateProjectSrs(projectId);
+      showToast('SRS document generated successfully!', 'success');
+      await fetchSrsData();
+    } catch (err) {
+      showToast('Failed to generate SRS document.', 'error');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleSelectVersion = async (vItem) => {
+    if (!vItem) return;
+    try {
+      const details = await getSrsVersionDetails(vItem.id);
+      setActiveSrs(details);
+    } catch (err) {
+      setActiveSrs({
+        id: vItem.id,
+        version: vItem.version,
+        created_at: vItem.created_at,
+        download_url: vItem.file_url,
+      });
+    }
+  };
+
+  if (loading) return <Skeleton variant="rectangular" height={280} sx={{ borderRadius: 3 }} />;
+
+  return (
+    <Box>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }} flexWrap="wrap" gap={2}>
+        <Typography variant="h6" sx={{ fontWeight: 700 }}>
+          Software Requirements Specification (SRS)
+        </Typography>
+        <Stack direction="row" spacing={2} alignItems="center">
+          {versions.length > 0 && (
+            <FormControl sx={{ minWidth: 180 }}>
+              <InputLabel id="srs-version-label">Revision Version</InputLabel>
+              <Select
+                labelId="srs-version-label"
+                value={activeSrs?.id || ''}
+                label="Revision Version"
+                onChange={(e) => {
+                  const sel = versions.find((v) => v.id === e.target.value);
+                  if (sel) handleSelectVersion(sel);
+                }}
+              >
+                {versions.map((v) => (
+                  <MenuItem key={v.id} value={v.id}>
+                    Version v{v.version} ({formatDateTime(v.created_at)})
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+          <Button
+            variant="contained"
+            startIcon={<DescriptionIcon />}
+            onClick={handleGenerateSrs}
+            loading={generating}
+          >
+            Generate SRS Document
+          </Button>
+        </Stack>
+      </Stack>
+
+      {!activeSrs ? (
+        <EmptyState
+          title="No SRS Documents Generated"
+          description="This project does not have any generated requirements specs yet. Click below to generate the initial SRS draft!"
+          actionLabel="Generate SRS Now"
+          onAction={handleGenerateSrs}
+        />
+      ) : (
+        <Stack spacing={4}>
+          <SRSViewer srsData={activeSrs} onShowHistory={null} />
+          {versions.length > 1 && (
+            <VersionHistory
+              versions={versions}
+              onSelectVersion={handleSelectVersion}
+              currentVersionId={activeSrs?.id}
+            />
+          )}
+        </Stack>
+      )}
+    </Box>
+  );
+};
+
+
+// ── Tab 0: Project Dashboard Overview ─────────────────────────────────────────
+const ProjectDashboardTab = ({ project, sessions, contradictions, atoms, engagement }) => {
+  return (
+    <Box>
+      <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+        Project Overview & Analytics
+      </Typography>
+      
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={4}>
+          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+            <Typography variant="caption" color="text.secondary">System Domain</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700, mt: 0.5 }}>
+              {PROJECT_DOMAIN_LABELS[project?.domain] || project?.domain || 'Web App'}
+            </Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+            <Typography variant="caption" color="text.secondary">Total Gathering Sessions</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700, mt: 0.5 }}>
+              {sessions.length}
+            </Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+            <Typography variant="caption" color="text.secondary">Extracted Requirements</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700, mt: 0.5 }}>
+              {atoms.length} Atoms
+            </Typography>
+          </Paper>
+        </Grid>
+      </Grid>
+
+      {engagement && (
+        <Paper variant="outlined" sx={{ p: 3, borderRadius: 3 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2 }}>
+            Client Engagement Overview
+          </Typography>
+          <Grid container spacing={3}>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary">Messages sent</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>{engagement.messages_sent ?? 0}</Typography>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary">Avg response (s)</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                {engagement.avg_response_time_seconds != null
+                  ? Math.round(engagement.avg_response_time_seconds)
+                  : '—'}
+              </Typography>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary">Sessions completed</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>{engagement.sessions_completed ?? 0}</Typography>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary">Last active</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600, mt: 0.5 }}>
+                {engagement.last_active ? formatDateTime(engagement.last_active) : '—'}
+              </Typography>
+            </Grid>
+          </Grid>
+        </Paper>
+      )}
+    </Box>
+  );
+};
+
+// ── Main ProjectDetail Component ──────────────────────────────────────────────
 export const ProjectDetail = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -60,6 +740,22 @@ export const ProjectDetail = () => {
   const [engagement, setEngagement] = useState(null);
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  // Chroma similarity threshold (tunable by developer)
+  const [chromaThreshold, setChromaThreshold] = useState(0.3);
+  const [savingThreshold, setSavingThreshold] = useState(false);
+
+  const handleSaveThreshold = useCallback(async (newValue) => {
+    setSavingThreshold(true);
+    try {
+      await updateProject(projectId, { chroma_similarity_threshold: newValue });
+      showToast(`Similarity threshold updated to ${newValue}`, 'success');
+    } catch {
+      showToast('Failed to update similarity threshold.', 'error');
+    } finally {
+      setSavingThreshold(false);
+    }
+  }, [projectId, showToast]);
 
   const [selectedContradiction, setSelectedContradiction] = useState(null);
   const [resolving, setResolving] = useState(false);
@@ -76,6 +772,10 @@ export const ProjectDetail = () => {
       const proj = await getProject(projectId);
       setProject(proj);
       setActiveProject(proj);
+      // Sync local chroma threshold from project
+      if (proj?.chroma_similarity_threshold != null) {
+        setChromaThreshold(proj.chroma_similarity_threshold);
+      }
 
       const sessList = await listSessionsForProject(projectId);
       setSessions(sessList);
@@ -87,33 +787,11 @@ export const ProjectDetail = () => {
         setEngagement(null);
       }
 
-      try {
-        const contradictionsRes = await axios.get(`/contradictions/project/${projectId}`);
-        setContradictions(contradictionsRes.data || []);
-      } catch (err) {
-        const allContradictions = [];
-        for (const s of sessList) {
-          try {
-            const res = await axios.get(`/contradictions/session/${s.id}`);
-            if (res.data) allContradictions.push(...res.data);
-          } catch (e) {}
-        }
-        setContradictions(allContradictions);
-      }
+      const contradictionsRes = await axios.get(`/contradictions/project/${projectId}`).catch(() => ({ data: [] }));
+      setContradictions(contradictionsRes.data || []);
 
-      try {
-        const atomsRes = await axios.get(`/requirement-atoms/project/${projectId}`);
-        setAtoms(atomsRes.data || []);
-      } catch (err) {
-        const allAtoms = [];
-        for (const s of sessList) {
-          try {
-            const res = await axios.get(`/requirement-atoms/session/${s.id}`);
-            if (res.data) allAtoms.push(...res.data);
-          } catch (e) {}
-        }
-        setAtoms(allAtoms);
-      }
+      const atomsList = await listAtomsForProject(projectId).catch(() => []);
+      setAtoms(atomsList || []);
     } catch (err) {
       showToast('Error loading project details.', 'error');
     } finally {
@@ -123,11 +801,17 @@ export const ProjectDetail = () => {
 
   useEffect(() => {
     fetchProjectDetails();
-  }, [projectId]);
 
-  const handleTabChange = (event, newValue) => {
-    setTabValue(newValue);
-  };
+    const interval = setInterval(() => {
+      if (projectId) {
+        axios.get(`/contradictions/project/${projectId}`)
+          .then((res) => setContradictions(res.data || []))
+          .catch(() => {});
+      }
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [projectId]);
 
   const handleResolveContradiction = (contradiction) => {
     setSelectedContradiction(contradiction);
@@ -228,225 +912,312 @@ export const ProjectDetail = () => {
     );
   }
 
+  const menuItems = [
+    { text: 'Dashboard', icon: <DashboardIcon /> },
+    { text: 'Chat Sessions', icon: <ChatIcon />, badge: sessions.length },
+    { text: 'Contradictions', icon: <WarningIcon />, badge: contradictions.length },
+    { text: 'Feature Board', icon: <CheckCircleOutlineIcon /> },
+    { text: 'Change Requests', icon: <RateReviewIcon /> },
+    { text: 'SRS Document', icon: <DescriptionIcon /> },
+  ];
+
   return (
     <Layout>
-      <EmailVerificationBanner />
-      <Box sx={{ mb: 4 }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={2} sx={{ mb: 2 }}>
-          <Button
-            variant="outlined"
-            color="inherit"
-            startIcon={<ArrowBackIcon />}
-            onClick={() => navigate('/')}
-          >
-            Back to Dashboard
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<PersonAddIcon />}
-            onClick={() => {
-              resetInviteDialog();
-              setInviteOpen(true);
-            }}
-          >
-            Invite Client
-          </Button>
-        </Stack>
-        <Stack direction="row" spacing={2} alignItems="center">
-          <Typography variant="h3" sx={{ fontWeight: 800 }}>
-            {project?.name}
-          </Typography>
-          <Badge label={project?.status || 'active'} type="feature" />
-        </Stack>
-        <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
-          {project?.description || 'No description provided.'}
-        </Typography>
-      </Box>
+      <ClosureBanner project={project} onUpdated={setProject} />
 
-      {engagement && (
-        <Paper variant="outlined" sx={{ p: 2.5, mb: 3, borderRadius: 2 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-            Client Engagement
-          </Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={6} sm={3}>
-              <Typography variant="caption" color="text.secondary">Messages sent</Typography>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>{engagement.messages_sent ?? 0}</Typography>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <Typography variant="caption" color="text.secondary">Avg response (s)</Typography>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                {engagement.avg_response_time_seconds != null
-                  ? Math.round(engagement.avg_response_time_seconds)
-                  : '—'}
-              </Typography>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <Typography variant="caption" color="text.secondary">Sessions completed</Typography>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>{engagement.sessions_completed ?? 0}</Typography>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <Typography variant="caption" color="text.secondary">Last active</Typography>
-              <Typography variant="body1" sx={{ fontWeight: 600, mt: 0.5 }}>
-                {engagement.last_active ? formatDateTime(engagement.last_active) : '—'}
-              </Typography>
-            </Grid>
-          </Grid>
-        </Paper>
-      )}
+      {/* Top Header & Project Overview Hero */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: { xs: 2.5, md: 3.5 },
+          mb: 3,
+          borderRadius: 4,
+          background: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          boxShadow: '0 4px 20px -2px rgba(15, 23, 42, 0.04)',
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2, mb: 2 }}>
+          <Stack direction="row" spacing={2} alignItems="center">
+            <Button
+              variant="outlined"
+              color="inherit"
+              startIcon={<ArrowBackIcon />}
+              onClick={() => navigate('/')}
+              size="small"
+              sx={{ borderColor: '#E2E8F0', color: 'text.secondary' }}
+            >
+              Back
+            </Button>
 
-      <Box sx={{ width: '100%', mb: 4 }}>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={tabValue} onChange={handleTabChange} aria-label="project-details-tabs">
-            <Tab icon={<ChatIcon />} label="Chat Sessions" sx={{ gap: 1 }} />
-            <Tab icon={<WarningIcon />} label={`Contradictions (${contradictions.length})`} sx={{ gap: 1 }} />
-            <Tab icon={<ListAltIcon />} label={`Extracted Atoms (${atoms.length})`} sx={{ gap: 1 }} />
-          </Tabs>
+            <Box>
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <Typography variant="h4" sx={{ fontWeight: 800, color: '#0F172A', letterSpacing: '-0.01em' }}>
+                  {project?.name}
+                </Typography>
+                <Badge label={project?.status || 'active'} type="feature" />
+              </Stack>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                {project?.description || 'AI Requirements Gathering Workspace'}
+              </Typography>
+            </Box>
+          </Stack>
+
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<PersonAddIcon />}
+              onClick={() => {
+                resetInviteDialog();
+                setInviteOpen(true);
+              }}
+              size="medium"
+            >
+              Invite Client
+            </Button>
+          </Stack>
         </Box>
 
+        <Divider sx={{ my: 2 }} />
+
+        {/* Sensitivity & Clients Quick Bar */}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
+            <Box sx={{ minWidth: 240 }}>
+              <Tooltip
+                title="Controls how similar two requirements must be before ARIA checks for contradiction."
+                placement="top"
+                arrow
+              >
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.5, cursor: 'help' }}>
+                  Contradiction Sensitivity: <strong>{(chromaThreshold * 100).toFixed(0)}%</strong>
+                </Typography>
+              </Tooltip>
+              <Slider
+                value={chromaThreshold}
+                onChange={(_, val) => setChromaThreshold(val)}
+                onChangeCommitted={(_, val) => handleSaveThreshold(val)}
+                min={0.1}
+                max={0.9}
+                step={0.05}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(v) => `${(v * 100).toFixed(0)}%`}
+                disabled={savingThreshold}
+                color="primary"
+                size="small"
+              />
+            </Box>
+
+            <Box sx={{ borderLeft: '1px solid #E2E8F0', pl: 3, display: { xs: 'none', sm: 'block' } }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+                Invited Clients:
+              </Typography>
+              <ProjectClientsList projectId={projectId} refreshKey={sessions.length} />
+            </Box>
+          </Box>
+        </Box>
+      </Paper>
+
+      {/* Pill Navigation Tabs Bar */}
+      <Paper
+        elevation={0}
+        sx={{
+          mb: 3,
+          p: 1,
+          borderRadius: 3,
+          background: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+        }}
+      >
+        <Stack direction="row" spacing={1} sx={{ overflowX: 'auto', pb: { xs: 1, sm: 0 } }}>
+          {menuItems.map((item, idx) => {
+            const isSelected = tabValue === idx;
+            return (
+              <Button
+                key={item.text}
+                onClick={() => setTabValue(idx)}
+                startIcon={item.icon}
+                sx={{
+                  borderRadius: 2.5,
+                  px: 2.5,
+                  py: 1,
+                  fontWeight: isSelected ? 700 : 500,
+                  fontSize: '0.875rem',
+                  whiteSpace: 'nowrap',
+                  color: isSelected ? 'primary.main' : 'text.secondary',
+                  background: isSelected ? '#EEF2FF' : 'transparent',
+                  border: isSelected ? '1px solid #C7D2FE' : '1px solid transparent',
+                  '&:hover': {
+                    background: isSelected ? '#EEF2FF' : '#F8FAFC',
+                  },
+                }}
+              >
+                {item.text}
+                {item.badge !== undefined && (
+                  <Chip
+                    label={item.badge}
+                    size="small"
+                    sx={{
+                      ml: 1,
+                      height: 20,
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      background: isSelected ? '#4F46E5' : '#E2E8F0',
+                      color: isSelected ? '#FFFFFF' : '#64748B',
+                    }}
+                  />
+                )}
+              </Button>
+            );
+          })}
+        </Stack>
+      </Paper>
+
+      {/* Full-width Workspace Content Area */}
+      <Paper elevation={0} sx={{ p: { xs: 2.5, md: 4 }, borderRadius: 4, background: '#FFFFFF', border: '1px solid #E2E8F0', minHeight: 500 }}>
         {tabValue === 0 && (
-          <Box sx={{ py: 3 }}>
-            {sessions.length === 0 ? (
-              <EmptyState
-                title="No Sessions Recorded"
-                description="No client gathering sessions have been started for this project yet."
-              />
-            ) : (
-              <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
-                <Table aria-label="sessions-table">
-                  <TableHead sx={{ bgcolor: 'action.hover' }}>
-                    <TableRow>
-                      <TableCell><strong>#</strong></TableCell>
-                      <TableCell><strong>Status</strong></TableCell>
-                      <TableCell><strong>Stability</strong></TableCell>
-                      <TableCell><strong>Msg Count</strong></TableCell>
-                      <TableCell><strong>Started At</strong></TableCell>
-                      <TableCell align="right"><strong>Actions</strong></TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {sessions.map((sess, idx) => (
-                      <TableRow key={sess.id}>
-                        <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }}>#{idx + 1}</TableCell>
-                        <TableCell sx={{ textTransform: 'capitalize' }}>{sess.status}</TableCell>
-                        <TableCell>{sess.stability_score ? `${Math.round(sess.stability_score)}%` : '100%'}</TableCell>
-                        <TableCell>{sess.total_messages ?? 0}</TableCell>
-                        <TableCell>{formatDateTime(sess.started_at)}</TableCell>
-                        <TableCell align="right">
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={() => navigate(`/client/sessions/${sess.id}`)}
-                          >
-                            Watch Session
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            )}
-          </Box>
+          <ProjectDashboardTab
+            project={project}
+            sessions={sessions}
+            contradictions={contradictions}
+            atoms={atoms}
+            engagement={engagement}
+          />
         )}
 
-        {tabValue === 1 && (
-          <Box sx={{ py: 3 }}>
-            {contradictions.length === 0 ? (
-              <EmptyState
-                title="No Contradictions Found"
-                description="ARIA has not detected any contradictions or requirement conflicts in this project."
-              />
-            ) : (
-              <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
-                <Table aria-label="contradictions-table">
-                  <TableHead sx={{ bgcolor: 'action.hover' }}>
-                    <TableRow>
-                      <TableCell><strong>Conflict Type</strong></TableCell>
-                      <TableCell><strong>Confidence</strong></TableCell>
-                      <TableCell><strong>Aria Warning Message</strong></TableCell>
-                      <TableCell><strong>Status</strong></TableCell>
-                      <TableCell><strong>Detected Date</strong></TableCell>
-                      <TableCell align="right"><strong>Override</strong></TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {contradictions.map((c) => (
-                      <TableRow key={c.id}>
-                        <TableCell sx={{ textTransform: 'capitalize', fontWeight: 600 }}>
-                          {c.conflict_type?.replace('_', ' ') || 'direct_contradiction'}
-                        </TableCell>
-                        <TableCell>{c.confidence ? `${Math.round(c.confidence * 100)}%` : 'N/A'}</TableCell>
-                        <TableCell sx={{ maxWidth: 300 }}>{c.aria_message}</TableCell>
-                        <TableCell>
-                          <Badge label={c.status} type="conflict" />
-                        </TableCell>
-                        <TableCell>{formatDateTime(c.detected_at)}</TableCell>
-                        <TableCell align="right">
-                          {c.status === 'pending' ? (
-                            <Button
-                              size="small"
-                              variant="contained"
-                              color="warning"
-                              onClick={() => handleResolveContradiction(c)}
-                            >
-                              Resolve
-                            </Button>
-                          ) : (
-                            <Typography variant="caption" color="text.secondary">
-                              Resolved by developer
-                            </Typography>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+            {tabValue === 1 && (
+              <Box>
+                <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+                  Gathering Sessions History
+                </Typography>
+                {sessions.length === 0 ? (
+                  <EmptyState
+                    title="No Sessions Recorded"
+                    description="No client gathering sessions have been started for this project yet."
+                  />
+                ) : (
+                  <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+                    <Table aria-label="sessions-table">
+                      <TableHead sx={{ bgcolor: 'action.hover' }}>
+                        <TableRow>
+                          <TableCell><strong>#</strong></TableCell>
+                          <TableCell><strong>Status</strong></TableCell>
+                          <TableCell><strong>Stability</strong></TableCell>
+                          <TableCell><strong>Msg Count</strong></TableCell>
+                          <TableCell><strong>Started At</strong></TableCell>
+                          <TableCell align="right"><strong>Actions</strong></TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {sessions.map((sess, idx) => (
+                          <TableRow key={sess.id}>
+                            <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }}>#{idx + 1}</TableCell>
+                            <TableCell sx={{ textTransform: 'capitalize' }}>{sess.status}</TableCell>
+                            <TableCell>{sess.stability_score ? `${Math.round(sess.stability_score)}%` : '100%'}</TableCell>
+                            <TableCell>{sess.total_messages ?? 0}</TableCell>
+                            <TableCell>{formatDateTime(sess.started_at)}</TableCell>
+                            <TableCell align="right">
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => navigate(`/client/sessions/${sess.id}`)}
+                              >
+                                Watch Session
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </Box>
             )}
-          </Box>
-        )}
 
-        {tabValue === 2 && (
-          <Box sx={{ py: 3 }}>
-            {atoms.length === 0 ? (
-              <EmptyState
-                title="No Extracted Atoms"
-                description="No requirements atoms have been processed for this project yet."
-              />
-            ) : (
-              <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
-                <Table aria-label="atoms-table">
-                  <TableHead sx={{ bgcolor: 'action.hover' }}>
-                    <TableRow>
-                      <TableCell><strong>Subject</strong></TableCell>
-                      <TableCell><strong>Action</strong></TableCell>
-                      <TableCell><strong>Constraints</strong></TableCell>
-                      <TableCell><strong>Raw Source Sentence</strong></TableCell>
-                      <TableCell><strong>Status</strong></TableCell>
-                      <TableCell><strong>Extracted At</strong></TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {atoms.map((atom) => (
-                      <TableRow key={atom.id}>
-                        <TableCell sx={{ fontWeight: 600 }}>{atom.subject || 'N/A'}</TableCell>
-                        <TableCell>{atom.action || 'N/A'}</TableCell>
-                        <TableCell>{atom.constraint_text || 'N/A'}</TableCell>
-                        <TableCell sx={{ maxWidth: 300 }}>{atom.raw_text}</TableCell>
-                        <TableCell>
-                          <Badge label={atom.status || 'active'} type="feature" />
-                        </TableCell>
-                        <TableCell>{formatDateTime(atom.created_at)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+            {tabValue === 2 && (
+              <Box>
+                <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+                  Detected Requirement Contradictions
+                </Typography>
+                {contradictions.length === 0 ? (
+                  <EmptyState
+                    title="No Contradictions Found"
+                    description="ARIA has not detected any contradictions or requirement conflicts in this project."
+                  />
+                ) : (
+                  <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+                    <Table aria-label="contradictions-table">
+                      <TableHead sx={{ bgcolor: 'action.hover' }}>
+                        <TableRow>
+                          <TableCell><strong>Source</strong></TableCell>
+                          <TableCell><strong>Conflict Type</strong></TableCell>
+                          <TableCell><strong>Confidence</strong></TableCell>
+                          <TableCell><strong>Aria Warning Message</strong></TableCell>
+                          <TableCell><strong>Status</strong></TableCell>
+                          <TableCell><strong>False +ve</strong></TableCell>
+                          <TableCell><strong>Detected Date</strong></TableCell>
+                          <TableCell align="right"><strong>Override</strong></TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {contradictions.map((c) => (
+                          <TableRow key={c.id} sx={c.is_false_positive ? { opacity: 0.6 } : {}}>
+                            <TableCell>
+                              <Chip
+                                size="small"
+                                label={c.source === 'change_request' ? 'Change Request' : 'Live Chat'}
+                                color={c.source === 'change_request' ? 'secondary' : 'default'}
+                                variant="outlined"
+                                sx={{ fontWeight: 600, fontSize: '0.72rem' }}
+                              />
+                            </TableCell>
+                            <TableCell sx={{ textTransform: 'capitalize', fontWeight: 600 }}>
+                              {c.conflict_type?.replace(/_/g, ' ') || 'direct contradiction'}
+                            </TableCell>
+                            <TableCell>{c.confidence != null ? `${Math.round(c.confidence * 100)}%` : 'N/A'}</TableCell>
+                            <TableCell sx={{ maxWidth: 280 }}>{c.aria_message}</TableCell>
+                            <TableCell>
+                              <Badge label={c.status} type="conflict" />
+                            </TableCell>
+                            <TableCell>
+                              {c.is_false_positive ? (
+                                <Tooltip title="Tagged as AI False Positive" arrow>
+                                  <Typography variant="caption" color="warning.main" sx={{ fontWeight: 700 }}>FP</Typography>
+                                </Tooltip>
+                              ) : '—'}
+                            </TableCell>
+                            <TableCell>{formatDateTime(c.detected_at)}</TableCell>
+                            <TableCell align="right">
+                              {c.status === 'pending' ? (
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  color="warning"
+                                  onClick={() => handleResolveContradiction(c)}
+                                >
+                                  Resolve
+                                </Button>
+                              ) : (
+                                <Typography variant="caption" color="text.secondary">
+                                  {c.is_false_positive ? 'False Positive' : 'Resolved'}
+                                </Typography>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </Box>
             )}
-          </Box>
-        )}
-      </Box>
+
+            {tabValue === 3 && <ProjectFeatureTrackerTab projectId={projectId} />}
+            {tabValue === 4 && <ProjectChangeRequestsTab projectId={projectId} />}
+            {tabValue === 5 && <ProjectSRSTab projectId={projectId} />}
+
+          </Paper>
 
       <ConflictOverridePanel
         open={Boolean(selectedContradiction)}

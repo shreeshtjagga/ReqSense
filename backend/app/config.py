@@ -37,7 +37,6 @@ class Settings(BaseSettings):
     ALGORITHM: str = Field(default="HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30)
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=14)
-    STREAM_TOKEN_EXPIRE_SECONDS: int = Field(default=60)
 
     # ── Groq ─────────────────────────────────────────────────────────────────
     GROQ_API_KEY: str = Field(..., description="Groq API key")
@@ -87,6 +86,33 @@ class Settings(BaseSettings):
     ENV: Literal["development", "production"] = Field(default="development")
 
     # ── Derived helpers ───────────────────────────────────────────────────────
+    CONTRADICTION_CONFIDENCE_THRESHOLD: float = Field(default=0.5, description="Minimum confidence required to surface a contradiction")
+
+    @property
+    def groq_is_mocked(self) -> bool:
+        """Returns True if Groq API key is empty or starts with test/mock."""
+        return not self.GROQ_API_KEY or self.GROQ_API_KEY.startswith("test") or self.GROQ_API_KEY.startswith("mock")
+
+    @property
+    def chroma_is_mocked(self) -> bool:
+        """Returns True if Chroma is effectively unavailable.
+        - In 'local' mode: never mocked — local Chroma needs no API key.
+        - In 'hosted' mode: mocked if API key is empty or starts with test/mock.
+        """
+        if self.CHROMA_MODE == "local":
+            return False
+        return not self.CHROMA_API_KEY or self.CHROMA_API_KEY.startswith("test") or self.CHROMA_API_KEY.startswith("mock")
+
+    @property
+    def s3_is_mocked(self) -> bool:
+        """Returns True if S3 credentials are dummy/mock."""
+        return not self.S3_ACCESS_KEY_ID or self.S3_ACCESS_KEY_ID.startswith("test") or self.S3_ACCESS_KEY_ID.startswith("mock")
+
+    @property
+    def sendgrid_is_mocked(self) -> bool:
+        """Returns True if SendGrid API key is dummy/mock."""
+        return not self.SENDGRID_API_KEY or self.SENDGRID_API_KEY.startswith("test") or self.SENDGRID_API_KEY.startswith("mock")
+
     @property
     def allowed_origins_list(self) -> list[str]:
         """Split comma-separated ALLOWED_ORIGINS into a list for FastAPI CORS."""
@@ -100,7 +126,9 @@ class Settings(BaseSettings):
     # ── Fail-fast cross-field validation ──────────────────────────────────────
     @model_validator(mode="after")
     def _validate_chroma_hosted_credentials(self) -> "Settings":
-        if self.CHROMA_MODE == "hosted":
+        # Only enforce API key + tenant when using hosted Chroma cloud.
+        # In local mode these fields are intentionally empty.
+        if self.CHROMA_MODE == "hosted" and not self.chroma_is_mocked:
             missing = [
                 name
                 for name, val in [

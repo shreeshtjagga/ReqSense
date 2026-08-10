@@ -15,12 +15,14 @@ import {
   Stack,
   Box,
   Divider,
+  Checkbox,
 } from '@mui/material';
 import WarningIcon from '@mui/icons-material/Warning';
 
 export const ConflictOverridePanel = ({ open, contradiction, onClose, onResolveSubmit, loading }) => {
   const [action, setAction] = useState('resolved');
   const [resolution, setResolution] = useState('');
+  const [isFalsePositive, setIsFalsePositive] = useState(false);
 
   if (!contradiction) return null;
 
@@ -28,6 +30,7 @@ export const ConflictOverridePanel = ({ open, contradiction, onClose, onResolveS
     onResolveSubmit(contradiction.id, {
       action,
       resolution: resolution.trim() || `Marked as ${action} by developer.`,
+      is_false_positive: isFalsePositive,
     });
   };
 
@@ -117,6 +120,22 @@ export const ConflictOverridePanel = ({ open, contradiction, onClose, onResolveS
               />
             </RadioGroup>
           </FormControl>
+
+          {/* False Positive Checkbox */}
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={isFalsePositive}
+                onChange={(e) => setIsFalsePositive(e.target.checked)}
+                color="warning"
+              />
+            }
+            label={
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                Tag as AI False Positive (ARIA misidentified a conflict)
+              </Typography>
+            }
+          />
 
           {/* Resolution Notes */}
           <TextField

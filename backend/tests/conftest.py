@@ -51,6 +51,11 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.main import app
+from app.services.rate_limit_service import limiter
+
+# Disable rate limiting globally during test runs to prevent 429 Too Many Requests errors.
+limiter.enabled = False
+
 
 # ── In-memory SQLite engine ───────────────────────────────────────────────────
 # aiosqlite is required: pip install aiosqlite  (or requirements-test.txt)
@@ -97,8 +102,19 @@ def event_loop():
     Suppresses the pytest-asyncio deprecation warning for scope mismatch.
     """
     loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     yield loop
     loop.close()
+
+
+@pytest.fixture(autouse=True)
+def set_event_loop_for_test(event_loop):
+    """
+    Ensure the session event loop is set as the active event loop for the current
+    thread before each test runs.
+    """
+    asyncio.set_event_loop(event_loop)
+
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)

@@ -183,7 +183,8 @@ async def test_end_session_enqueues_srs_task(
     """POST /sessions/{id}/generate-srs enqueues generate_srs_task for developer/admin."""
     headers_a = await get_auth_headers(client, dev_a.email)
 
-    with patch("app.routers.sessions.generate_srs_task") as mock_task:
+    with patch("app.routers.sessions.SRSGenerator.generate_srs", side_effect=Exception("Trigger fallback")), \
+         patch("app.routers.sessions.generate_srs_task") as mock_task:
         mock_task.delay = MagicMock(return_value=None)
         resp = await client.post(
             f"/api/v1/sessions/{session_a.id}/generate-srs",
@@ -305,7 +306,8 @@ async def test_change_request_create_and_enqueue(
         "severity": "medium",
     }
 
-    with patch("app.routers.change_requests.run_impact_analysis_task") as mock_task:
+    with patch("app.routers.change_requests.ImpactAnalyser.analyze_impact", side_effect=Exception("Trigger fallback")), \
+         patch("app.routers.change_requests.run_impact_analysis_task") as mock_task:
         mock_task.delay = MagicMock(return_value=None)
         resp = await client.post("/api/v1/change-requests", json=payload, headers=headers_a)
 

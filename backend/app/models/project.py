@@ -8,13 +8,18 @@ the model it extends.
 
 import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import DateTime, Float, ForeignKey, String, Text, func
 from sqlalchemy import Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.organization import Organization
+    from app.models.session import Session
+    from app.models.user import User
 
 
 class ProjectClient(Base):
@@ -61,9 +66,15 @@ class Project(Base):
     status: Mapped[str] = mapped_column(
         String(50), default="active", nullable=False
     )  # 'active', 'completed', 'on_hold', 'archived'
+    closure_requested_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    closure_requested_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Chroma distance threshold for contradiction recall (lower = stricter)
     chroma_similarity_threshold: Mapped[float] = mapped_column(
-        Float, default=0.3, nullable=False
+        Float, default=0.55, nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -72,8 +83,13 @@ class Project(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    organization: Mapped["Organization"] = relationship(back_populates="projects")
-    developer: Mapped["User"] = relationship(foreign_keys=[developer_id])
+    organization: Mapped[Optional["Organization"]] = relationship(back_populates="projects")
+    developer: Mapped[Optional["User"]] = relationship(
+        foreign_keys=[developer_id]
+    )
+    closure_requested_user: Mapped[Optional["User"]] = relationship(
+        foreign_keys=[closure_requested_by]
+    )
     sessions: Mapped[List["Session"]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )

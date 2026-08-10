@@ -59,7 +59,7 @@ async def get_latest_srs(
         {
             "title": "2. Functional Requirements",
             "content": "\n\n".join([
-                f"[{idx}] {atom.subject}: {atom.action}" + (f" (Constraint: {atom.constraint_text})" if atom.constraint_text else "")
+                f"[{idx}] {atom.subject or 'Unspecified'}: {atom.action or 'Unspecified'}" + (f" (Constraint: {atom.constraint_text})" if atom.constraint_text else "")
                 for idx, atom in enumerate(atoms, start=1)
             ]) if atoms else "No active functional requirements extracted yet."
         },
@@ -100,10 +100,20 @@ from fastapi.responses import FileResponse, RedirectResponse
 from app.services.storage_service import get_s3_client, _BASE_DIR
 
 @router.get("/download-file")
-async def download_srs_file(key: str):
+async def download_srs_file(
+    key: str,
+    current_user: User = Depends(require_roles("admin", "developer", "client")),
+):
     """
     Serves the SRS Word .docx file for local/mock storage mode or redirects to S3.
+    Requires authentication — same as all other SRS endpoints.
     """
+    # Basic path-traversal guard
+    if ".." in key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file key.",
+        )
     s3 = get_s3_client()
     if s3 is None:
         file_path = _BASE_DIR / "storage_files" / key
@@ -201,7 +211,7 @@ async def get_srs_version_details(
         {
             "title": "2. Functional Requirements",
             "content": "\n\n".join([
-                f"[{idx}] {atom.subject}: {atom.action}" + (f" (Constraint: {atom.constraint_text})" if atom.constraint_text else "")
+                f"[{idx}] {atom.subject or 'Unspecified'}: {atom.action or 'Unspecified'}" + (f" (Constraint: {atom.constraint_text})" if atom.constraint_text else "")
                 for idx, atom in enumerate(atoms, start=1)
             ]) if atoms else "No active functional requirements extracted yet."
         },
@@ -257,16 +267,6 @@ async def generate_project_srs(
         .limit(1)
     )
     latest_session = sess_res.scalar_one_or_none()
-    if not latest_session:
-        latest_session = Session(
-            project_id=project_id,
-            client_id=current_user.id if current_user.role == "client" else None,
-            status="completed"
-        )
-        db.add(latest_session)
-        await db.commit()
-        await db.refresh(latest_session)
-
     srs = await SRSGenerator.generate_srs(latest_session.id, db)
     download_url = StorageService.get_download_url(srs.file_url)
 
@@ -276,3 +276,62 @@ async def generate_project_srs(
         "download_url": download_url,
         "created_at": srs.created_at
     }
+
+
+@router.get("/project/{project_id}/diff")
+async def diff_srs_versions(
+    project_id: uuid.UUID,
+    v1_id: uuid.UUID,
+    v2_id: uuid.UUID,
+    current_user: User = Depends(require_roles("admin", "developer", "client")),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Compare two SRS versions for a project and list added/removed requirement statements.
+    """
+    await get_scoped_project(project_id, current_user, db)
+
+    srs_v1 = await db.get(SRSVersion, v1_id)
+    srs_v2 = await db.get(SRSVersion, v2_id)
+
+    if not srs_v1 or not srs_v2 or srs_v1.project_id != project_id or srs_v2.project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Specified SRS versions not found for this project."
+        )
+
+    atoms_v1_res = await db.execute(
+        select(RequirementAtom)
+        .where(
+            RequirementAtom.project_id == project_id,
+            RequirementAtom.created_at <= srs_v1.created_at
+        )
+    )
+    atoms_v1 = {a.id: a for a in atoms_v1_res.scalars().all()}
+
+    atoms_v2_res = await db.execute(
+        select(RequirementAtom)
+        .where(
+            RequirementAtom.project_id == project_id,
+            RequirementAtom.created_at <= srs_v2.created_at
+        )
+    )
+    atoms_v2 = {a.id: a for a in atoms_v2_res.scalars().all()}
+
+    added = [
+        {"id": str(a.id), "raw_text": a.raw_text, "subject": a.subject, "action": a.action}
+        for aid, a in atoms_v2.items() if aid not in atoms_v1
+    ]
+    removed = [
+        {"id": str(a.id), "raw_text": a.raw_text, "subject": a.subject, "action": a.action}
+        for aid, a in atoms_v1.items() if aid not in atoms_v2
+    ]
+
+    return {
+        "v1": {"id": str(srs_v1.id), "version": srs_v1.version, "created_at": srs_v1.created_at},
+        "v2": {"id": str(srs_v2.id), "version": srs_v2.version, "created_at": srs_v2.created_at},
+        "added_requirements": added,
+        "removed_requirements": removed,
+        "net_change_count": len(added) - len(removed)
+    }
+

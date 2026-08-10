@@ -5,13 +5,18 @@ Developer can override (resolve/ignore/merge) via the contradictions router.
 
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
-from sqlalchemy import DateTime, Float, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, Text, func
 from sqlalchemy import Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.requirement_atom import RequirementAtom
+    from app.models.user import User
+    from app.models.change_request import ChangeRequest
 
 
 class Contradiction(Base):
@@ -35,6 +40,7 @@ class Contradiction(Base):
     aria_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     client_clarification: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     resolution: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_false_positive: Mapped[Optional[bool]] = mapped_column(Boolean, default=False, nullable=True)
     resolved_by: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -45,6 +51,14 @@ class Contradiction(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # ── Source tracking ───────────────────────────────────────────────────────
+    # 'chat' = detected during a live gathering session
+    # 'change_request' = detected when a change request was submitted
+    source: Mapped[str] = mapped_column(String(20), default="chat", nullable=False)
+    change_request_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(), ForeignKey("change_requests.id", ondelete="SET NULL"), nullable=True
+    )
 
     atom_1: Mapped["RequirementAtom"] = relationship(foreign_keys=[atom_1_id])
     atom_2: Mapped["RequirementAtom"] = relationship(foreign_keys=[atom_2_id])

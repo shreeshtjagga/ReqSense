@@ -6,6 +6,7 @@ or app.services to avoid circular deps.
 """
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -25,3 +26,40 @@ def truncate(text: str, max_len: int, suffix: str = "…") -> str:
     if len(text) <= max_len:
         return text
     return text[: max_len - len(suffix)] + suffix
+
+
+import json
+
+
+def strip_json_fences(text: str) -> str:
+    """Strip markdown code fences and conversational text from LLM responses to extract JSON."""
+    text = (text or "").strip()
+    
+    # 1. Try to find a ```json ... ``` fence specifically
+    json_fence_match = re.search(r"```json\s*\n?(.*?)\n?```", text, re.DOTALL | re.IGNORECASE)
+    if json_fence_match:
+        candidate = json_fence_match.group(1).strip()
+        try:
+            json.loads(candidate)
+            return candidate
+        except Exception:
+            pass
+
+    # 2. Try finding raw JSON array [...] or object {...} substrings that parse cleanly
+    for match in re.finditer(r"(\[[\s\S]*\]|\{[\s\S]*\})", text):
+        candidate = match.group(0).strip()
+        try:
+            json.loads(candidate)
+            return candidate
+        except Exception:
+            continue
+
+    # 3. Fallback: extract content between first bracket and last bracket
+    brackets = [pos for pos in (text.find("["), text.find("{")) if pos != -1]
+    if brackets:
+        start = min(brackets)
+        end = max(text.rfind("]"), text.rfind("}"))
+        if start != -1 and end != -1 and end > start:
+            text = text[start : end + 1].strip()
+
+    return text

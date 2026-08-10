@@ -12,9 +12,6 @@ from typing import Any, Dict
 logger = logging.getLogger(__name__)
 
 
-
-
-
 def send_password_reset_email(to_email: str, token: str, reset_url: str) -> None:
     """Enqueue a password-reset email."""
     from app.tasks.email_tasks import send_email_task

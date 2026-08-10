@@ -9,15 +9,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 def get_s3_client():
-    # Detect mock mode
-    is_mock = (
-        not settings.S3_ACCESS_KEY_ID or
-        settings.S3_ACCESS_KEY_ID.startswith("test") or
-        settings.S3_ACCESS_KEY_ID.startswith("mock") or
-        settings.S3_ACCESS_KEY_ID.startswith("dev") or
-        "placeholder" in settings.S3_ACCESS_KEY_ID.lower()
-    )
-    if is_mock:
+    if settings.s3_is_mocked:
         return None
 
     config = Config(

@@ -17,10 +17,14 @@ class ContradictionRead(BaseModel):
     aria_message: Optional[str]
     client_clarification: Optional[str]
     resolution: Optional[str]
+    is_false_positive: Optional[bool] = False
     resolved_by: Optional[uuid.UUID]
     status: str
     detected_at: datetime
     resolved_at: Optional[datetime]
+    # Source tracking — populated for all new contradictions
+    source: str = "chat"                        # 'chat' | 'change_request'
+    change_request_id: Optional[uuid.UUID] = None
 
     model_config = {"from_attributes": True}
 
@@ -29,3 +33,5 @@ class ContradictionResolve(BaseModel):
     """Developer override — resolve, ignore, or merge a contradiction."""
     action: Literal["resolved", "ignored"]
     resolution: Optional[str] = None
+    is_false_positive: Optional[bool] = False
+

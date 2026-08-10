@@ -65,6 +65,7 @@ logs/
 
 # ── Chroma local persistence (only used in CHROMA_MODE=local) ─────────────────
 backend/data/chroma_db/
+backend/chroma_data/
 
 # ── Generated SRS docs (uploaded to R2 — don't commit binaries) ───────────────
 *.docx

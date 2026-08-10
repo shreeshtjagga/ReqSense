@@ -8,11 +8,11 @@ import ProjectCard from '../../components/dashboard/ProjectCard';
 import { listProjects } from '../../api/projects';
 import { useProjectStore } from '../../store/projectStore';
 import { useToastStore } from '../../store/toastStore';
+import { useAuthStore } from '../../store/authStore';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import LockIcon from '@mui/icons-material/Lock';
 import FolderOffIcon from '@mui/icons-material/FolderOff';
 import SendIcon from '@mui/icons-material/Send';
-import EmailVerificationBanner from '../../components/common/EmailVerificationBanner';
 
 // ── Demo preview messages shown when no project is assigned ──────────────────
 const DEMO_MESSAGES = [
@@ -174,12 +174,14 @@ export const ClientDashboard = () => {
     navigate(`/client/projects/${project.id}`);
   };
 
+  const { user } = useAuthStore();
+
   return (
     <Layout>
       {/* Page header */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h3" sx={{ fontWeight: 800, mb: 1 }}>
-          Client Workspace
+          {user?.name ? `${user.name}'s Projects` : 'Projects'}
         </Typography>
         <Typography variant="body1" color="text.secondary">
           Collaborate with ARIA to describe your project requirements in plain language.

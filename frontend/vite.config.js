@@ -23,9 +23,16 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
-      // Increase warning threshold slightly since MUI is large;
-      // a real app should code-split with React.lazy
-      chunkSizeWarningLimit: 1200,
+      chunkSizeWarningLimit: 800,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'mui-vendor': ['@mui/material', '@mui/icons-material', '@emotion/react', '@emotion/styled'],
+            'chart-vendor': ['recharts'],
+            'motion-vendor': ['framer-motion'],
+          },
+        },
+      },
     },
   }
 })

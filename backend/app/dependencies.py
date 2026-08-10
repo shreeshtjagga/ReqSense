@@ -4,9 +4,6 @@ FastAPI dependencies — authentication and role/org scoped access.
 get_current_user:   validates access JWT, returns User ORM object
 require_role:       factory that raises 403 if user's role not in allowed set
 require_same_org:   raises 403 if user's org_id doesn't match the target resource's org
-get_current_user_or_stream_token: accepts both access tokens and short-lived stream tokens
-                                  (used on SSE endpoints so the browser can pass the token
-                                  as a query param instead of an Authorization header)
 """
 
 import uuid
@@ -66,49 +63,6 @@ async def get_current_user(
     return user
 
 
-async def get_current_user_or_stream_token(
-    token: Annotated[Optional[str], Query(alias="stream_token")] = None,
-    credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(_bearer)] = None,
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    """
-    Accept either a standard Authorization: Bearer header (access token)
-    OR a ?stream_token=... query param (short-lived stream token).
-    Used on SSE endpoints where EventSource can't set custom headers.
-    """
-    raw_token: Optional[str] = None
-
-    if token:
-        raw_token = token
-        expected_type = "stream"
-    elif credentials:
-        raw_token = credentials.credentials
-        expected_type = "access"
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authorization required.",
-        )
-
-    payload = decode_token(raw_token)
-    if payload.get("type") != expected_type:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token type.",
-        )
-
-    user_id = payload.get("sub")
-    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
-    user = result.scalar_one_or_none()
-
-    if not user or not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found or deactivated.",
-        )
-    return user
-
-
 def require_roles(*roles: str):
     """
     Dependency factory — raises 403 if the current user's role is not in roles.
@@ -126,20 +80,6 @@ def require_roles(*roles: str):
             )
         return user
     return _check
-
-
-def require_same_org(org_id: uuid.UUID):
-    """
-    Raises 403 if the current user's organization_id doesn't match org_id.
-
-    Primarily used as an inline check inside route handlers rather than as
-    a Depends() factory, since org_id typically comes from a path/body param.
-
-    Usage:
-        user = await get_current_user(...)
-        require_same_org_check(user, project.organization_id)
-    """
-    pass  # see require_same_org_check below for the inline helper
 
 
 def require_same_org_check(user: User, resource_org_id: Optional[uuid.UUID]) -> None:
@@ -208,17 +148,21 @@ async def get_scoped_project(
         )
         if sess_res.scalar_one_or_none():
             return project
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found.",
+        )
 
-        # Allow client access if project has no client restrictions
-        return project
-
-    # Developer check: developer_id or same organization or unassigned
+    # Developer check: must be assigned developer OR in same org
     if user.role == "developer":
-        if project.developer_id == user.id or project.developer_id is None:
+        if project.developer_id == user.id:
             return project
         if project.organization_id and user.organization_id == project.organization_id:
             return project
-        return project
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found.",
+        )
 
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,

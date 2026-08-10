@@ -10,14 +10,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import require_roles, get_scoped_project
 from app.models.change_request import ChangeRequest
+from app.models.contradiction import Contradiction
 from app.models.user import User
 from app.schemas.change_request import ChangeRequestCreate, ChangeRequestRead, ChangeRequestReview
-from app.tasks.impact_tasks import run_impact_analysis_task
 from app.services.impact_analyser import ImpactAnalyser
+from app.tasks.impact_tasks import run_impact_analysis_task
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/change-requests", tags=["change-requests"])
+
 
 @router.post("", response_model=ChangeRequestRead, status_code=status.HTTP_201_CREATED)
 async def create_change_request(
@@ -27,7 +29,10 @@ async def create_change_request(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Create a new change request and enqueue impact analysis background task.
+    Create a new change request and immediately run impact analysis inline.
+    Falls back to Celery if the inline call fails (e.g. Groq timeout).
+    Any requirement conflicts detected by the RDCD pipeline are persisted as
+    Contradiction rows so they surface in the same Contradictions tab as live-chat conflicts.
     """
     pid = body.project_id or project_id
     if not pid:
@@ -36,18 +41,15 @@ async def create_change_request(
             detail="Must provide project_id either in request body or as a query parameter."
         )
 
-    # Scoped access check
+    # Scoped access check — raises 403 if user has no access to this project
     await get_scoped_project(pid, current_user, db)
-
-    # Serialize list to JSON string
-    serialized_features = json.dumps(body.affected_features)
 
     cr = ChangeRequest(
         project_id=pid,
         client_id=current_user.id if current_user.role == "client" else None,
         title=body.title,
         description=body.description,
-        affected_features=serialized_features,
+        affected_features=json.dumps(body.affected_features),
         severity=body.severity,
         status="pending",
         version=1
@@ -56,30 +58,56 @@ async def create_change_request(
     await db.commit()
     await db.refresh(cr)
 
-    # Perform impact analysis inline to guarantee instant analysis for dev & client
+    # ── Inline impact analysis (mirrors sessions.py SRS pattern) ─────────────
+    # Runs synchronously so the CR is returned with severity + impact_report
+    # already populated. Only falls back to Celery if the inline call itself fails.
+    analysis_result: dict = {}
     try:
         analysis_result = await ImpactAnalyser.analyze_impact(
             title=cr.title,
             description=cr.description,
             project_id=cr.project_id,
-            db=db
+            db=db,
         )
-        if analysis_result:
-            cr.severity = analysis_result.get("severity", cr.severity or "medium")
-            cr.impact_report = analysis_result.get("impact_report", "Impact analysis completed.")
-            if analysis_result.get("affected_features"):
-                cr.affected_features = json.dumps(analysis_result.get("affected_features"))
-            db.add(cr)
-            await db.commit()
-            await db.refresh(cr)
-    except Exception as e:
-        logger.warning(f"Impact analysis failed for change request {cr.id}: {e}")
+        cr.severity = analysis_result.get("severity") or cr.severity or "low"
+        cr.impact_report = analysis_result.get("impact_report", "")
+        cr.affected_features = json.dumps(analysis_result.get("affected_features", []))
+        db.add(cr)
+        await db.commit()
+        await db.refresh(cr)
+        logger.info(f"Impact analysis completed inline for change request {cr.id}")
+    except Exception as inline_err:
+        logger.warning(
+            f"Inline impact analysis failed for {cr.id}, queueing Celery fallback: {inline_err}"
+        )
+        try:
+            run_impact_analysis_task.delay(str(cr.id))
+        except Exception as celery_err:
+            logger.error(f"Celery fallback also failed for {cr.id}: {celery_err}")
 
-    # Enqueue background task as fallback
-    try:
-        run_impact_analysis_task.delay(str(cr.id))
-    except Exception as e:
-        logger.debug(f"Celery dispatch skipped/failed: {e}")
+    # ── Persist RDCD-detected requirement contradictions ──────────────────────
+    # conflict_hits is a list of dicts set by ImpactAnalyser._check_requirement_conflicts
+    conflict_hits = analysis_result.get("_conflict_hits", [])
+    if conflict_hits:
+        for hit in conflict_hits:
+            db.add(Contradiction(
+                session_id=None,
+                atom_1_id=hit.get("existing_atom_id"),
+                atom_2_id=None,
+                confidence=hit.get("confidence"),
+                conflict_type=hit.get("conflict_type"),
+                aria_message=(
+                    hit.get("aria_message")
+                    or f"Change request '{cr.title}' may conflict with an existing captured requirement."
+                ),
+                status="pending",
+                source="change_request",
+                change_request_id=cr.id,
+            ))
+        await db.commit()
+        logger.info(
+            f"{len(conflict_hits)} requirement conflict(s) persisted from change request {cr.id}"
+        )
 
     return cr
 

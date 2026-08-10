@@ -361,34 +361,28 @@ export const Login = () => {
 
   return (
     <div style={styles.root}>
+      {/* ── TOP HEADER (Logo on left, Help/Support on right) ─────────────── */}
+      <div style={styles.topHeader}>
+        <div style={styles.logoRow}>
+          <ReqSenseLogo size={38} />
+          <span style={styles.logoText}>ReqSense <span style={styles.aiText}>AI</span></span>
+        </div>
+        <div style={styles.helpRow}>
+          <button style={styles.helpBtn} onClick={() => showToast('Help documentation available in your dashboard.', 'info')}>
+            <HelpIcon /> Help
+          </button>
+          <span style={styles.divider}>|</span>
+          <button style={styles.helpBtn} onClick={() => showToast('Contact support at support@reqsense.ai', 'info')}>
+            <HeadsetIcon /> Contact Us
+          </button>
+        </div>
+      </div>
+
       {/* ── LEFT PANEL ──────────────────────────────────────────────────── */}
       <div style={styles.left}>
-        {/* Top header */}
-        <div style={styles.header}>
-          <div style={styles.logoRow}>
-            <ReqSenseLogo size={38} />
-            <span style={styles.logoText}>ReqSense <span style={styles.aiText}>AI</span></span>
-          </div>
-          <div style={styles.helpRow}>
-            <button style={styles.helpBtn} onClick={() => showToast('Help documentation available in your dashboard.', 'info')}>
-              <HelpIcon /> Help
-            </button>
-            <span style={styles.divider}>|</span>
-            <button style={styles.helpBtn} onClick={() => showToast('Contact support at support@reqsense.ai', 'info')}>
-              <HeadsetIcon /> Contact Us
-            </button>
-          </div>
-        </div>
-
         {/* Animated cube */}
         <div style={styles.cubeWrap}>
           <AnimatedCube />
-        </div>
-
-        {/* Bottom trust badge */}
-        <div style={styles.trustRow}>
-          <ShieldIcon />
-          <span style={styles.trustText}>Trusted by developers, teams and businesses<br />worldwide to build better software.</span>
         </div>
       </div>
 
@@ -494,12 +488,6 @@ export const Login = () => {
           </p>
         </div>
       </div>
-
-      {/* ── Bottom security bar ────────────────────────────────────────── */}
-      <div style={styles.secBar}>
-        <LockSmallIcon />
-        <span style={styles.secText}>Your data is secure with enterprise-grade encryption.</span>
-      </div>
     </div>
   );
 };
@@ -554,12 +542,24 @@ const styles = {
     position: 'relative',
     fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
   },
+  topHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '24px 36px',
+    zIndex: 10,
+  },
   left: {
     flex: '0 0 52%',
     display: 'flex',
     flexDirection: 'column',
-    justifyContent: 'space-between',
-    padding: '28px 36px 28px 36px',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: '80px 36px 28px 36px',
     position: 'relative',
     overflow: 'hidden',
     color: '#fff',
