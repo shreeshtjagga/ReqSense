@@ -22,7 +22,7 @@ def upgrade() -> None:
             'chroma_similarity_threshold',
             sa.Float(),
             nullable=False,
-            server_default='0.3',
+            server_default='0.55',
         ),
     )
 

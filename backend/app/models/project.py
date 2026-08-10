@@ -74,7 +74,7 @@ class Project(Base):
     )
     # Chroma distance threshold for contradiction recall (lower = stricter)
     chroma_similarity_threshold: Mapped[float] = mapped_column(
-        Float, default=0.3, nullable=False
+        Float, default=0.55, nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
