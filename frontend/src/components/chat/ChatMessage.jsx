@@ -39,13 +39,11 @@ export const ChatMessage = ({ message, onResolveConflict }) => {
     );
   }
 
-  // Parse if it's a conflict alert containing JSON data
   let conflictData = null;
   if (message_type === 'conflict_alert') {
     try {
       conflictData = JSON.parse(content);
     } catch (e) {
-      // Normal text content fallback
     }
   }
 

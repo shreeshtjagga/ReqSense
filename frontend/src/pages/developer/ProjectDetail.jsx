@@ -80,19 +80,16 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import axios from '../../api/axios';
 
-// ── Tab 4: Project Feature Tracker ───────────────────────────────────────────
 const ProjectFeatureTrackerTab = ({ projectId }) => {
   const showToast = useToastStore((s) => s.showToast);
   const [features, setFeatures] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Create Modal
   const [createOpen, setCreateOpen] = useState(false);
   const [createTitle, setCreateTitle] = useState('');
   const [createDescription, setCreateDescription] = useState('');
   const [creating, setCreating] = useState(false);
 
-  // Edit Modal
   const [editOpen, setEditOpen] = useState(false);
   const [selectedFeature, setSelectedFeature] = useState(null);
   const [newStatus, setNewStatus] = useState('');
@@ -321,13 +318,11 @@ const ProjectFeatureTrackerTab = ({ projectId }) => {
   );
 };
 
-// ── Tab 5: Project Change Requests ───────────────────────────────────────────
 const ProjectChangeRequestsTab = ({ projectId }) => {
   const showToast = useToastStore((s) => s.showToast);
   const [changeRequests, setChangeRequests] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Review Modal
   const [reviewOpen, setReviewOpen] = useState(false);
   const [selectedCr, setSelectedCr] = useState(null);
   const [note, setNote] = useState('');
@@ -534,7 +529,6 @@ const ProjectChangeRequestsTab = ({ projectId }) => {
   );
 };
 
-// ── Tab 6: Project SRS Documents ──────────────────────────────────────────────
 const ProjectSRSTab = ({ projectId }) => {
   const showToast = useToastStore((s) => s.showToast);
   const [activeSrs, setActiveSrs] = useState(null);
@@ -656,7 +650,6 @@ const ProjectSRSTab = ({ projectId }) => {
 };
 
 
-// ── Tab 0: Project Dashboard Overview ─────────────────────────────────────────
 const ProjectDashboardTab = ({ project, sessions, contradictions, atoms, engagement }) => {
   return (
     <Box>
@@ -726,7 +719,6 @@ const ProjectDashboardTab = ({ project, sessions, contradictions, atoms, engagem
   );
 };
 
-// ── Main ProjectDetail Component ──────────────────────────────────────────────
 export const ProjectDetail = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -741,7 +733,6 @@ export const ProjectDetail = () => {
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // Chroma similarity threshold (tunable by developer)
   const [chromaThreshold, setChromaThreshold] = useState(0.3);
   const [savingThreshold, setSavingThreshold] = useState(false);
 
@@ -772,7 +763,6 @@ export const ProjectDetail = () => {
       const proj = await getProject(projectId);
       setProject(proj);
       setActiveProject(proj);
-      // Sync local chroma threshold from project
       if (proj?.chroma_similarity_threshold != null) {
         setChromaThreshold(proj.chroma_similarity_threshold);
       }

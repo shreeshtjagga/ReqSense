@@ -35,7 +35,6 @@ export const AdminDashboard = () => {
       setStats(analyticsData);
       setProjects(projData || []);
 
-      // Fetch live audit logs for the recent activity widget
       try {
         const auditRes = await axios.get('/audit-logs', { params: { limit: 10 } });
         const logs = auditRes.data || [];

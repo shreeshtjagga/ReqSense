@@ -27,7 +27,6 @@ export const Sidebar = ({ mobileOpen, onDrawerToggle }) => {
 
   const role = user?.role;
 
-  // Sidebar is only used for Admin management
   if (role !== ROLES.ADMIN) {
     return null;
   }

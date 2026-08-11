@@ -73,7 +73,6 @@ export const AdminAuditLogs = () => {
     );
   });
 
-  // Get unique entity types for the filter dropdown
   const entityTypes = [...new Set(logs.map((l) => l.entity_type).filter(Boolean))];
 
   return (

@@ -3,7 +3,6 @@ import { useNavigate, Link as RouterLink, useSearchParams } from 'react-router-d
 import { registerUser } from '../../api/auth';
 import { useToastStore } from '../../store/toastStore';
 
-// ── Animated Isometric Cube (identical to Login) ────────────────────────────
 const AnimatedCube = () => {
   const canvasRef = useRef(null);
   const animRef   = useRef(null);
@@ -83,7 +82,6 @@ const AnimatedCube = () => {
       ctx.clearRect(0, 0, W, H);
       const p = getCubePoints(W, H);
 
-      // floor grid
       ctx.save();
       const rows = 6, cols = 6;
       for (let r = 0; r <= rows; r++) {
@@ -118,7 +116,6 @@ const AnimatedCube = () => {
       }
       ctx.restore();
 
-      // cube faces
       ctx.save();
       const leftGrad = ctx.createLinearGradient(p.left.x, p.left.y, p.bbottom.x, p.bbottom.y);
       leftGrad.addColorStop(0, 'rgba(29,78,216,0.85)');
@@ -150,7 +147,6 @@ const AnimatedCube = () => {
       ctx.lineTo(p.bottom.x, p.bottom.y); ctx.lineTo(p.right.x, p.right.y);
       ctx.closePath(); ctx.fill(); ctx.restore();
 
-      // edges
       const drawEdge = (a, b, color, width, blur) => {
         ctx.save();
         ctx.strokeStyle = color; ctx.lineWidth = width;
@@ -169,7 +165,6 @@ const AnimatedCube = () => {
       drawEdge(p.bleft, p.bbottom,'rgba(59,130,246,0.40)', 1.2, 4);
       drawEdge(p.bright,p.bbottom,'rgba(59,130,246,0.35)', 1.0, 3);
 
-      // sparks
       sparks.forEach((spark) => {
         spark.t += spark.speed * dt;
         if (spark.t > 1) spark.t = 0;
@@ -207,7 +202,6 @@ const AnimatedCube = () => {
   return <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />;
 };
 
-// ── Logo ────────────────────────────────────────────────────────────────────
 const ReqSenseLogo = ({ size = 40 }) => (
   <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path fill="url(#rlt)" d="M50 12 L85 32 L50 52 L15 32 Z" />
@@ -229,7 +223,6 @@ const ReqSenseLogo = ({ size = 40 }) => (
   </svg>
 );
 
-// ── Inline SVG icons ────────────────────────────────────────────────────────
 const GoogleIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24">
     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -300,7 +293,6 @@ const SpinnerIcon = () => (
   </svg>
 );
 
-// ── Main Register Component ──────────────────────────────────────────────────
 export const Register = () => {
   const [searchParams] = useSearchParams();
   const inviteToken = searchParams.get('invite_token') || searchParams.get('invite') || '';
@@ -570,7 +562,6 @@ export const Register = () => {
   );
 };
 
-// ── Styles — mirrors Login exactly ──────────────────────────────────────────
 const s = {
   root: {
     minHeight: '100vh',

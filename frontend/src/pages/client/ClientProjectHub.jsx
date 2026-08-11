@@ -55,7 +55,6 @@ import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import CommentIcon from '@mui/icons-material/Comment';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
-// ── Project Overview Tab ──────────────────────────────────────────────────────
 const ProjectOverviewTab = ({ project, sessions }) => {
 
   return (
@@ -97,7 +96,6 @@ const ProjectOverviewTab = ({ project, sessions }) => {
 };
 
 
-// ── Chat Sessions Tab ─────────────────────────────────────────────────────────
 const ChatSessionsTab = ({ projectId, project, sessions, loadingSessions, onRefresh }) => {
   const navigate = useNavigate();
   const showToast = useToastStore((s) => s.showToast);
@@ -220,7 +218,6 @@ const ChatSessionsTab = ({ projectId, project, sessions, loadingSessions, onRefr
   );
 };
 
-// ── Change Request Tab ────────────────────────────────────────────────────────
 const ChangeRequestTab = ({ projectId, project, onCancel }) => {
   const showToast = useToastStore((s) => s.showToast);
 
@@ -228,7 +225,6 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
 
-  // Form states
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [severity, setSeverity] = useState('medium');
@@ -601,7 +597,6 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
 
 import ClosureBanner from '../../components/common/ClosureBanner';
 
-// ── Main ClientProjectHub page ────────────────────────────────────────────────
 export const ClientProjectHub = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();

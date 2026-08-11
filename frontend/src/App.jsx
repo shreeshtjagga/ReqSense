@@ -3,15 +3,12 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { CircularProgress, Box } from '@mui/material';
 import { useAuth } from './hooks/useAuth';
 
-// Auth Pages (small, load eagerly — first thing anyone sees)
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import ForgotPassword from './pages/auth/ForgotPassword';
 import ResetPassword from './pages/auth/ResetPassword';
 import AcceptInvite from './pages/auth/AcceptInvite';
 
-// Everything else — lazy-loaded per role so a client never downloads admin
-// bundles and vice versa
 const ClientDashboard = lazy(() => import('./pages/client/ClientDashboard'));
 const ClientProjectHub = lazy(() => import('./pages/client/ClientProjectHub'));
 const ChatSession = lazy(() => import('./pages/client/ChatSession'));
@@ -34,7 +31,6 @@ const RouteFallback = () => (
   </Box>
 );
 
-// Scoped Route Guards
 const PrivateRoute = ({ children, allowedRoles }) => {
   const { isAuthenticated, user } = useAuth();
 
@@ -49,7 +45,6 @@ const PrivateRoute = ({ children, allowedRoles }) => {
   return children;
 };
 
-// Root Dashboard Switcher
 const DashboardSwitcher = () => {
   const { user } = useAuth();
   
