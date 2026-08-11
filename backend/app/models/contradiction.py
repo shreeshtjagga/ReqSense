@@ -1,8 +1,3 @@
-"""
-Contradiction model — 2-way conflicts between RequirementAtoms.
-Developer can override (resolve/ignore/merge) via the contradictions router.
-"""
-
 import uuid
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
@@ -18,7 +13,6 @@ if TYPE_CHECKING:
     from app.models.user import User
     from app.models.change_request import ChangeRequest
 
-
 class Contradiction(Base):
     __tablename__ = "contradictions"
 
@@ -33,10 +27,10 @@ class Contradiction(Base):
         Uuid(), ForeignKey("requirement_atoms.id", ondelete="SET NULL"), nullable=True
     )
     similarity_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # 0.0–1.0
+    confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     conflict_type: Mapped[Optional[str]] = mapped_column(
         String(100), nullable=True
-    )  # 'scope_creep', 'user_shift', 'priority_flip', 'direct_contradiction'
+    )
     aria_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     client_clarification: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     resolution: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -46,7 +40,7 @@ class Contradiction(Base):
     )
     status: Mapped[str] = mapped_column(
         String(50), default="pending", nullable=False
-    )  # 'pending', 'resolved', 'unresolved', 'ignored'
+    )
     detected_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

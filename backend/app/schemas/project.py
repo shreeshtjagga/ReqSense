@@ -1,10 +1,8 @@
-"""Project schemas."""
 import uuid
 from datetime import datetime
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
-
 
 class ProjectCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
@@ -13,7 +11,6 @@ class ProjectCreate(BaseModel):
     organization_id: Optional[uuid.UUID] = None
     developer_id: Optional[uuid.UUID] = None
 
-
 class ProjectUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
@@ -21,7 +18,6 @@ class ProjectUpdate(BaseModel):
     status: Optional[Literal["active", "completed", "on_hold", "archived"]] = None
     developer_id: Optional[uuid.UUID] = None
     chroma_similarity_threshold: Optional[float] = Field(None, ge=0.05, le=1.0)
-
 
 class ProjectRead(BaseModel):
     id: uuid.UUID
@@ -39,10 +35,8 @@ class ProjectRead(BaseModel):
 
     model_config = {"from_attributes": True}
 
-
 class ProjectClientAdd(BaseModel):
     client_id: uuid.UUID
-
 
 class ProjectClientRead(BaseModel):
     id: uuid.UUID
@@ -52,11 +46,9 @@ class ProjectClientRead(BaseModel):
 
     model_config = {"from_attributes": True}
 
-
 class ProjectInviteCreate(BaseModel):
     email: str = Field(..., min_length=3, max_length=255)
     role: Literal["client", "developer"] = "client"
-
 
 class ProjectInviteRead(BaseModel):
     id: uuid.UUID

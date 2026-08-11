@@ -25,10 +25,6 @@ settings = get_settings()
 class SRSGenerator:
     @classmethod
     async def generate_srs(cls, session_id: uuid.UUID, db: AsyncSession) -> SRSVersion:
-        """
-        Generates an SRS Word document (.docx) for the session,
-        uploads it to storage, and writes an SRSVersion record to the database.
-        """
         start_time = time.time()
         logger.info(f"Starting SRS generation for session: {session_id}")
 
@@ -123,7 +119,7 @@ class SRSGenerator:
         title_run.font.name = "Arial"
         title_run.font.size = Pt(22)
         title_run.font.bold = True
-        title_run.font.color.rgb = RGBColor(30, 58, 138)  # Navy Blue
+        title_run.font.color.rgb = RGBColor(30, 58, 138)
 
         subtitle_p = doc.add_paragraph()
         subtitle_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -132,7 +128,7 @@ class SRSGenerator:
         sub_run.font.italic = True
         sub_run.font.color.rgb = RGBColor(100, 116, 139)
 
-        doc.add_paragraph()  # spacing
+        doc.add_paragraph()
 
         meta_table = doc.add_table(rows=4, cols=2)
         meta_table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -310,6 +306,3 @@ class SRSGenerator:
 
         logger.info(f"SRS {version_str} generated for project {session.project_id} ({len(atoms)} atoms, {len(client_messages)} client statements, {generation_latency_ms}ms)")
         return srs_version
-
-
-

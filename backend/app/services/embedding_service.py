@@ -26,17 +26,14 @@ def _cached_encode(text: str) -> List[float]:
 class EmbeddingService:
     @staticmethod
     def get_embedding(text: str) -> List[float]:
-        """Generate embedding vector for a given text (cached)."""
         return _cached_encode(text)
 
     @staticmethod
     def embed(text: str) -> List[float]:
-        """Alias for get_embedding — use this for consistency across callers."""
         return _cached_encode(text)
 
     @staticmethod
     def preload_model() -> None:
-        """Pre-warm SentenceTransformer model during app startup so cold-start delay is zero."""
         try:
             get_model()
             logger.info("SentenceTransformer embedding model pre-loaded successfully.")
@@ -45,7 +42,6 @@ class EmbeddingService:
 
     @staticmethod
     def get_model_info() -> dict:
-        """Get the model metadata."""
         return {
             "embedding_model": settings.EMBEDDING_MODEL,
             "embedding_version": settings.EMBEDDING_VERSION

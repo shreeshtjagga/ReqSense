@@ -17,7 +17,6 @@ settings = get_settings()
 
 _CR_CONFLICT_THRESHOLD = 0.4
 
-
 class ImpactAnalyser:
     @classmethod
     async def analyze_impact(
@@ -27,17 +26,6 @@ class ImpactAnalyser:
         project_id: uuid.UUID,
         db: AsyncSession,
     ) -> Dict[str, Any]:
-        """
-        Analyse the impact of a change request on existing project features.
-
-        Returns a dict:
-          {
-            "affected_features": [...],
-            "severity": "low" | "medium" | "high",
-            "impact_report": "...",
-            "_conflict_hits": [...]   <- consumed by the router, not stored verbatim
-          }
-        """
         q = select(FeatureStatus).where(FeatureStatus.project_id == project_id)
         result = await db.execute(q)
         features = result.scalars().all()
@@ -95,7 +83,6 @@ class ImpactAnalyser:
         except Exception as rdcd_err:
             logger.warning(f"RDCD conflict check failed for CR '{title}': {rdcd_err}")
 
-        # Deduplicate conflict hits by unique existing requirement text
         seen_texts = set()
         unique_conflict_hits = []
         for h in conflict_hits:
@@ -108,7 +95,6 @@ class ImpactAnalyser:
             llm_result["severity"] = "high"
 
         existing_report = llm_result.get("impact_report", "").strip()
-        # Clean up any generic exception string if fallback occurred
         if "Automated impact analysis failed" in existing_report:
             existing_report = (
                 "Automated Architectural Assessment:\n"
@@ -143,15 +129,6 @@ class ImpactAnalyser:
         project_id: uuid.UUID,
         db: AsyncSession,
     ) -> List[Dict[str, Any]]:
-        """
-        Run the RDCD atom-extraction + vector-similarity + contradiction-detection
-        pipeline against a change request's text, scoped to the project's Chroma
-        collection. When Chroma returns nothing (empty index or mocked), falls back
-        to keyword-overlap matching against DB-stored RequirementAtoms.
-        Returns a list of conflict hit dicts — empty if none found.
-
-        Import-local to avoid circular dependency (ImpactAnalyser ← rdcd_layer ← aria_agent).
-        """
         from app.services.rdcd_layer import RDCDLayer
         from app.services.embedding_service import EmbeddingService
         from app.services.vector_store import VectorStore

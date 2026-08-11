@@ -16,9 +16,7 @@ from app.schemas.contradiction import ContradictionRead, ContradictionResolve
 
 router = APIRouter(prefix="/contradictions", tags=["contradictions"])
 
-
 def _atom_display_text(atom: Optional[RequirementAtom]) -> Optional[str]:
-    """Build a human-readable summary of a requirement atom for the UI."""
     if not atom:
         return None
     parts = []
@@ -32,13 +30,7 @@ def _atom_display_text(atom: Optional[RequirementAtom]) -> Optional[str]:
         return " — ".join(parts)
     return atom.raw_text or None
 
-
 async def _enrich(c: Contradiction, db: AsyncSession) -> ContradictionRead:
-    """
-    Convert a Contradiction ORM row into a ContradictionRead schema,
-    populating atom_1_text and atom_2_text from the DB so the resolution
-    modal shows the actual conflicting requirement statements.
-    """
     atom_1 = await db.get(RequirementAtom, c.atom_1_id) if c.atom_1_id else None
     atom_2 = await db.get(RequirementAtom, c.atom_2_id) if c.atom_2_id else None
 
@@ -46,7 +38,6 @@ async def _enrich(c: Contradiction, db: AsyncSession) -> ContradictionRead:
     data.atom_1_text = _atom_display_text(atom_1)
     data.atom_2_text = _atom_display_text(atom_2)
     return data
-
 
 @router.get("/project/{project_id}", response_model=List[ContradictionRead])
 async def list_contradictions_for_project(
@@ -56,10 +47,6 @@ async def list_contradictions_for_project(
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    List all contradictions detected across all sessions AND change requests of a project.
-    Used by ProjectDetail tabs and the Analytics pie chart.
-    """
     await get_scoped_project(project_id, current_user, db)
 
     from app.models.change_request import ChangeRequest
@@ -95,7 +82,6 @@ async def list_contradictions_for_project(
     rows = result.scalars().all()
     return [await _enrich(c, db) for c in rows]
 
-
 @router.get("/session/{session_id}", response_model=List[ContradictionRead])
 async def list_contradictions_for_session(
     session_id: uuid.UUID,
@@ -104,9 +90,6 @@ async def list_contradictions_for_session(
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    List all contradictions detected within a single session.
-    """
     session_res = await db.execute(select(Session).where(Session.id == session_id))
     session = session_res.scalar_one_or_none()
     if not session:
@@ -124,7 +107,6 @@ async def list_contradictions_for_session(
     rows = result.scalars().all()
     return [await _enrich(c, db) for c in rows]
 
-
 @router.patch("/{id}", response_model=ContradictionRead)
 async def resolve_contradiction(
     id: uuid.UUID,
@@ -132,10 +114,6 @@ async def resolve_contradiction(
     current_user: User = Depends(require_roles("admin", "developer")),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Developer override: resolve or ignore a detected contradiction.
-    Also transitions RequirementAtom statuses and restores session stability.
-    """
     c = await db.get(Contradiction, id)
     if not c:
         raise HTTPException(

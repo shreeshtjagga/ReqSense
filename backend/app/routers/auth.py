@@ -1,12 +1,3 @@
-"""
-Auth router — register, login, refresh, logout, forgot-password, reset-password.
-
-Rate limiting via slowapi:
-  - Login:          RATE_LIMIT_LOGIN_PER_MINUTE (default 5/min)
-  - Register:       10/min (generous for dev, reasonable for prod)
-  - Forgot-password: 3/min (prevent abuse of email sending)
-"""
-
 import logging
 
 from fastapi import APIRouter, Depends, Request, status
@@ -32,7 +23,6 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-
 @router.post(
     "/register",
     response_model=RegisterResponse,
@@ -57,7 +47,6 @@ async def register(
 
     return RegisterResponse(id=user.id, email=user.email, role=user.role)
 
-
 @router.post(
     "/login",
     response_model=TokenResponse,
@@ -71,7 +60,6 @@ async def login(
 ) -> TokenResponse:
     return await auth_service.login_user(db, email=body.email, password=body.password)
 
-
 @router.post(
     "/refresh",
     response_model=TokenResponse,
@@ -83,7 +71,6 @@ async def refresh(
 ) -> TokenResponse:
     return await auth_service.refresh_tokens(db, raw_refresh_token=body.refresh_token)
 
-
 @router.post(
     "/logout",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -94,7 +81,6 @@ async def logout(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     await auth_service.logout_user(db, raw_refresh_token=body.refresh_token)
-
 
 @router.post(
     "/forgot-password",
@@ -117,7 +103,6 @@ async def forgot_password(
         content={"message": "If this email is registered, a reset link has been sent."}
     )
 
-
 @router.post(
     "/reset-password",
     status_code=status.HTTP_200_OK,
@@ -131,4 +116,3 @@ async def reset_password(
         db, raw_token=body.token, new_password=body.new_password
     )
     return JSONResponse(content={"message": "Password reset successful."})
-

@@ -41,6 +41,7 @@ import { useToastStore } from '../../store/toastStore';
 import { useProjectStore } from '../../store/projectStore';
 import { formatDateTime } from '../../utils/helpers';
 import { SEVERITIES, PROJECT_DOMAIN_LABELS } from '../../utils/constants';
+import ClosureBanner from '../../components/common/ClosureBanner';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ChatIcon from '@mui/icons-material/Chat';
 import AddIcon from '@mui/icons-material/Add';
@@ -594,8 +595,6 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
     </Box>
   );
 };
-
-import ClosureBanner from '../../components/common/ClosureBanner';
 
 export const ClientProjectHub = () => {
   const { projectId } = useParams();

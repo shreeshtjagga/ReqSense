@@ -1,10 +1,3 @@
-"""
-ReqSense AI — Application Settings
-Pydantic v2 BaseSettings with fail-fast validation on startup.
-All required fields have no default; missing values raise an error before
-the server accepts a single request.
-"""
-
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -14,7 +7,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _BASE_DIR = Path(__file__).resolve().parent.parent
 _ENV_FILE = _BASE_DIR / ".env"
-
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -77,37 +69,28 @@ class Settings(BaseSettings):
 
     @property
     def groq_is_mocked(self) -> bool:
-        """Returns True if Groq API key is empty or starts with test/mock/dev."""
         return not self.GROQ_API_KEY or self.GROQ_API_KEY.startswith(("test", "mock", "dev"))
 
     @property
     def chroma_is_mocked(self) -> bool:
-        """Returns True if Chroma is effectively unavailable.
-        - In 'local' mode: never mocked — local Chroma needs no API key.
-        - In 'hosted' mode: mocked if API key is empty or starts with test/mock.
-        """
         if self.CHROMA_MODE == "local":
             return False
         return not self.CHROMA_API_KEY or self.CHROMA_API_KEY.startswith(("test", "mock", "dev"))
 
     @property
     def s3_is_mocked(self) -> bool:
-        """Returns True if S3 credentials are dummy/mock."""
         return not self.S3_ACCESS_KEY_ID or self.S3_ACCESS_KEY_ID.startswith(("test", "mock", "dev"))
 
     @property
     def sendgrid_is_mocked(self) -> bool:
-        """Returns True if SendGrid API key is dummy/mock."""
         return not self.SENDGRID_API_KEY or self.SENDGRID_API_KEY.startswith(("test", "mock", "dev"))
 
     @property
     def allowed_origins_list(self) -> list[str]:
-        """Split comma-separated ALLOWED_ORIGINS into a list for FastAPI CORS."""
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
 
     @property
     def docs_enabled(self) -> bool:
-        """Swagger/ReDoc only exposed in development."""
         return self.ENV == "development"
 
     @model_validator(mode="after")
@@ -136,12 +119,6 @@ class Settings(BaseSettings):
             )
         return self
 
-
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """
-    Return the cached Settings singleton.
-    Called once at startup; subsequent calls return the same object.
-    The lru_cache means the .env file is read exactly once.
-    """
     return Settings()

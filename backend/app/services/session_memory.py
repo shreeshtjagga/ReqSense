@@ -17,9 +17,7 @@ def get_redis_client():
         _redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
     return _redis_client
 
-
 _CONVERSATIONAL_SENDERS = {"client", "user", "aria"}
-
 
 class SessionMemory:
     @staticmethod
@@ -28,11 +26,6 @@ class SessionMemory:
 
     @classmethod
     async def _load_from_db(cls, session_id: uuid.UUID, db: Any) -> List[Dict[str, Any]]:
-        """
-        Load the last 40 chat messages from the DB for a session.
-        Excludes conflict_alert messages (raw JSON blobs) so ARIA context
-        only contains actual human/ARIA conversation turns.
-        """
         try:
             from sqlalchemy import select
             from app.models.message import Message
@@ -54,14 +47,6 @@ class SessionMemory:
 
     @classmethod
     async def get_messages(cls, session_id: uuid.UUID, db: Optional[Any] = None) -> List[Dict[str, Any]]:
-        """
-        Retrieve the last 40 messages for the session from Redis.
-        If Redis is unavailable or returns nothing, falls back to the DB
-        and re-seeds Redis for subsequent calls.
-
-        Only conversational messages (client/user/aria, non-conflict_alert)
-        are returned so ARIA never receives raw JSON contradiction blobs.
-        """
         r = get_redis_client()
         key = cls._get_key(session_id)
         messages: List[Dict[str, Any]] = []
@@ -99,10 +84,6 @@ class SessionMemory:
 
     @classmethod
     async def add_message(cls, session_id: uuid.UUID, message: Dict[str, Any]) -> None:
-        """
-        Add a conversational message to session memory, keeping the last 40.
-        Skips conflict_alert messages — they are DB-only, never in ARIA history.
-        """
         if message.get("message_type") == "conflict_alert":
             return
 
@@ -120,7 +101,6 @@ class SessionMemory:
 
     @classmethod
     async def clear_memory(cls, session_id: uuid.UUID) -> None:
-        """Clear all messages from session memory."""
         r = get_redis_client()
         key = cls._get_key(session_id)
         try:
@@ -135,15 +115,6 @@ class SessionMemory:
         project_id: uuid.UUID,
         db: Any,
     ) -> None:
-        """
-        Seed the current session's Redis key with the last 20 conversational turns
-        from the most recently active/completed prior session on the same project.
-
-        Seeds from ANY prior session status (not just 'completed') so ARIA retains
-        context even when a client abandons a session mid-way and starts a new one.
-        A lightweight context-marker message is prepended so ARIA knows it already
-        has history and should acknowledge it at the start of the new conversation.
-        """
         try:
             from sqlalchemy import select
             from app.models.message import Message
@@ -207,4 +178,3 @@ class SessionMemory:
                 logger.warning("Failed to seed prior session into Redis: %s", redis_exc)
         except Exception as exc:
             logger.warning("seed_from_prior_session failed: %s", exc)
-

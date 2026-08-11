@@ -1,5 +1,3 @@
-"""SRSVersion — each generated SRS document stored in S3/R2."""
-
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -9,7 +7,6 @@ from sqlalchemy import Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-
 
 class SRSVersion(Base):
     __tablename__ = "srs_versions"
@@ -21,8 +18,8 @@ class SRSVersion(Base):
     session_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(), ForeignKey("sessions.id", ondelete="SET NULL"), index=True, nullable=True
     )
-    version: Mapped[str] = mapped_column(String(20), nullable=False)  # '1.0', '1.1', '2.0'
-    file_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)  # S3/R2 URL
+    version: Mapped[str] = mapped_column(String(20), nullable=False)
+    file_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     generated_by: Mapped[str] = mapped_column(
         String(50), default="system", nullable=False
     )

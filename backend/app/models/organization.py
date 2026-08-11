@@ -1,5 +1,3 @@
-"""Organization model."""
-
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, List
@@ -12,7 +10,6 @@ from app.database import Base
 if TYPE_CHECKING:
     from app.models.project import Project
     from app.models.user import User
-
 
 class Organization(Base):
     __tablename__ = "organizations"

@@ -1,4 +1,3 @@
-"""Sessions router — full Phase 2 CRUD with scoped access checking."""
 import uuid
 from datetime import datetime, timezone
 from typing import List
@@ -18,7 +17,6 @@ from app.services.session_memory import SessionMemory
 from app.models.user import User
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
-
 
 @router.post("", response_model=SessionRead, status_code=status.HTTP_201_CREATED)
 async def create_session(
@@ -80,8 +78,6 @@ async def create_session(
 
     return session
 
-
-
 @router.get("/project/{project_id}", response_model=List[SessionRead])
 async def list_sessions_for_project(
     project_id: uuid.UUID,
@@ -96,16 +92,12 @@ async def list_sessions_for_project(
     result = await db.execute(q)
     return result.scalars().all()
 
-
 @router.get("/project/{project_id}/messages", response_model=List[MessageRead])
 async def list_all_project_messages(
     project_id: uuid.UUID,
     current_user: User = Depends(require_roles("admin", "developer", "client")),
     db: AsyncSession = Depends(get_db),
 ):
-    """All messages across every session of a project, in order. Used so the
-    client sees continuity of their requirements conversation even after
-    starting a new session."""
     await get_scoped_project(project_id=project_id, user=current_user, db=db)
     result = await db.execute(
         select(Message)
@@ -115,14 +107,11 @@ async def list_all_project_messages(
     )
     return result.scalars().all()
 
-
-
 async def _get_scoped_session(
     session_id: uuid.UUID,
     user: User,
     db: AsyncSession,
 ) -> Session:
-    """Helper to fetch a session and verify the user has access to its project."""
     result = await db.execute(select(Session).where(Session.id == session_id))
     session = result.scalar_one_or_none()
     if not session:
@@ -133,7 +122,6 @@ async def _get_scoped_session(
     await get_scoped_project(project_id=session.project_id, user=user, db=db)
     return session
 
-
 @router.get("/{session_id}", response_model=SessionRead)
 async def get_session(
     session_id: uuid.UUID,
@@ -141,7 +129,6 @@ async def get_session(
     db: AsyncSession = Depends(get_db),
 ):
     return await _get_scoped_session(session_id, current_user, db)
-
 
 import logging
 from app.tasks.srs_tasks import generate_srs_task
@@ -185,7 +172,6 @@ async def end_session(
     session_dict["srs_status"] = srs_status
     return session_dict
 
-
 @router.post("/{session_id}/generate-srs", response_model=SessionRead)
 async def trigger_srs_generation(
     session_id: uuid.UUID,
@@ -202,5 +188,3 @@ async def trigger_srs_generation(
         except Exception as celery_err:
             logger.error(f"Celery task dispatch failed: {celery_err}")
     return session
-
-

@@ -1,8 +1,3 @@
-"""
-analytics.py — Read-only analytics endpoints for admin/developer dashboards.
-
-All analytics are scoped to the caller's organization.
-"""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -24,7 +19,6 @@ from app.models.user import User
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
-
 def _as_utc(dt: Optional[datetime]) -> Optional[datetime]:
     if dt is None:
         return None
@@ -32,13 +26,11 @@ def _as_utc(dt: Optional[datetime]) -> Optional[datetime]:
         return dt.replace(tzinfo=timezone.utc)
     return dt
 
-
 @router.get("/overview", summary="High-level platform stats for the caller's org")
 async def analytics_overview(
     current_user: User = Depends(require_roles("admin", "developer")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Return total projects, sessions, messages, and contradictions for the org."""
     org_id = current_user.organization_id
 
     total_projects = await db.scalar(
@@ -68,9 +60,6 @@ async def analytics_overview(
         "total_messages": total_messages or 0,
         "total_contradictions": total_contradictions or 0,
     }
-
-
-
 
 @router.get(
     "/projects/{project_id}/summary",
@@ -177,7 +166,6 @@ async def project_summary(
         },
     }
 
-
 @router.get(
     "/developer/portfolio",
     summary="Developer portfolio metrics across their projects",
@@ -255,7 +243,6 @@ async def developer_portfolio(
         "change_request_approval_rate": (cr_approved / cr_total) if cr_total else None,
     }
 
-
 @router.get(
     "/conflict-types",
     summary="Org-wide conflict_type distribution for ARIA tuning",
@@ -278,7 +265,6 @@ async def conflict_type_distribution(
         "total": sum(count for _, count in rows),
     }
 
-
 @router.get(
     "/llm-usage",
     summary="Cost governance & LLM token usage breakdown (Deprecated)",
@@ -288,9 +274,6 @@ async def llm_usage_analytics(
     current_user: User = Depends(require_roles("admin", "developer")),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Returns empty summary as LLM usage logging has been removed.
-    """
     return {
         "breakdown": [],
         "summary": {
@@ -300,5 +283,3 @@ async def llm_usage_analytics(
             "total_estimated_cost_usd": 0.0,
         }
     }
-
-

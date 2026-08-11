@@ -1,8 +1,3 @@
-"""
-Session model — one requirements-gathering session per (project, client) pair.
-Tracks drift/contradiction stats and stability score in real time.
-"""
-
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
@@ -18,7 +13,6 @@ if TYPE_CHECKING:
     from app.models.project import Project
     from app.models.user import User
 
-
 class Session(Base):
     __tablename__ = "sessions"
 
@@ -31,7 +25,7 @@ class Session(Base):
     )
     status: Mapped[str] = mapped_column(
         String(50), default="active", nullable=False
-    )  # 'active', 'completed', 'abandoned'
+    )
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

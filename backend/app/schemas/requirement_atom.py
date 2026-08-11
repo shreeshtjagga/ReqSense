@@ -1,10 +1,8 @@
-"""RequirementAtom schemas — Phase 3 (RDCD layer populates)."""
 import uuid
 from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel
-
 
 class RequirementAtomRead(BaseModel):
     id: uuid.UUID

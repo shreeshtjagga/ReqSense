@@ -64,4 +64,3 @@ export const listProjectClients = async (projectId) => {
   const response = await api.get(`/projects/${projectId}/clients`);
   return response.data;
 };
-

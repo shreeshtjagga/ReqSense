@@ -1,8 +1,3 @@
-"""
-Models package — import every model here so Alembic autogenerate
-discovers all tables from a single `import app.models` in env.py.
-"""
-
 from app.models.organization import Organization
 from app.models.user import User
 from app.models.refresh_token import RefreshToken

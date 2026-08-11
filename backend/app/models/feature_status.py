@@ -1,5 +1,3 @@
-"""FeatureStatus — tracks implementation state of each requirement atom."""
-
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
@@ -13,7 +11,6 @@ from app.database import Base
 if TYPE_CHECKING:
     from app.models.project import Project
     from app.models.user import User
-
 
 class FeatureStatus(Base):
     __tablename__ = "feature_status"
@@ -29,8 +26,8 @@ class FeatureStatus(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
         String(50), default="planned", nullable=False
-    )  # 'planned', 'in_progress', 'completed'
-    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)  # optimistic locking
+    )
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     created_by: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

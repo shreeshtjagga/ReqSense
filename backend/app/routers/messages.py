@@ -1,20 +1,3 @@
-"""
-Messages router — Phase 3 AI Core.
-
-POST /v1/sessions/{session_id}/messages
-  1. Sanitize input (RDCD)
-  2. Fetch session history from Redis  ← outside DB transaction
-  3. Call ARIA via Groq SDK            ← outside DB transaction
-  4. Extract requirement atoms (Groq)  ← outside DB transaction
-  5. Embed atoms & search Chroma for contradictions ← outside DB transaction
-  6. Open ONE atomic DB transaction — write Message, ARIA reply, atoms, contradictions
-  7. Store messages in Redis session memory
-  Returns the user message (ARIA reply saved separately).
-
-GET /v1/sessions/{session_id}/messages/stream
-  SSE streaming of ARIA tokens (best-effort; no DB writes during stream).
-"""
-
 import asyncio
 import functools
 import json
@@ -54,14 +37,12 @@ _STOPWORDS = {
     "should", "must", "can", "are", "was", "were", "been", "being", "into",
 }
 
-
 def _tokenize(text: str) -> set[str]:
     return {
         w
         for w in re.findall(r"[a-z0-9]+", (text or "").lower())
         if len(w) > 2 and w not in _STOPWORDS
     }
-
 
 def _keyword_overlap_score(text_a: str, text_b: str) -> float:
     a = _tokenize(text_a)
@@ -70,13 +51,11 @@ def _keyword_overlap_score(text_a: str, text_b: str) -> float:
         return 0.0
     return len(a & b) / len(a | b)
 
-
 def _find_keyword_match(
     atom_dict: dict,
     prior_atoms: list,
     min_overlap: float = 0.10,
 ) -> Optional[dict]:
-    """Fallback when Chroma is down: pick strongest keyword-overlap prior atom."""
     raw = atom_dict.get("raw_text", "")
     best = None
     best_score = 0.0
@@ -100,13 +79,11 @@ def _find_keyword_match(
         "source": "keyword_fallback",
     }
 
-
 async def _get_scoped_active_session(
     session_id: uuid.UUID,
     user: User,
     db: AsyncSession,
 ) -> Session:
-    """Fetch session, verify access scoping, and ensure session is active."""
     result = await db.execute(select(Session).where(Session.id == session_id))
     session = result.scalar_one_or_none()
     if not session:
@@ -122,11 +99,8 @@ async def _get_scoped_active_session(
         )
     return session
 
-
 def _is_test_env() -> bool:
     return settings.GROQ_API_KEY.startswith("test") or settings.GROQ_API_KEY.startswith("mock")
-
-
 
 @router.post("", response_model=MessageRead, status_code=status.HTTP_201_CREATED)
 async def create_message(
@@ -136,11 +110,6 @@ async def create_message(
     current_user: User = Depends(require_roles("admin", "developer", "client")),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Append a user message, run ARIA, extract atoms, detect contradictions.
-    All external I/O (Groq, Chroma, Redis) completes BEFORE the DB transaction opens.
-    A Groq timeout therefore never leaves a half-written DB row.
-    """
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
 
     session = await _get_scoped_active_session(session_id, current_user, db)
@@ -361,7 +330,6 @@ async def create_message(
         session.total_messages = (session.total_messages or 0) + 2
         db.add(session)
 
-
         persisted_atoms = []
         for atom_dict, evaluations in atom_contradiction_pairs:
             ra = RequirementAtom(
@@ -433,7 +401,7 @@ async def create_message(
                     session.contradiction_events = (session.contradiction_events or 0) + 1
                     session.stability_score = max(0.0, (session.stability_score or 100.0) - 10.0)
                 else:
-                    pass  # Low-confidence evaluation — no action needed
+                    pass
 
         await db.commit()
         await db.refresh(user_msg)
@@ -481,8 +449,6 @@ async def create_message(
                 logger.warning("Chroma upsert failed for atom: %s", exc)
 
     return user_msg
-
-
 
 @router.get("", response_model=List[MessageRead])
 async def list_messages(
@@ -554,5 +520,3 @@ async def list_messages(
             response.append(m)
 
     return response
-
-

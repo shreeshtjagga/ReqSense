@@ -1,5 +1,3 @@
-"""AuditLog — immutable record of every significant action."""
-
 import uuid
 from datetime import datetime
 from typing import Dict, Optional
@@ -13,7 +11,6 @@ from app.database import Base
 
 _JSON = JSON().with_variant(JSONB(), "postgresql")
 
-
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
@@ -26,7 +23,7 @@ class AuditLog(Base):
     entity_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(), nullable=True)
     metadata_: Mapped[Optional[Dict]] = mapped_column(
         "metadata", _JSON, nullable=True
-    )  # 'metadata_' avoids shadowing SQLAlchemy's Base.metadata
+    )
     ip_address: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     request_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -37,4 +34,3 @@ class AuditLog(Base):
         if "metadata" in kwargs:
             kwargs["metadata_"] = kwargs.pop("metadata")
         super().__init__(**kwargs)
-

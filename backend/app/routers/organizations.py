@@ -1,4 +1,3 @@
-"""Organizations router."""
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -14,7 +13,6 @@ from app.models.user import User
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
-
 @router.post("", response_model=OrganizationRead, status_code=status.HTTP_201_CREATED)
 async def create_organization(
     body: OrganizationCreate,
@@ -26,7 +24,6 @@ async def create_organization(
     await db.commit()
     await db.refresh(org)
     return org
-
 
 @router.get("/{org_id}", response_model=OrganizationRead)
 async def get_organization(

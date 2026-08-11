@@ -1,10 +1,3 @@
-"""
-Requirement Atoms router — read-only listing endpoints.
-
-Atoms are written by messages.py (RDCD layer) during a session.
-These GET endpoints are used by ProjectDetail.jsx (Extracted Atoms tab)
-and potentially by analytics views.
-"""
 import uuid
 from typing import List, Optional
 
@@ -21,7 +14,6 @@ from app.schemas.requirement_atom import RequirementAtomRead
 
 router = APIRouter(prefix="/requirement-atoms", tags=["requirement-atoms"])
 
-
 @router.get("/project/{project_id}", response_model=List[RequirementAtomRead])
 async def list_atoms_for_project(
     project_id: uuid.UUID,
@@ -31,10 +23,6 @@ async def list_atoms_for_project(
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    List all requirement atoms extracted across all sessions of a project.
-    Used by ProjectDetail 'Extracted Atoms' tab.
-    """
     await get_scoped_project(project_id, current_user, db)
 
     q = (
@@ -50,7 +38,6 @@ async def list_atoms_for_project(
     result = await db.execute(q)
     return result.scalars().all()
 
-
 @router.get("/session/{session_id}", response_model=List[RequirementAtomRead])
 async def list_atoms_for_session(
     session_id: uuid.UUID,
@@ -59,9 +46,6 @@ async def list_atoms_for_session(
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    List all requirement atoms extracted within a single session.
-    """
     session_res = await db.execute(select(Session).where(Session.id == session_id))
     session = session_res.scalar_one_or_none()
     if not session:

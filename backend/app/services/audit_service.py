@@ -1,4 +1,3 @@
-"""Audit log service — helper functions to write structured, request-correlated logs."""
 import uuid
 from typing import Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,10 +13,6 @@ async def log_audit_event(
     ip_address: Optional[str] = None,
     request_id: Optional[str] = None,
 ) -> AuditLog:
-    """
-    Creates and saves a new audit log record.
-    Uses 'metadata_' field mapping to Postgres JSONB / SQLite JSON.
-    """
     entry = AuditLog(
         user_id=user_id,
         action=action,

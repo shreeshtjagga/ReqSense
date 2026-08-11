@@ -1,7 +1,3 @@
-"""
-Celery app configuration.
-"""
-
 from celery import Celery
 from app.config import get_settings
 
@@ -29,4 +25,3 @@ celery_app.conf.update(
     ]
 )
 celery_app.autodiscover_tasks(["app.tasks"])
-

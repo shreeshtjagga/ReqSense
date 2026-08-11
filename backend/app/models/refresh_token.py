@@ -1,4 +1,3 @@
-"""RefreshToken model — stores hashed token values for revocable sessions."""
 from __future__ import annotations
 
 import uuid
@@ -12,7 +11,6 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.user import User
-
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"

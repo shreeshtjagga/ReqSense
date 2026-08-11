@@ -17,7 +17,7 @@ async def _async_run_impact_analysis(change_request_id: uuid.UUID) -> None:
             return
 
         logger.info(f"Running impact analysis for change request {cr.id} in project {cr.project_id}")
-        
+
         analysis_result = await ImpactAnalyser.analyze_impact(
             title=cr.title,
             description=cr.description,
@@ -28,16 +28,13 @@ async def _async_run_impact_analysis(change_request_id: uuid.UUID) -> None:
         cr.severity = analysis_result.get("severity", "low")
         cr.impact_report = analysis_result.get("impact_report", "")
         cr.affected_features = json.dumps(analysis_result.get("affected_features", []))
-        
+
         db.add(cr)
         await db.commit()
         logger.info(f"ChangeRequest {cr.id} successfully updated with impact analysis.")
 
 @celery_app.task(name="app.tasks.impact_tasks.run_impact_analysis_task")
 def run_impact_analysis_task(change_request_id_str: str) -> None:
-    """
-    Celery background task to analyze the impact of a change request.
-    """
     logger.info(f"Celery task run_impact_analysis_task started for change request: {change_request_id_str}")
     try:
         change_request_id = uuid.UUID(change_request_id_str)

@@ -1,13 +1,3 @@
-"""
-ReqSense AI — FastAPI application factory.
-
-Middleware order (outermost → innermost):
-  1. RequestIDMiddleware  — attaches/propagates X-Request-ID
-  2. CORSMiddleware       — handles preflight before any auth runs
-  3. Route handlers
-  4. Error handlers       — catch everything that reaches the edge
-"""
-
 import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,13 +22,11 @@ import asyncio
 from contextlib import asynccontextmanager
 from app.services.embedding_service import EmbeddingService
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     loop = asyncio.get_event_loop()
     loop.run_in_executor(None, EmbeddingService.preload_model)
     yield
-
 
 app = FastAPI(
     title="ReqSense AI",
@@ -58,7 +46,6 @@ from app.services.rate_limit_service import limiter
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
-
 
 app.add_middleware(
     CORSMiddleware,
@@ -91,4 +78,3 @@ app.include_router(change_requests.router, prefix="/api/v1")
 app.include_router(analytics.router, prefix="/api/v1")
 app.include_router(audit_logs.router, prefix="/api/v1")
 app.include_router(requirement_atoms.router, prefix="/api/v1")
-

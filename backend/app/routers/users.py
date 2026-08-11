@@ -1,6 +1,3 @@
-"""
-Users router — user profile self-service + full admin CRUD.
-"""
 import uuid
 from typing import List, Optional
 
@@ -17,11 +14,9 @@ from app.services.auth_service import hash_password
 
 router = APIRouter(prefix="/users", tags=["users"])
 
-
 @router.get("/me", response_model=UserResponse, summary="Get current user profile")
 async def get_me(current_user: CurrentUser) -> UserResponse:
     return UserResponse.model_validate(current_user)
-
 
 @router.get("/lookup", response_model=UserLookupResponse, summary="Look up user by email")
 async def lookup_user(
@@ -29,9 +24,6 @@ async def lookup_user(
     current_user: User = Depends(require_roles("admin", "developer")),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Look up user by email, scoped to the current user's organization.
-    """
     query = select(User).where(User.email == email)
     if current_user.organization_id:
         query = query.where(User.organization_id == current_user.organization_id)
@@ -43,8 +35,6 @@ async def lookup_user(
             detail="User not found in your organization."
         )
     return user
-
-
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def admin_create_user(
@@ -82,7 +72,7 @@ async def admin_create_user(
         is_active=True,
     )
     db.add(user)
-    await db.flush()  # get the new user's ID before committing
+    await db.flush()
     db.add(AuditLog(
         user_id=current_user.id,
         action="admin_create_user",
@@ -93,7 +83,6 @@ async def admin_create_user(
     await db.commit()
     await db.refresh(user)
     return user
-
 
 @router.get("", response_model=List[UserResponse])
 async def admin_list_users(
@@ -116,7 +105,6 @@ async def admin_list_users(
     res = await db.execute(q)
     return res.scalars().all()
 
-
 @router.get("/{user_id}", response_model=UserResponse)
 async def admin_get_user(
     user_id: uuid.UUID,
@@ -132,7 +120,6 @@ async def admin_get_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
     return user
-
 
 @router.patch("/{user_id}", response_model=UserResponse)
 async def admin_update_user(
@@ -167,7 +154,6 @@ async def admin_update_user(
     await db.commit()
     await db.refresh(user)
     return user
-
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def admin_delete_user(

@@ -1,20 +1,3 @@
-"""
-Standard error envelope middleware + exception handlers.
-
-Every error response from the API has this shape:
-{
-    "error": {
-        "code": "VALIDATION_ERROR",       # machine-readable
-        "message": "...",                  # human-readable
-        "request_id": "uuid",
-        "detail": [...]                    # optional, e.g. pydantic field errors
-    }
-}
-
-This means the frontend always knows exactly where to find the error message
-and request_id regardless of which endpoint produced the error.
-"""
-
 import logging
 from typing import Any
 
@@ -28,7 +11,6 @@ from app.middleware.request_id import get_request_id
 
 logger = logging.getLogger(__name__)
 
-
 def _error_envelope(
     code: str,
     message: str,
@@ -40,10 +22,7 @@ def _error_envelope(
         body["detail"] = detail
     return {"error": body}
 
-
 def register_error_handlers(app: FastAPI) -> None:
-    """Attach all exception handlers to the FastAPI app."""
-
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(
         request: Request, exc: StarletteHTTPException
@@ -72,7 +51,6 @@ def register_error_handlers(app: FastAPI) -> None:
                 request_id=request_id,
             ),
         )
-
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(
