@@ -26,7 +26,6 @@ async def create_session(
     current_user: User = Depends(require_roles("admin", "developer", "client")),
     db: AsyncSession = Depends(get_db),
 ):
-    # Verify the user has access to the project
     await get_scoped_project(project_id=body.project_id, user=current_user, db=db)
 
     session = Session(
@@ -40,8 +39,6 @@ async def create_session(
     await db.commit()
     await db.refresh(session)
 
-    # ── Carry conversational memory forward from the project's most recent
-    #    prior sessions so ARIA doesn't "forget" everything on a new session ──
     try:
         prev_res = await db.execute(
             select(Message)
@@ -54,7 +51,6 @@ async def create_session(
         )
         prev_msgs = list(reversed(prev_res.scalars().all()))
         if prev_msgs:
-            # Prepend context marker so ARIA acknowledges history without re-asking
             marker = {
                 "sender": "aria",
                 "content": (
@@ -63,7 +59,6 @@ async def create_session(
                 ),
             }
             all_msgs = [marker] + [{"sender": m.sender, "content": m.content} for m in prev_msgs]
-            # Single pipeline batch-write — far more efficient than N round-trips
             from app.services.session_memory import get_redis_client
             import json as _json
             try:
@@ -76,13 +71,11 @@ async def create_session(
                     pipe.expire(key, 86400)
                     await pipe.execute()
             except Exception as redis_err:
-                # Non-fatal — worst case ARIA uses DB fallback on first message
                 import logging as _logging
                 _logging.getLogger(__name__).warning(
                     "Session pre-seed Redis write failed (non-fatal): %s", redis_err
                 )
     except Exception:
-        # Non-fatal — worst case ARIA just starts with less context this time
         pass
 
     return session
@@ -95,7 +88,6 @@ async def list_sessions_for_project(
     current_user: User = Depends(require_roles("admin", "developer", "client")),
     db: AsyncSession = Depends(get_db),
 ):
-    # Verify access to the project
     await get_scoped_project(project_id=project_id, user=current_user, db=db)
 
     q = select(Session).where(Session.project_id == project_id)
@@ -138,7 +130,6 @@ async def _get_scoped_session(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Session not found.",
         )
-    # Perform scoping check via the session's project
     await get_scoped_project(project_id=session.project_id, user=user, db=db)
     return session
 
@@ -177,7 +168,6 @@ async def end_session(
     await db.refresh(session)
 
     srs_status = "generated"
-    # Automatically generate SRS document on completion
     if body.status == "completed":
         try:
             await SRSGenerator.generate_srs(session_id, db)

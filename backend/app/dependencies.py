@@ -96,7 +96,6 @@ def require_same_org_check(user: User, resource_org_id: Optional[uuid.UUID]) -> 
         )
 
 
-# Convenience type aliases for use in route signatures
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
@@ -126,7 +125,6 @@ async def get_scoped_project(
     if user.role == "admin":
         return project
 
-    # Client membership check
     if user.role == "client":
         if project.organization_id and user.organization_id == project.organization_id:
             return project
@@ -153,7 +151,6 @@ async def get_scoped_project(
             detail="Project not found.",
         )
 
-    # Developer check: must be assigned developer OR in same org
     if user.role == "developer":
         if project.developer_id == user.id:
             return project

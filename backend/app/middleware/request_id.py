@@ -27,7 +27,6 @@ from starlette.responses import Response
 
 REQUEST_ID_CTX: ContextVar[str] = ContextVar("request_id", default="")
 
-# Security headers applied unconditionally on every response.
 _SECURITY_HEADERS: dict[str, str] = {
     "X-Frame-Options": "DENY",
     "X-Content-Type-Options": "nosniff",
@@ -42,7 +41,6 @@ _SECURITY_HEADERS: dict[str, str] = {
         "connect-src 'self'; "
         "frame-ancestors 'none';"
     ),
-    # 2 years — max recommended by HSTS preload list
     "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
 }
 
@@ -52,10 +50,6 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
         token = REQUEST_ID_CTX.set(request_id)
 
-        # Tag every Sentry event on this request with the request_id so
-        # support can search Sentry by ID reported in an API error response.
-        # sentry_sdk.set_tag() is compatible with SDK v1 and v2 (configure_scope
-        # was removed in v2). Safe to call when Sentry is disabled — it's a no-op.
         try:
             sentry_sdk.set_tag("request_id", request_id)
         except Exception:
@@ -66,10 +60,8 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         finally:
             REQUEST_ID_CTX.reset(token)
 
-        # Propagate the ID back to the caller (frontend stores it for support)
         response.headers["X-Request-ID"] = request_id
 
-        # Attach security headers
         for header, value in _SECURITY_HEADERS.items():
             response.headers[header] = value
 

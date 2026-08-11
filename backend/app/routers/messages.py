@@ -100,7 +100,6 @@ def _find_keyword_match(
         "source": "keyword_fallback",
     }
 
-# ── helpers ───────────────────────────────────────────────────────────────────
 
 async def _get_scoped_active_session(
     session_id: uuid.UUID,
@@ -128,7 +127,6 @@ def _is_test_env() -> bool:
     return settings.GROQ_API_KEY.startswith("test") or settings.GROQ_API_KEY.startswith("mock")
 
 
-# ── POST ──────────────────────────────────────────────────────────────────────
 
 @router.post("", response_model=MessageRead, status_code=status.HTTP_201_CREATED)
 async def create_message(
@@ -145,18 +143,14 @@ async def create_message(
     """
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
 
-    # ── 0. Session gating ────────────────────────────────────────────────────
     session = await _get_scoped_active_session(session_id, current_user, db)
 
-    # Only clients may initiate a gathering message — developers/admins
-    # can observe but not inject as the client voice.
     if body.sender in ("client", "user") and current_user.role not in ("client", "admin", "developer"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only clients can send gathering messages in a session.",
         )
 
-    # Load project for per-project Chroma threshold + prior atoms for fallback
     project = await db.scalar(select(Project).where(Project.id == session.project_id))
     chroma_threshold = (
         project.chroma_similarity_threshold
@@ -174,8 +168,6 @@ async def create_message(
             .limit(200)
         )
     ).scalars().all()
-    # Structured rolling summary of prior atoms for ARIA context.
-    # Format: "Subject: X | Action: Y | Constraint: Z" — more informative than raw_text alone.
     def _fmt_atom(a) -> str:
         parts = []
         if a.subject:
@@ -189,11 +181,9 @@ async def create_message(
 
     atom_summary_parts = [_fmt_atom(a) for a in prior_atoms[:60] if a.raw_text or a.action]
     atom_summary = "\n".join(atom_summary_parts)
-    # Truncate to a generous but bounded size for the prompt window
     if len(atom_summary) > 3000:
         atom_summary = atom_summary[:3000] + "..."
 
-    # Feature status summary — gives ARIA visibility into what devs have built
     feature_rows = (
         await db.execute(
             select(FeatureStatus.title, FeatureStatus.status)
@@ -206,28 +196,18 @@ async def create_message(
         f"{row.title} ({row.status})" for row in feature_rows
     ) if feature_rows else ""
 
-    # ── 1. Sanitize user input (RDCD) — pre-transaction ─────────────────────
     sanitized_content, is_flagged = RDCDLayer.sanitize_input(body.content)
 
-    # ── 2. Fetch session history (Redis → DB fallback) — pre-transaction ────
-    # SessionMemory.get_messages() handles Redis unavailability internally:
-    # it falls back to the DB and re-seeds Redis. History is always populated
-    # from actual client/ARIA conversation turns (no conflict_alert blobs).
     history = await SessionMemory.get_messages(session_id, db=db)
 
-    # If this is the first message in a new session with no prior history,
-    # seed from the most recent completed session on the same project so
-    # ARIA doesn't start cold on session #2+.
     if not history:
         await SessionMemory.seed_from_prior_session(
             current_session_id=session_id,
             project_id=session.project_id,
             db=db,
         )
-        # Re-fetch to pick up the seeded turns
         history = await SessionMemory.get_messages(session_id, db=db)
 
-    # ── 3 & 4. Call ARIA (Groq) & Extract Atoms (Groq) in PARALLEL ────────────
     project_context = {
         "name": project.name if project else "",
         "description": project.description if project else "",
@@ -254,7 +234,7 @@ async def create_message(
 
     atoms_task = (
         loop.run_in_executor(None, RDCDLayer.extract_atoms, sanitized_content)
-        if body.sender in ("client", "user")
+        if body.sender in ("client", "user") and not is_flagged
         else _empty_list()
     )
 
@@ -287,7 +267,6 @@ async def create_message(
         logger.error("Parallel ARIA/Atom execution error: %s", exc)
         aria_content = "I'm sorry, an error occurred while processing your message."
 
-    # ── 5. Embed atoms + search Chroma in parallel for contradictions ─────────
     async def _evaluate_candidate_match(atom_dict: dict, match: dict):
         existing_atom_dict = {
             "raw_text": match.get("document", ""),
@@ -312,8 +291,6 @@ async def create_message(
         raw_text = atom_dict.get("raw_text", sanitized_content)
         matches = []
         try:
-            # Use chroma_is_mocked flag (not _is_test_env) so real Chroma is
-            # always queried when properly configured, even during development.
             if not settings.chroma_is_mocked:
                 embedding = await loop.run_in_executor(None, EmbeddingService.embed, raw_text)
                 results = await loop.run_in_executor(
@@ -338,27 +315,22 @@ async def create_message(
         except Exception as exc:
             logger.warning("Chroma query failed for atom '%s...': %s", raw_text[:60], exc)
 
-        # Keyword fallback: runs when Chroma finds nothing (new project, empty index, etc.)
         if not matches and prior_atoms:
             fb = _find_keyword_match(atom_dict, prior_atoms)
             if fb:
                 logger.debug("Keyword fallback matched prior atom for contradiction check.")
                 matches.append(fb)
 
-        # Run candidate evaluations concurrently in parallel
         eval_tasks = [_evaluate_candidate_match(atom_dict, match) for match in matches]
         eval_results = await asyncio.gather(*eval_tasks) if eval_tasks else []
         evaluations = [r for r in eval_results if r is not None]
 
         return (atom_dict, evaluations)
 
-    # Process all extracted atoms concurrently
     tasks = [_process_single_atom(a) for a in extracted_atoms]
     atom_contradiction_pairs = await asyncio.gather(*tasks) if tasks else []
 
-    # ── 6. Single atomic DB transaction ──────────────────────────────────────
     try:
-        # If input was flagged during sanitization, record AuditLog inside transaction
         if is_flagged:
             from app.models.audit_log import AuditLog
             audit_log = AuditLog(
@@ -370,7 +342,6 @@ async def create_message(
             )
             db.add(audit_log)
 
-        # Write user message
         user_msg = Message(
             session_id=session_id,
             sender=body.sender,
@@ -379,7 +350,6 @@ async def create_message(
         )
         db.add(user_msg)
 
-        # Write ARIA reply
         aria_msg = Message(
             session_id=session_id,
             sender="aria",
@@ -388,7 +358,6 @@ async def create_message(
         )
         db.add(aria_msg)
 
-        # Increment session message counter
         session.total_messages = (session.total_messages or 0) + 2
         db.add(session)
 
@@ -409,8 +378,6 @@ async def create_message(
             ra.embedding_id = str(ra.id)
             persisted_atoms.append((atom_dict, ra))
 
-            # ── Auto-create a tracked feature so developers see it on the
-            #    Kanban board without manual entry ──
             if ra.subject and ra.action:
                 feature_title = f"{ra.subject}: {ra.action}"[:255]
                 db.add(FeatureStatus(
@@ -428,7 +395,6 @@ async def create_message(
                 conf = contradiction_result.get("confidence") or 0.0
                 conflict_type = contradiction_result.get("conflict_type", "none")
 
-                # Filter by confidence threshold before interrupting chat
                 if (
                     conflict_type not in ("none", "check_failed")
                     and conf >= settings.CONTRADICTION_CONFIDENCE_THRESHOLD
@@ -451,7 +417,6 @@ async def create_message(
                     )
                     db.add(c)
 
-                    # Wire contradiction into chat as a conflict_alert Message
                     conflict_msg = Message(
                         session_id=session_id,
                         sender="aria",
@@ -482,7 +447,6 @@ async def create_message(
             detail="Failed to persist message.",
         ) from exc
 
-    # ── 7. Update Redis session memory (after successful commit) ─────────────
     try:
         await SessionMemory.add_message(
             session_id, {"sender": body.sender, "content": sanitized_content}
@@ -493,7 +457,6 @@ async def create_message(
     except Exception as exc:
         logger.warning("Failed to update Redis session memory: %s", exc)
 
-    # ── 8. Embed new atoms into Chroma (best-effort, after commit) ───────────
     if not settings.chroma_is_mocked:
         for atom_dict, ra in persisted_atoms:
             try:
@@ -520,7 +483,6 @@ async def create_message(
     return user_msg
 
 
-# ── GET (list) ────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=List[MessageRead])
 async def list_messages(
@@ -548,16 +510,11 @@ async def list_messages(
     )
     messages = result.scalars().all()
 
-    # ── Live-patch conflict_alert messages with current Contradiction status ──
-    # The stored content JSON is written once at detection time. We overwrite
-    # the status field in the response payload (not in the DB) so the frontend
-    # always renders the current resolution state of the contradiction.
     conflict_ids = [
         json.loads(m.content).get("contradiction_id")
         for m in messages
         if m.message_type == "conflict_alert" and m.content
     ]
-    # Deduplicate and batch-fetch live Contradiction rows
     live_contradictions: dict = {}
     if conflict_ids:
         unique_ids = list({cid for cid in conflict_ids if cid})
@@ -575,7 +532,6 @@ async def list_messages(
         except Exception as exc:
             logger.warning("Failed to batch-fetch contradiction statuses: %s", exc)
 
-    # Build response, enriching conflict_alert rows with live status
     response = []
     for m in messages:
         if m.message_type == "conflict_alert" and m.content and live_contradictions:

@@ -34,7 +34,6 @@ async def get_organization(
     current_user: User = Depends(require_roles("admin", "developer", "client")),
     db: AsyncSession = Depends(get_db),
 ):
-    # Non-admins can only see their own organization
     if current_user.role != "admin" and current_user.organization_id != org_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

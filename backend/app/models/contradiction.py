@@ -52,9 +52,6 @@ class Contradiction(Base):
     )
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # ── Source tracking ───────────────────────────────────────────────────────
-    # 'chat' = detected during a live gathering session
-    # 'change_request' = detected when a change request was submitted
     source: Mapped[str] = mapped_column(String(20), default="chat", nullable=False)
     change_request_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(), ForeignKey("change_requests.id", ondelete="SET NULL"), nullable=True

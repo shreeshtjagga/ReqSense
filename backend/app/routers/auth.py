@@ -105,7 +105,6 @@ async def forgot_password(
     body: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
-    # Always 200 — don't reveal whether the email exists
     raw_token = await auth_service.initiate_password_reset(db, email=body.email)
     if raw_token:
         from app.services.notification_service import send_password_reset_email

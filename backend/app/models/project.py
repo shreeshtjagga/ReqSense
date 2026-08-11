@@ -72,7 +72,6 @@ class Project(Base):
     closure_requested_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    # Chroma distance threshold for contradiction recall (lower = stricter)
     chroma_similarity_threshold: Mapped[float] = mapped_column(
         Float, default=0.55, nullable=False
     )

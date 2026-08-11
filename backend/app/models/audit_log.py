@@ -11,7 +11,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
 
-# Cross-dialect JSON: JSONB on PostgreSQL, plain JSON on SQLite (tests)
 _JSON = JSON().with_variant(JSONB(), "postgresql")
 
 

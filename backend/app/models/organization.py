@@ -25,6 +25,5 @@ class Organization(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    # relationships (back-populated by child models)
     users: Mapped[List["User"]] = relationship(back_populates="organization")
     projects: Mapped[List["Project"]] = relationship(back_populates="organization")

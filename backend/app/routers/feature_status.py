@@ -28,7 +28,6 @@ async def create_feature_status(
             detail="Must provide either project_id or atom_id."
         )
 
-    # Check access to the project
     await get_scoped_project(project_id, current_user, db)
 
     feature = FeatureStatus(
@@ -110,7 +109,6 @@ async def update_feature_status(
 
     await get_scoped_project(feature.project_id, current_user, db)
 
-    # Optimistic locking check
     if feature.version != body.version:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -122,7 +120,6 @@ async def update_feature_status(
     if body.description is not None:
         feature.description = body.description
 
-    # Increment version
     feature.version += 1
     feature.updated_by = current_user.id
 

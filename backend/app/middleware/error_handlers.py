@@ -49,7 +49,6 @@ def register_error_handlers(app: FastAPI) -> None:
         request: Request, exc: StarletteHTTPException
     ) -> JSONResponse:
         request_id = get_request_id()
-        # Map common HTTP codes to machine-readable codes
         code_map = {
             400: "BAD_REQUEST",
             401: "UNAUTHORIZED",
@@ -80,8 +79,6 @@ def register_error_handlers(app: FastAPI) -> None:
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         request_id = get_request_id()
-        # Pydantic v2 errors() can contain non-serializable objects (ValueError);
-        # convert each error's 'ctx' values to strings for safe JSON encoding.
         safe_errors = []
         for err in exc.errors():
             safe_err = dict(err)
@@ -109,9 +106,6 @@ def register_error_handlers(app: FastAPI) -> None:
             request.method,
             request.url.path,
         )
-        # Capture explicitly so 500s always reach Sentry even when
-        # traces_sample_rate < 1 (the FastAPI integration only samples traces,
-        # not error events, but being explicit here removes all ambiguity).
         with sentry_sdk.push_scope() as scope:
             scope.set_tag("request_id", request_id)
             scope.set_context("request", {

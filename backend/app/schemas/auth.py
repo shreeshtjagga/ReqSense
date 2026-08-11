@@ -9,7 +9,6 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional
 
 
-# ── Registration ──────────────────────────────────────────────────────────────
 
 class RegisterRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
@@ -36,7 +35,6 @@ class RegisterResponse(BaseModel):
     message: str = "Registration successful."
 
 
-# ── Login ─────────────────────────────────────────────────────────────────────
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -50,19 +48,16 @@ class TokenResponse(BaseModel):
     expires_in: int  # access token lifetime in seconds
 
 
-# ── Refresh ───────────────────────────────────────────────────────────────────
 
 class RefreshRequest(BaseModel):
     refresh_token: str
 
 
-# ── Logout ────────────────────────────────────────────────────────────────────
 
 class LogoutRequest(BaseModel):
     refresh_token: str
 
 
-# ── Forgot / Reset password ───────────────────────────────────────────────────
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
@@ -82,7 +77,6 @@ class ResetPasswordRequest(BaseModel):
         return v
 
 
-# ── JWT payload ───────────────────────────────────────────────────────────────
 
 class TokenPayload(BaseModel):
     sub: str          # user UUID as string

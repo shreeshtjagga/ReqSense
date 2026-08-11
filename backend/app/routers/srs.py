@@ -41,7 +41,6 @@ async def get_latest_srs(
             detail="No SRS document found for this project."
         )
 
-    # Fetch active requirement atoms for this project/session
     atoms_res = await db.execute(
         select(RequirementAtom)
         .where(
@@ -108,7 +107,6 @@ async def download_srs_file(
     Serves the SRS Word .docx file for local/mock storage mode or redirects to S3.
     Requires authentication — same as all other SRS endpoints.
     """
-    # Basic path-traversal guard
     if ".." in key:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

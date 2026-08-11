@@ -70,7 +70,6 @@ async def list_projects(
             select(Project).where(or_(*conditions))
         )
     else:
-        # client — projects where they are invited
         result = await db.execute(
             select(Project)
             .join(ProjectClient, ProjectClient.project_id == Project.id)
@@ -137,7 +136,6 @@ async def add_client_to_project(
     current_user: User = Depends(require_roles("admin", "developer")),
     db: AsyncSession = Depends(get_db),
 ):
-    # Ensure the client being added exists and belongs to the same org
     from app.models.user import User
     client_res = await db.execute(select(User).where(User.id == body.client_id))
     client_user = client_res.scalar_one_or_none()
@@ -152,7 +150,6 @@ async def add_client_to_project(
             detail="That user is not a client account. Each email has one role — use a separate client email.",
         )
 
-    # Check if client is already invited
     existing_res = await db.execute(
         select(ProjectClient).where(
             ProjectClient.project_id == project.id,
@@ -170,7 +167,6 @@ async def add_client_to_project(
     await db.commit()
     await db.refresh(pc)
 
-    # Queue invite email via Celery task
     from app.services.notification_service import send_project_invite_email
     from app.config import get_settings
     settings = get_settings()
@@ -312,7 +308,6 @@ async def create_project_invite(
 
     email = body.email.strip().lower()
 
-    # If user already exists in this org, tell the developer to use Add Client instead
     existing = await db.execute(select(User).where(User.email == email))
     existing_user = existing.scalar_one_or_none()
     if existing_user:

@@ -41,7 +41,6 @@ async def create_change_request(
             detail="Must provide project_id either in request body or as a query parameter."
         )
 
-    # Scoped access check — raises 403 if user has no access to this project
     await get_scoped_project(pid, current_user, db)
 
     cr = ChangeRequest(
@@ -58,9 +57,6 @@ async def create_change_request(
     await db.commit()
     await db.refresh(cr)
 
-    # ── Inline impact analysis (mirrors sessions.py SRS pattern) ─────────────
-    # Runs synchronously so the CR is returned with severity + impact_report
-    # already populated. Only falls back to Celery if the inline call itself fails.
     analysis_result: dict = {}
     try:
         analysis_result = await ImpactAnalyser.analyze_impact(
@@ -85,8 +81,6 @@ async def create_change_request(
         except Exception as celery_err:
             logger.error(f"Celery fallback also failed for {cr.id}: {celery_err}")
 
-    # ── Persist RDCD-detected requirement contradictions ──────────────────────
-    # conflict_hits is a list of dicts set by ImpactAnalyser._check_requirement_conflicts
     conflict_hits = analysis_result.get("_conflict_hits", [])
     if conflict_hits:
         for hit in conflict_hits:
@@ -175,7 +169,6 @@ async def review_change_request(
 
     await get_scoped_project(cr.project_id, current_user, db)
 
-    # Optimistic locking check
     if cr.version != body.version:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

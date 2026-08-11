@@ -23,7 +23,6 @@ class ChangeRequest(Base):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)  # max 10000 chars (app layer)
-    # affected_features stored as JSON list — TEXT on Postgres, JSON on SQLite
     affected_features: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     impact_report: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     severity: Mapped[Optional[str]] = mapped_column(

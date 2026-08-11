@@ -112,7 +112,6 @@ async def project_summary(
         .where(Session.project_id == project.id)
     )
 
-    # Avg client→ARIA response time from ordered message pairs
     msg_rows = (
         await db.execute(
             select(Message.sender, Message.created_at, Message.session_id)
@@ -233,7 +232,6 @@ async def developer_portfolio(
         )
     ) or 0
 
-    # SRS turnaround: session start → first SRS version for that session
     srs_rows = (
         await db.execute(
             select(Session.started_at, SRSVersion.created_at)
