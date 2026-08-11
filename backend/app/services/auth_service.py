@@ -37,15 +37,12 @@ from app.schemas.auth import TokenResponse
 
 settings = get_settings()
 
-# argon2-cffi hasher — defaults are deliberately conservative
 _ph = PasswordHasher()
 
-# Lockout policy
 _MAX_FAILED_ATTEMPTS = 5
 _LOCKOUT_MINUTES = 15
 
 
-# ── Password utilities ────────────────────────────────────────────────────────
 
 def hash_password(plain: str) -> str:
     return _ph.hash(plain)
@@ -58,7 +55,6 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-# ── Token utilities ───────────────────────────────────────────────────────────
 
 def _hash_token(raw: str) -> str:
     """SHA-256 hash a token before storing. Never store raw refresh tokens."""
@@ -97,7 +93,6 @@ def decode_token(token: str) -> dict:
         )
 
 
-# ── Auth flows ────────────────────────────────────────────────────────────────
 
 async def register_user(
     db: AsyncSession,
@@ -138,11 +133,9 @@ async def register_user(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email must match the invite address.",
             )
-        # Invite dictates org + role (single-role accounts)
         organization_id = invite.organization_id
         role = invite.role
 
-    # Duplicate email check
     existing = await db.execute(select(User).where(User.email == email))
     if existing.scalar_one_or_none():
         raise HTTPException(
@@ -177,7 +170,6 @@ async def login_user(
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
 
-    # Unified "invalid credentials" message — don't reveal whether email exists
     _invalid = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid email or password.",
@@ -186,7 +178,6 @@ async def login_user(
     if not user:
         raise _invalid
 
-    # Lockout check
     now = datetime.now(timezone.utc)
     if user.locked_until and _as_utc(user.locked_until) > now:
         remaining = int((_as_utc(user.locked_until) - now).total_seconds() / 60) + 1
@@ -201,25 +192,18 @@ async def login_user(
             detail="Account is deactivated.",
         )
 
-    # NOTE: email_verified is NOT checked here in v1 (per master spec —
-    # gating deferred; the field is tracked and the email flow is wired,
-    # but we don't block login on it yet).
 
     if not verify_password(password, user.password_hash or ""):
         user.failed_login_attempts += 1
         if user.failed_login_attempts >= _MAX_FAILED_ATTEMPTS:
             user.locked_until = now + timedelta(minutes=_LOCKOUT_MINUTES)
-        # Commit before raising so lockout state isn't rolled back by the
-        # exception handler's rollback (SQLAlchemy flushes are transactional).
         await db.commit()
         raise _invalid
 
-    # Successful login — reset counter
     user.failed_login_attempts = 0
     user.locked_until = None
     await db.flush()
 
-    # Issue tokens
     access_token, expires_in = create_access_token(user)
     raw_refresh = secrets.token_urlsafe(48)
     refresh_record = RefreshToken(
@@ -257,7 +241,6 @@ async def refresh_tokens(
             detail="Refresh token is invalid or expired.",
         )
 
-    # Rotate — revoke old, issue new
     record.revoked = True
     await db.flush()
 
@@ -357,7 +340,6 @@ async def complete_password_reset(
 
     user.password_hash = hash_password(new_password)
     
-    # Revoke all old refresh tokens for this user
     from sqlalchemy import update
     await db.execute(
         update(RefreshToken)

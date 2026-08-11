@@ -48,7 +48,6 @@ class StorageService:
         s3 = get_s3_client()
 
         if s3 is None:
-            # Mock upload — copy file persistently to storage_files/{s3_key}
             logger.info(f"[MOCK STORAGE] Saving {local_file_path} to storage_files/{s3_key}")
             target_path = _BASE_DIR / "storage_files" / s3_key
             target_path.parent.mkdir(parents=True, exist_ok=True)

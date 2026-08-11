@@ -43,7 +43,6 @@ class AriaAgent:
         )
 
         messages = [{"role": "system", "content": system_prompt}]
-        # Cap to last 16 turns
         recent_history = history[-16:] if len(history) > 16 else history
         for msg in recent_history:
             role = "user" if msg.get("sender") in ("client", "user") else "assistant"

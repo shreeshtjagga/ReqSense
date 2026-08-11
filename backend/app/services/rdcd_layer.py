@@ -76,8 +76,7 @@ class RDCDLayer:
             )
             raw_response = response.choices[0].message.content.strip()
             clean_json = strip_json_fences(raw_response)
-            extracted = json.loads(clean_json)
-            # Basic validation: ensure list of dicts with raw_text
+            extracted = json.loads(clean_json, strict=False)
             if isinstance(extracted, list):
                 valid_atoms = []
                 for item in extracted:
@@ -145,7 +144,7 @@ class RDCDLayer:
             )
             raw_response = response.choices[0].message.content.strip()
             clean_json = strip_json_fences(raw_response)
-            parsed = json.loads(clean_json)
+            parsed = json.loads(clean_json, strict=False)
             if isinstance(parsed, dict) and "conflict_type" in parsed:
                 return parsed
             return {
@@ -155,7 +154,6 @@ class RDCDLayer:
             }
         except Exception as e:
             logger.error(f"Failed to detect contradiction: {e}")
-            # Sentinel return on final failure: distinguishes transient failure from 'no conflict'
             return {
                 "conflict_type": "check_failed",
                 "confidence": None,

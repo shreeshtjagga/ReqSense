@@ -35,7 +35,6 @@ def strip_json_fences(text: str) -> str:
     """Strip markdown code fences and conversational text from LLM responses to extract JSON."""
     text = (text or "").strip()
     
-    # 1. Try to find a ```json ... ``` fence specifically
     json_fence_match = re.search(r"```json\s*\n?(.*?)\n?```", text, re.DOTALL | re.IGNORECASE)
     if json_fence_match:
         candidate = json_fence_match.group(1).strip()
@@ -45,7 +44,6 @@ def strip_json_fences(text: str) -> str:
         except Exception:
             pass
 
-    # 2. Try finding raw JSON array [...] or object {...} substrings that parse cleanly
     for match in re.finditer(r"(\[[\s\S]*\]|\{[\s\S]*\})", text):
         candidate = match.group(0).strip()
         try:
@@ -54,7 +52,6 @@ def strip_json_fences(text: str) -> str:
         except Exception:
             continue
 
-    # 3. Fallback: extract content between first bracket and last bracket
     brackets = [pos for pos in (text.find("["), text.find("{")) if pos != -1]
     if brackets:
         start = min(brackets)

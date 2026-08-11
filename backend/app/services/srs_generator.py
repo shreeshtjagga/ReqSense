@@ -32,7 +32,6 @@ class SRSGenerator:
         start_time = time.time()
         logger.info(f"Starting SRS generation for session: {session_id}")
 
-        # 1. Fetch the session, project, and requirement atoms
         session_result = await db.execute(select(Session).where(Session.id == session_id))
         session = session_result.scalar_one_or_none()
         if not session:
@@ -50,8 +49,6 @@ class SRSGenerator:
         )
         atoms = atoms_result.scalars().all()
 
-        # 2. Fetch verbatim client messages for Section 3 (raw statements)
-        #    These are the actual words the client spoke, not the extracted atoms.
         client_msgs_result = await db.execute(
             select(Message)
             .join(Session, Session.id == Message.session_id)
@@ -64,7 +61,6 @@ class SRSGenerator:
         )
         client_messages = client_msgs_result.scalars().all()
 
-        # 2b. Fetch contradictions/conflicts detected during chat sessions or CR reviews
         session_ids_q = select(Session.id).where(Session.project_id == session.project_id)
         cr_ids_q = select(ChangeRequest.id).where(ChangeRequest.project_id == session.project_id)
 
@@ -81,7 +77,6 @@ class SRSGenerator:
         contradictions_res = await db.execute(contradictions_q)
         contradictions = contradictions_res.scalars().all()
 
-        # 3. Call Groq to generate a professional project summary/intro
         summary_text = "No summary generated."
         llm_model = settings.GROQ_MODEL
         if atoms:
@@ -117,13 +112,11 @@ class SRSGenerator:
                     f"{len(atoms)} requirement atoms were captured across the gathering sessions."
                 )
 
-        # 4. Create the Word document using python-docx with professional styling
         doc = docx.Document()
         from docx.shared import Inches, Pt, RGBColor
         from docx.enum.text import WD_ALIGN_PARAGRAPH
         from docx.enum.table import WD_TABLE_ALIGNMENT
 
-        # Title
         title_p = doc.add_paragraph()
         title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         title_run = title_p.add_run("SOFTWARE REQUIREMENTS SPECIFICATION")
@@ -141,7 +134,6 @@ class SRSGenerator:
 
         doc.add_paragraph()  # spacing
 
-        # Executive Metadata Table
         meta_table = doc.add_table(rows=4, cols=2)
         meta_table.alignment = WD_TABLE_ALIGNMENT.CENTER
         meta_table.style = 'Table Grid'
@@ -166,20 +158,17 @@ class SRSGenerator:
 
         doc.add_paragraph()
 
-        # Section 1: Executive Summary
         h1 = doc.add_heading("1. Executive Summary", level=1)
         h1.runs[0].font.color.rgb = RGBColor(30, 58, 138)
         p_sum = doc.add_paragraph(summary_text)
         p_sum.paragraph_format.line_spacing = 1.25
 
-        # Section 2: Functional Requirements
         h2 = doc.add_heading("2. Functional Requirements", level=1)
         h2.runs[0].font.color.rgb = RGBColor(30, 58, 138)
 
         if not atoms:
             doc.add_paragraph("No requirements captured for this project yet.")
         else:
-            # Group requirements by subject domain for a professional, structured document
             from collections import defaultdict
             atoms_by_subject = defaultdict(list)
             for atom in atoms:
@@ -195,7 +184,6 @@ class SRSGenerator:
                 table.style = 'Table Grid'
                 table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
-                # Header Row
                 hdr_cells = table.rows[0].cells
                 hdr_titles = ["Ref #", "Subject Domain", "Action Statement", "Constraint Details"]
                 for idx, text in enumerate(hdr_titles):
@@ -214,8 +202,6 @@ class SRSGenerator:
 
                 doc.add_paragraph()
 
-        # Section 3: Verbatim Client Statements
-        #   Uses the actual messages the client typed — not the extracted/normalized atoms.
         h3 = doc.add_heading("3. Verbatim Client Statements", level=1)
         h3.runs[0].font.color.rgb = RGBColor(30, 58, 138)
         note_p = doc.add_paragraph(
@@ -235,7 +221,6 @@ class SRSGenerator:
 
         doc.add_paragraph()
 
-        # Section 4: Requirement Conflicts & Clarifications
         h4 = doc.add_heading("4. Requirement Conflicts & Clarifications", level=1)
         h4.runs[0].font.color.rgb = RGBColor(30, 58, 138)
         note_p4 = doc.add_paragraph(
@@ -268,19 +253,16 @@ class SRSGenerator:
                 row_cells[2].paragraphs[0].add_run(c.status.title())
                 row_cells[3].paragraphs[0].add_run(c.resolution or "Pending stakeholder review.")
 
-        # 5. Save to a temporary file
         fd, temp_path = tempfile.mkstemp(suffix=".docx")
         try:
             os.close(fd)
             doc.save(temp_path)
 
-            # 6. Determine version number — use patch-style versioning (1.0, 1.1, …)
             version_q = select(SRSVersion).where(SRSVersion.project_id == session.project_id)
             version_result = await db.execute(version_q)
             existing_count = len(version_result.scalars().all())
             version_str = f"1.{existing_count}"
 
-            # 7. Upload to S3/R2
             file_url = StorageService.upload_srs(
                 local_file_path=temp_path,
                 project_id=str(session.project_id),
@@ -292,7 +274,6 @@ class SRSGenerator:
 
         generation_latency_ms = int((time.time() - start_time) * 1000)
 
-        # 8. Write SRSVersion row
         srs_version = SRSVersion(
             project_id=session.project_id,
             session_id=session.id,
@@ -308,7 +289,6 @@ class SRSGenerator:
         await db.commit()
         await db.refresh(srs_version)
 
-        # 9. Send notification email to the client if client_id is set
         if session.client_id:
             try:
                 from app.models.user import User

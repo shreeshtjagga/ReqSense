@@ -21,7 +21,6 @@ celery_app.conf.update(
     enable_utc=True,
 )
 
-# Autodiscover tasks from the app.tasks package
 celery_app.conf.update(
     imports=[
         "app.tasks.email_tasks",

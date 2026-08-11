@@ -18,7 +18,6 @@ def get_redis_client():
     return _redis_client
 
 
-# Senders that carry meaningful conversational content for ARIA
 _CONVERSATIONAL_SENDERS = {"client", "user", "aria"}
 
 
@@ -68,13 +67,11 @@ class SessionMemory:
         messages: List[Dict[str, Any]] = []
         redis_available = True
 
-        # ── 1. Try Redis ──────────────────────────────────────────────────────
         try:
             raw_msgs = await r.lrange(key, 0, -1)
             for raw in raw_msgs:
                 try:
                     parsed = json.loads(raw)
-                    # Guard: skip any conflict_alert blobs that slipped into Redis
                     if parsed.get("sender") in _CONVERSATIONAL_SENDERS and parsed.get("message_type") != "conflict_alert":
                         messages.append(parsed)
                 except Exception as e:
@@ -83,11 +80,9 @@ class SessionMemory:
             logger.warning("Redis unavailable, falling back to DB for history: %s", exc)
             redis_available = False
 
-        # ── 2. DB fallback when Redis is empty or unavailable ─────────────────
         if not messages and db is not None:
             messages = await cls._load_from_db(session_id, db)
 
-            # Re-seed Redis so the next message in the same session hits cache
             if messages and redis_available:
                 try:
                     async with r.pipeline(transaction=True) as pipe:
@@ -108,7 +103,6 @@ class SessionMemory:
         Add a conversational message to session memory, keeping the last 40.
         Skips conflict_alert messages — they are DB-only, never in ARIA history.
         """
-        # Don't store conflict_alert blobs in ARIA's working memory
         if message.get("message_type") == "conflict_alert":
             return
 
@@ -119,7 +113,6 @@ class SessionMemory:
             async with r.pipeline(transaction=True) as pipe:
                 pipe.rpush(key, serialized)
                 pipe.ltrim(key, -40, -1)
-                # TTL: 24 hours so idle sessions clean up automatically
                 pipe.expire(key, 86400)
                 await pipe.execute()
         except Exception as exc:
@@ -156,7 +149,6 @@ class SessionMemory:
             from app.models.message import Message
             from app.models.session import Session
 
-            # Find the most recent prior session on this project (any status)
             prior_session_res = await db.execute(
                 select(Session)
                 .where(
@@ -173,7 +165,6 @@ class SessionMemory:
                 )
                 return
 
-            # Pull last 20 conversational turns from that session
             msgs_res = await db.execute(
                 select(Message)
                 .where(
@@ -188,8 +179,6 @@ class SessionMemory:
             if not prior_msgs:
                 return
 
-            # Prepend a lightweight system-style marker so ARIA knows it has prior context.
-            # This appears as an aria turn so it fits naturally into the conversation flow.
             marker = {
                 "sender": "aria",
                 "content": (
@@ -199,7 +188,6 @@ class SessionMemory:
             }
             seeded = [marker] + [{"sender": m.sender, "content": m.content} for m in prior_msgs]
 
-            # Seed into Redis under the current session's key
             r = get_redis_client()
             key = cls._get_key(current_session_id)
             try:

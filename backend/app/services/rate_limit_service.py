@@ -4,5 +4,4 @@ from app.config import get_settings
 
 settings = get_settings()
 
-# Initialize the Limiter using the remote address
 limiter = Limiter(key_func=get_remote_address)

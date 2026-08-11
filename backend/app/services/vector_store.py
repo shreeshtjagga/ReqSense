@@ -109,8 +109,6 @@ class VectorStore:
         """
         try:
             collection = cls.get_or_create_collection(session_id)
-            # ChromaDB raises InvalidArgumentError if n_results > index size.
-            # Count only once and bail early when nothing is stored yet.
             count = collection.count()
             if count == 0:
                 logger.debug("Chroma collection for %s is empty — skipping query.", session_id)
@@ -129,8 +127,6 @@ class VectorStore:
             try:
                 results = _do_query(safe_limit, where_clause)
             except Exception as inner_exc:
-                # Filtered count may be lower than safe_limit (status mismatch).
-                # Retry with limit=1 and no where-filter as a last resort.
                 logger.debug(
                     "Chroma filtered query failed (%s) — retrying without where-filter.", inner_exc
                 )

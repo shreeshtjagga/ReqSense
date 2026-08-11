@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 
 async def _async_run_impact_analysis(change_request_id: uuid.UUID) -> None:
     async with _app_database.AsyncSessionLocal() as db:
-        # Load the change request
         cr = await db.get(ChangeRequest, change_request_id)
         if not cr:
             logger.error(f"ChangeRequest {change_request_id} not found.")
@@ -19,7 +18,6 @@ async def _async_run_impact_analysis(change_request_id: uuid.UUID) -> None:
 
         logger.info(f"Running impact analysis for change request {cr.id} in project {cr.project_id}")
         
-        # Analyze impact
         analysis_result = await ImpactAnalyser.analyze_impact(
             title=cr.title,
             description=cr.description,
@@ -27,10 +25,8 @@ async def _async_run_impact_analysis(change_request_id: uuid.UUID) -> None:
             db=db
         )
 
-        # Update fields
         cr.severity = analysis_result.get("severity", "low")
         cr.impact_report = analysis_result.get("impact_report", "")
-        # Serialize list of titles to JSON string
         cr.affected_features = json.dumps(analysis_result.get("affected_features", []))
         
         db.add(cr)

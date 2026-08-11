@@ -24,7 +24,6 @@ def run_sync(coro):
         loop = None
 
     if loop and loop.is_running():
-        # Event loop is running (e.g. in pytest-asyncio). Run in a separate thread.
         result = [None]
         exception = [None]
 
@@ -112,7 +111,6 @@ def send_email_task(to_email: str, template: str, context: Dict[str, Any]) -> No
     else:
         body = f"Notification content context: {context}"
 
-    # Check if we are running in test / dummy mode
     is_dummy_key = (
         not settings.SENDGRID_API_KEY or
         not settings.SENDGRID_API_KEY.startswith("SG.") or
@@ -124,7 +122,6 @@ def send_email_task(to_email: str, template: str, context: Dict[str, Any]) -> No
         logger.info(
             f"[DUMMY EMAIL] To: {to_email} | Template: {template} | Subject: {subject} | Body: {body}"
         )
-        # Log to email_logs database table
         run_sync(_save_email_log(to_email, template, "sent"))
         return
 
