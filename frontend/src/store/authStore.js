@@ -21,7 +21,6 @@ const getInitialState = () => {
     }
   }
   
-  // Cleanup if token is expired
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
   return {
