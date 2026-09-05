@@ -1,11 +1,14 @@
 import logging
+from functools import lru_cache
 from typing import List
+
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 _model = None
+
 
 def get_model():
     global _model
@@ -15,13 +18,13 @@ def get_model():
         _model = SentenceTransformer(settings.EMBEDDING_MODEL)
     return _model
 
-from functools import lru_cache
 
 @lru_cache(maxsize=1024)
 def _cached_encode(text: str) -> List[float]:
     model = get_model()
     embedding = model.encode(text)
     return embedding.tolist()
+
 
 class EmbeddingService:
     @staticmethod

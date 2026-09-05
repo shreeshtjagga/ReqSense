@@ -4,11 +4,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-def _as_utc(dt: datetime) -> datetime:
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt
-
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError, VerifyMismatchError
@@ -23,6 +18,13 @@ from app.models.user import User
 from app.schemas.auth import TokenResponse
 
 settings = get_settings()
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """Ensure datetime is timezone-aware (UTC). Naïve datetimes are assumed UTC."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 _ph = PasswordHasher()
 

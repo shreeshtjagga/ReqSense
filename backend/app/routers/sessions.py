@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import List
@@ -10,11 +11,14 @@ from app.database import get_db
 from app.dependencies import CurrentUser, get_scoped_project, require_roles
 from app.models.message import Message
 from app.models.session import Session
+from app.models.user import User
 from app.schemas.message import MessageRead
 from app.schemas.session import SessionCreate, SessionEnd, SessionRead
 from app.services.session_memory import SessionMemory
+from app.services.srs_generator import SRSGenerator
+from app.tasks.srs_tasks import generate_srs_task
 
-from app.models.user import User
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -130,11 +134,6 @@ async def get_session(
 ):
     return await _get_scoped_session(session_id, current_user, db)
 
-import logging
-from app.tasks.srs_tasks import generate_srs_task
-from app.services.srs_generator import SRSGenerator
-
-logger = logging.getLogger(__name__)
 
 @router.patch("/{session_id}/end", response_model=SessionRead)
 async def end_session(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import uuid
 from datetime import datetime, timezone
@@ -14,8 +15,6 @@ def truncate(text: str, max_len: int, suffix: str = "…") -> str:
     if len(text) <= max_len:
         return text
     return text[: max_len - len(suffix)] + suffix
-
-import json
 
 def strip_json_fences(text: str) -> str:
     text = (text or "").strip()

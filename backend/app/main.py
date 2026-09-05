@@ -1,13 +1,23 @@
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+
 import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import get_settings
 from app.middleware.error_handlers import register_error_handlers
 from app.middleware.request_id import RequestIDMiddleware
+from app.services.embedding_service import EmbeddingService
+from app.services.rate_limit_service import limiter
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 if settings.SENTRY_DSN:
@@ -18,15 +28,13 @@ if settings.SENTRY_DSN:
         environment=settings.ENV,
     )
 
-import asyncio
-from contextlib import asynccontextmanager
-from app.services.embedding_service import EmbeddingService
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     loop = asyncio.get_event_loop()
     loop.run_in_executor(None, EmbeddingService.preload_model)
     yield
+
 
 app = FastAPI(
     title="ReqSense AI",
@@ -37,11 +45,6 @@ app = FastAPI(
     redoc_url="/redoc" if settings.docs_enabled else None,
     openapi_url="/openapi.json" if settings.docs_enabled else None,
 )
-
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
-from app.services.rate_limit_service import limiter
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

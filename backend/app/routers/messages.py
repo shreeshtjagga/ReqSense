@@ -99,9 +99,6 @@ async def _get_scoped_active_session(
         )
     return session
 
-def _is_test_env() -> bool:
-    return settings.GROQ_API_KEY.startswith("test") or settings.GROQ_API_KEY.startswith("mock")
-
 @router.post("", response_model=MessageRead, status_code=status.HTTP_201_CREATED)
 async def create_message(
     session_id: uuid.UUID,
@@ -190,7 +187,7 @@ async def create_message(
 
     aria_task = loop.run_in_executor(
         None,
-        _functools.partial(
+        functools.partial(
             AriaAgent.generate_response,
             history,
             sanitized_content,
