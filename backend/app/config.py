@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     @property
     def chroma_is_mocked(self) -> bool:
         if self.CHROMA_MODE == "local":
-            return False
+            return True   # local mode = no hosted Chroma = treat as mocked
         return not self.CHROMA_API_KEY or self.CHROMA_API_KEY.startswith(("test", "mock", "dev"))
 
     @property

@@ -96,7 +96,7 @@ async def get_scoped_project(
                 ProjectClient.client_id == user.id,
             )
         )
-        if client_res.scalar_one_or_none():
+        if client_res.scalars().first():
             return project
 
         from app.models.session import Session
@@ -106,7 +106,7 @@ async def get_scoped_project(
                 Session.client_id == user.id,
             )
         )
-        if sess_res.scalar_one_or_none():
+        if sess_res.scalars().first():
             return project
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
