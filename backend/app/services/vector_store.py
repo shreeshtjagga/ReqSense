@@ -21,16 +21,10 @@ def get_chroma_client():
                 logger.info("Chroma API key is mock/empty, initializing EphemeralClient for testing")
                 _chroma_client = chromadb.EphemeralClient()
             else:
-                headers = {}
-                if settings.CHROMA_API_KEY:
-                    headers["Authorization"] = f"Bearer {settings.CHROMA_API_KEY}"
-
-                host = "https://api.trychroma.com"
-                _chroma_client = chromadb.HttpClient(
-                    host=host,
-                    headers=headers,
+                _chroma_client = chromadb.CloudClient(
+                    api_key=settings.CHROMA_API_KEY,
                     tenant=settings.CHROMA_TENANT,
-                    database=settings.CHROMA_DATABASE
+                    database=settings.CHROMA_DATABASE,
                 )
     return _chroma_client
 
