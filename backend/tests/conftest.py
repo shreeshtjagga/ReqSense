@@ -13,7 +13,6 @@ validator. The actual Chroma/Redis/Groq connections are never exercised
 in Phase 1 tests.
 """
 
-import asyncio
 import os
 
 # ── Inject test env vars BEFORE importing any app module ─────────────────────
@@ -45,9 +44,18 @@ from collections.abc import AsyncGenerator
 
 import pytest
 import pytest_asyncio
+from argon2 import PasswordHasher
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
+
+# ── Patch Argon2 hasher with test-grade low-memory settings ──────────────────
+# Default memory_cost=65536 (64 MB) causes OOM when many fixtures hash passwords
+# in quick succession on the test runner. We swap the shared _ph instance for one
+# with minimal cost (memory_cost=8, parallelism=1) — identical API, no security
+# concern in tests since these hashes never leave the test environment.
+import app.services.auth_service as _auth_svc
+_auth_svc._ph = PasswordHasher(time_cost=1, memory_cost=8, parallelism=1)
 
 from app.database import Base, get_db
 from app.main import app
@@ -93,28 +101,6 @@ async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """
-    Provide a single event loop for the entire test session.
-    Required so session-scoped async fixtures share one loop.
-    Suppresses the pytest-asyncio deprecation warning for scope mismatch.
-    """
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    yield loop
-    loop.close()
-
-
-@pytest.fixture(autouse=True)
-def set_event_loop_for_test(event_loop):
-    """
-    Ensure the session event loop is set as the active event loop for the current
-    thread before each test runs.
-    """
-    asyncio.set_event_loop(event_loop)
-
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
