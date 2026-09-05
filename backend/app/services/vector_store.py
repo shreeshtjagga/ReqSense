@@ -1,6 +1,7 @@
 import logging
 import uuid
 from typing import List, Dict, Any, Optional
+# pyrefly: ignore [missing-import]
 import chromadb
 from app.config import get_settings
 
