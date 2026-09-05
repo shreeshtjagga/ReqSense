@@ -72,6 +72,13 @@ class RDCDLayer:
                 valid_atoms = []
                 for item in extracted:
                     if isinstance(item, dict) and item.get("raw_text"):
+                        # Quality filter: skip atoms with no structured fields
+                        if not item.get("subject") and not item.get("action"):
+                            logger.debug(
+                                "Skipping low-quality atom (no subject or action): '%s...'",
+                                item["raw_text"][:60],
+                            )
+                            continue
                         valid_atoms.append(item)
                 return valid_atoms
             return []

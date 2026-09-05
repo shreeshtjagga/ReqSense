@@ -27,7 +27,7 @@ def _atom_display_text(atom: Optional[RequirementAtom]) -> Optional[str]:
     if atom.constraint_text:
         parts.append(f"({atom.constraint_text})")
     if parts:
-        return " — ".join(parts)
+        return " - ".join(parts)
     return atom.raw_text or None
 
 async def _enrich(c: Contradiction, db: AsyncSession) -> ContradictionRead:
