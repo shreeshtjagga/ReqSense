@@ -162,7 +162,15 @@ class SessionMemory:
             r = get_redis_client()
             key = cls._get_key(current_session_id)
             try:
+                already_seeded = await r.exists(key)
+                if already_seeded:
+                    logger.debug(
+                        "Session %s already has Redis context — skipping seed.",
+                        current_session_id,
+                    )
+                    return
                 async with r.pipeline(transaction=True) as pipe:
+                    pipe.delete(key)
                     for m in seeded:
                         pipe.rpush(key, json.dumps(m))
                     pipe.ltrim(key, -40, -1)

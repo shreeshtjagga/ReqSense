@@ -45,6 +45,13 @@ class SRSGenerator:
         )
         atoms = atoms_result.scalars().all()
 
+        conflicted_count_result = await db.execute(
+            select(RequirementAtom)
+            .where(RequirementAtom.project_id == session.project_id)
+            .where(RequirementAtom.status == "conflicted")
+        )
+        conflicted_count = len(conflicted_count_result.scalars().all())
+
         client_msgs_result = await db.execute(
             select(Message)
             .join(Session, Session.id == Message.session_id)
@@ -276,7 +283,11 @@ class SRSGenerator:
             version=version_str,
             file_url=file_url,
             generated_by="ARIA",
-            change_summary=f"Generated after ending session {session_id}. {len(atoms)} requirements, {len(client_messages)} client statements.",
+            change_summary=(
+                f"Generated after ending session {session_id}. "
+                f"{len(atoms)} active requirements, {len(client_messages)} client statements"
+                + (f", {conflicted_count} excluded (pending contradiction resolution)." if conflicted_count else ".")
+            ),
             llm_model=llm_model,
             prompt_version=PROMPT_VERSION,
             generation_latency_ms=generation_latency_ms,

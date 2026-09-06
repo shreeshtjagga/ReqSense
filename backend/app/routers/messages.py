@@ -26,6 +26,7 @@ from app.services.session_memory import SessionMemory
 from app.services.vector_store import VectorStore
 from app.config import get_settings
 from app.models.feature_status import FeatureStatus
+from app.services.rate_limit_service import limiter
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -100,6 +101,7 @@ async def _get_scoped_active_session(
     return session
 
 @router.post("", response_model=MessageRead, status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
 async def create_message(
     session_id: uuid.UUID,
     body: MessageCreate,
@@ -368,6 +370,23 @@ async def create_message(
                     c_id = _uuid.uuid4()
                     atom_1_id = chroma_match.get("id") if chroma_match else None
                     similarity_score = float(chroma_match.get("distance", 0.0)) if chroma_match else None
+
+                    if atom_1_id:
+                        conflicted_atom_1 = await db.get(RequirementAtom, atom_1_id)
+                        if conflicted_atom_1 and conflicted_atom_1.status == "active":
+                            conflicted_atom_1.status = "conflicted"
+                            db.add(conflicted_atom_1)
+                            logger.info(
+                                "Marked atom %s as 'conflicted' (older side of contradiction).",
+                                atom_1_id,
+                            )
+
+                    ra.status = "conflicted"
+                    db.add(ra)
+                    logger.info(
+                        "Marked atom %s as 'conflicted' (newer side of contradiction).",
+                        ra.id,
+                    )
 
                     c = Contradiction(
                         id=c_id,
