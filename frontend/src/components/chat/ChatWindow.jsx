@@ -76,7 +76,7 @@ export const ChatWindow = ({
       </Box>
 
       {/* Input Box */}
-      <ChatInput onSendMessage={onSendMessage} disabled={disabled} />
+      <ChatInput onSendMessage={onSendMessage} disabled={disabled} sending={sending} />
     </Paper>
   );
 };

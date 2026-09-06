@@ -1,21 +1,17 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { Box, TextField, IconButton, Typography, InputAdornment } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 
-export const ChatInput = ({ onSendMessage, disabled }) => {
+export const ChatInput = ({ onSendMessage, disabled, sending }) => {
   const [text, setText] = useState('');
   const maxLength = 4000;
-  const isSendingRef = useRef(false);
 
   const handleSend = () => {
-    if (!text.trim() || text.length > maxLength || disabled) return;
-    if (isSendingRef.current) return;
-    isSendingRef.current = true;
+    if (!text.trim() || text.length > maxLength || disabled || sending) return;
     const toSend = text;
-    setText('');
-    Promise.resolve(onSendMessage(toSend)).finally(() => {
-      isSendingRef.current = false;
-    });
+    onSendMessage(toSend)
+      .then(() => setText(''))
+      .catch(() => { /* keep text so the user can retry without retyping */ });
   };
 
   const handleKeyDown = (e) => {
@@ -45,7 +41,7 @@ export const ChatInput = ({ onSendMessage, disabled }) => {
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={disabled ? 'Chat session completed' : "Describe a requirement or answer ARIA's question... (Press Enter to send)"}
-        disabled={disabled}
+        disabled={disabled || sending}
         error={isOverLimit}
         sx={{
           '& .MuiOutlinedInput-root': {
@@ -69,16 +65,16 @@ export const ChatInput = ({ onSendMessage, disabled }) => {
               <InputAdornment position="end">
                 <IconButton
                   onClick={handleSend}
-                  disabled={disabled || !text.trim() || isOverLimit}
+                  disabled={disabled || sending || !text.trim() || isOverLimit}
                   edge="end"
                   sx={{
-                    background: disabled || !text.trim() || isOverLimit
+                    background: disabled || sending || !text.trim() || isOverLimit
                       ? '#E2E8F0'
                       : 'linear-gradient(135deg, #4F46E5 0%, #6366F1 100%)',
                     color: '#FFFFFF',
                     width: 38,
                     height: 38,
-                    boxShadow: disabled || !text.trim() || isOverLimit ? 'none' : '0 4px 12px rgba(79, 70, 229, 0.3)',
+                    boxShadow: disabled || sending || !text.trim() || isOverLimit ? 'none' : '0 4px 12px rgba(79, 70, 229, 0.3)',
                     transition: 'all 0.2s',
                     '&:hover': {
                       background: 'linear-gradient(135deg, #4338CA 0%, #4F46E5 100%)',

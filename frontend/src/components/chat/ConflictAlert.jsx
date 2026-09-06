@@ -90,6 +90,11 @@ export const ConflictAlert = ({ contradiction, onResolve }) => {
           </Button>
         </Box>
       )}
+      {isAlreadyResolved && (
+        <Typography variant="caption" sx={{ fontWeight: 700, color: status === 'resolved' ? '#16A34A' : '#64748B' }}>
+          {status === 'resolved' ? '✓ Resolved' : '— Ignored / False Positive'}
+        </Typography>
+      )}
     </Alert>
   );
 };

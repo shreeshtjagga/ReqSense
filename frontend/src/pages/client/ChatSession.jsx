@@ -103,6 +103,7 @@ export const ChatSession = () => {
     } catch (err) {
       showToast('Failed to send requirement. Please try again.', 'error');
       setMessages((prev) => prev.filter((m) => m.id !== tempClientMsg.id));
+      throw err; // re-throw so ChatInput's .catch() keeps the text
     } finally {
       setSending(false);
     }

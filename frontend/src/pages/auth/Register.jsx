@@ -325,6 +325,10 @@ export const Register = () => {
     if (password.length < 8) {
       showToast('Password must be at least 8 characters long.', 'error'); return;
     }
+    const isValidUuid = (v) => !v || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+    if (!isInviteFlow && orgId.trim() && !isValidUuid(orgId.trim())) {
+      showToast('Organization ID must be a valid UUID, or leave it blank.', 'error'); return;
+    }
     setLoading(true);
     try {
       await registerUser({

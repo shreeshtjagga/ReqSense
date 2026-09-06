@@ -15,7 +15,8 @@ def get_s3_client():
     config = Config(
         connect_timeout=settings.S3_TIMEOUT_SECONDS,
         read_timeout=settings.S3_TIMEOUT_SECONDS,
-        retries={"max_attempts": 3}
+        retries={"max_attempts": 3},
+        signature_version="s3v4",
     )
 
     kwargs = {

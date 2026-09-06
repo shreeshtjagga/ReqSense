@@ -87,7 +87,9 @@ async def logout(
     status_code=status.HTTP_200_OK,
     summary="Request a password reset email",
 )
+@limiter.limit("5/minute")
 async def forgot_password(
+    request: Request,
     body: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
