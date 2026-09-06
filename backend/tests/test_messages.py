@@ -145,6 +145,35 @@ async def test_messages_scoping(client: AsyncClient, dev_a, dev_b, client_a, pro
 
 
 @pytest.mark.asyncio
+async def test_message_double_submit_lock(client: AsyncClient, dev_a, client_a, project_a, monkeypatch):
+    """Verifies that concurrent requests in the same session return 429 when lock is already acquired."""
+    headers_a = await get_auth_headers(client, dev_a.email)
+    headers_client = await get_auth_headers(client, client_a.email)
+
+    await client.post(
+        f"/api/v1/projects/{project_a.id}/clients",
+        json={"client_id": str(client_a.id)},
+        headers=headers_a
+    )
+
+    resp = await client.post("/api/v1/sessions", json={"project_id": str(project_a.id)}, headers=headers_a)
+    assert resp.status_code == 201
+    sess_id = resp.json()["id"]
+
+    # Mock Redis client so that r.set returns False (lock already held)
+    from unittest.mock import AsyncMock
+    mock_redis = AsyncMock()
+    mock_redis.set.return_value = False
+    from app.routers import messages as messages_module
+    monkeypatch.setattr(messages_module, "get_redis_client", lambda: mock_redis)
+
+    msg_payload = {"content": "Concurrent message", "sender": "client", "message_type": "normal"}
+    resp2 = await client.post(f"/api/v1/sessions/{sess_id}/messages", json=msg_payload, headers=headers_client)
+    assert resp2.status_code == 429
+    assert "already being processed" in resp2.text
+
+
+@pytest.mark.asyncio
 async def test_admin_user_crud_scoping(client: AsyncClient, admin_a, dev_a, dev_b):
     """
     Test Admin User CRUD operations.

@@ -22,7 +22,7 @@ from app.schemas.message import MessageCreate, MessageRead
 from app.services.aria_agent import AriaAgent
 from app.services.embedding_service import EmbeddingService
 from app.services.rdcd_layer import RDCDLayer
-from app.services.session_memory import SessionMemory
+from app.services.session_memory import SessionMemory, get_redis_client
 from app.services.vector_store import VectorStore
 from app.config import get_settings
 from app.models.feature_status import FeatureStatus
@@ -113,383 +113,407 @@ async def create_message(
 
     session = await _get_scoped_active_session(session_id, current_user, db)
 
-    if body.sender in ("client", "user") and current_user.role not in ("client", "admin", "developer"):
+    lock_key = f"msg_lock:{session_id}"
+    r = None
+    acquired = False
+    try:
+        r = get_redis_client()
+        acquired = await r.set(lock_key, "1", nx=True, ex=30)
+    except Exception as exc:
+        logger.warning("Redis lock unavailable, proceeding without double-submit guard: %s", exc)
+        acquired = True  # fail open — don't block messaging if Redis is down
+
+    if not acquired:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only clients can send gathering messages in a session.",
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="A message is already being processed for this session. Please wait.",
         )
 
-    project = await db.scalar(select(Project).where(Project.id == session.project_id))
-    chroma_threshold = (
-        project.chroma_similarity_threshold
-        if project and project.chroma_similarity_threshold is not None
-        else 0.85
-    )
-    prior_atoms = (
-        await db.execute(
-            select(RequirementAtom)
-            .where(
-                RequirementAtom.project_id == session.project_id,
-                RequirementAtom.status == "active",
+    try:
+
+        if body.sender in ("client", "user") and current_user.role not in ("client", "admin", "developer"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only clients can send gathering messages in a session.",
             )
-            .order_by(RequirementAtom.created_at.desc())
-            .limit(200)
+
+        project = await db.scalar(select(Project).where(Project.id == session.project_id))
+        chroma_threshold = (
+            project.chroma_similarity_threshold
+            if project and project.chroma_similarity_threshold is not None
+            else 0.85
         )
-    ).scalars().all()
-    def _fmt_atom(a) -> str:
-        parts = []
-        if a.subject:
-            parts.append(f"Subject: {a.subject}")
-        if a.action:
-            parts.append(f"Action: {a.action}")
-        if a.constraint_text:
-            parts.append(f"Constraint: {a.constraint_text}")
-        raw = (a.raw_text or "")[:150]
-        return " | ".join(parts) + (f" [{raw}]" if raw else "")
+        prior_atoms = (
+            await db.execute(
+                select(RequirementAtom)
+                .where(
+                    RequirementAtom.project_id == session.project_id,
+                    RequirementAtom.status == "active",
+                )
+                .order_by(RequirementAtom.created_at.desc())
+                .limit(200)
+            )
+        ).scalars().all()
+        def _fmt_atom(a) -> str:
+            parts = []
+            if a.subject:
+                parts.append(f"Subject: {a.subject}")
+            if a.action:
+                parts.append(f"Action: {a.action}")
+            if a.constraint_text:
+                parts.append(f"Constraint: {a.constraint_text}")
+            raw = (a.raw_text or "")[:150]
+            return " | ".join(parts) + (f" [{raw}]" if raw else "")
 
-    atom_summary_parts = [_fmt_atom(a) for a in prior_atoms[:60] if a.raw_text or a.action]
-    atom_summary = "\n".join(atom_summary_parts)
-    if len(atom_summary) > 3000:
-        atom_summary = atom_summary[:3000] + "..."
+        atom_summary_parts = [_fmt_atom(a) for a in prior_atoms[:60] if a.raw_text or a.action]
+        atom_summary = "\n".join(atom_summary_parts)
+        if len(atom_summary) > 3000:
+            atom_summary = atom_summary[:3000] + "..."
 
-    feature_rows = (
-        await db.execute(
-            select(FeatureStatus.title, FeatureStatus.status)
-            .where(FeatureStatus.project_id == session.project_id)
-            .order_by(FeatureStatus.updated_at.desc())
-            .limit(30)
-        )
-    ).all()
-    feature_summary = "; ".join(
-        f"{row.title} ({row.status})" for row in feature_rows
-    ) if feature_rows else ""
+        feature_rows = (
+            await db.execute(
+                select(FeatureStatus.title, FeatureStatus.status)
+                .where(FeatureStatus.project_id == session.project_id)
+                .order_by(FeatureStatus.updated_at.desc())
+                .limit(30)
+            )
+        ).all()
+        feature_summary = "; ".join(
+            f"{row.title} ({row.status})" for row in feature_rows
+        ) if feature_rows else ""
 
-    sanitized_content, is_flagged = RDCDLayer.sanitize_input(body.content)
+        sanitized_content, is_flagged = RDCDLayer.sanitize_input(body.content)
 
-    history = await SessionMemory.get_messages(session_id, db=db)
-
-    if not history:
-        await SessionMemory.seed_from_prior_session(
-            current_session_id=session_id,
-            project_id=session.project_id,
-            db=db,
-        )
         history = await SessionMemory.get_messages(session_id, db=db)
 
-    project_context = {
-        "name": project.name if project else "",
-        "description": project.description if project else "",
-        "domain": project.domain if project else "",
-        "atom_summary": atom_summary[:3000] if atom_summary else "",
-        "feature_summary": feature_summary[:1500] if feature_summary else "",
-    }
-
-    loop = asyncio.get_event_loop()
-    import functools as _functools
-
-    aria_task = loop.run_in_executor(
-        None,
-        functools.partial(
-            AriaAgent.generate_response,
-            history,
-            sanitized_content,
-            project_context,
-        ),
-    )
-
-    async def _empty_list():
-        return []
-
-    atoms_task = (
-        loop.run_in_executor(None, RDCDLayer.extract_atoms, sanitized_content)
-        if body.sender in ("client", "user") and not is_flagged
-        else _empty_list()
-    )
-
-    aria_content = ""
-    prompt_tokens = 0
-    completion_tokens = 0
-    extracted_atoms: list = []
-
-    try:
-        results = await asyncio.gather(aria_task, atoms_task, return_exceptions=True)
-        aria_res = results[0]
-        atoms_res = results[1]
-
-        if isinstance(aria_res, Exception):
-            logger.error("ARIA call failed: %s", aria_res)
-            aria_content = (
-                "I'm sorry, I'm having trouble processing your request right now. "
-                "Please try again in a moment."
-            )
-        elif isinstance(aria_res, dict):
-            aria_content = aria_res.get("content", "")
-            prompt_tokens = aria_res.get("prompt_tokens", 0)
-            completion_tokens = aria_res.get("completion_tokens", 0)
-
-        if isinstance(atoms_res, Exception):
-            logger.warning("Atom extraction failed: %s", atoms_res)
-        elif isinstance(atoms_res, list):
-            extracted_atoms = atoms_res
-    except Exception as exc:
-        logger.error("Parallel ARIA/Atom execution error: %s", exc)
-        aria_content = "I'm sorry, an error occurred while processing your message."
-
-    async def _evaluate_candidate_match(atom_dict: dict, match: dict):
-        existing_atom_dict = {
-            "raw_text": match.get("document", ""),
-            "subject": match.get("metadata", {}).get("subject", ""),
-            "action": match.get("metadata", {}).get("action", ""),
-            "constraint_text": match.get("metadata", {}).get("constraint_text", ""),
-        }
-        if atom_summary:
-            existing_atom_dict["project_atom_summary"] = atom_summary[:1500]
-        try:
-            c_result = await loop.run_in_executor(
-                None,
-                functools.partial(RDCDLayer.detect_contradiction, existing_atom_dict, atom_dict),
-            )
-            if c_result and c_result.get("conflict_type") != "check_failed":
-                return (match, c_result)
-        except Exception as exc:
-            logger.warning("Contradiction detect evaluation failed: %s", exc)
-        return None
-
-    async def _process_single_atom(atom_dict: dict, sibling_atoms: list[dict]):
-        raw_text = atom_dict.get("raw_text", sanitized_content)
-        matches = []
-        try:
-            if not settings.chroma_is_mocked:
-                embedding = await loop.run_in_executor(None, EmbeddingService.embed, raw_text)
-                results = await loop.run_in_executor(
-                    None,
-                    lambda: VectorStore.query_similar_atoms(
-                        session_id=session.project_id,
-                        query_embedding=embedding,
-                        limit=5,
-                        status_filter="active",
-                    )
-                )
-                logger.debug(
-                    "Chroma returned %d candidates for atom '%s...' (threshold=%.2f)",
-                    len(results), raw_text[:60], chroma_threshold,
-                )
-                for res in results:
-                    logger.debug("  candidate distance=%.4f  doc='%s...'" , res["distance"], str(res.get("document", ""))[:60])
-                    if res["distance"] < chroma_threshold:
-                        matches.append(res)
-            else:
-                logger.debug("Chroma is mocked — skipping vector similarity for atom.")
-        except Exception as exc:
-            logger.warning("Chroma query failed for atom '%s...': %s", raw_text[:60], exc)
-
-        if not matches and prior_atoms:
-            fb = _find_keyword_match(atom_dict, prior_atoms)
-            if fb:
-                logger.debug("Keyword fallback matched prior atom for contradiction check.")
-                matches.append(fb)
-
-        # Check against sibling atoms extracted from the same message
-        for sibling in sibling_atoms:
-            if sibling is atom_dict:
-                continue
-            fake_match = {
-                "id": None,
-                "document": sibling.get("raw_text", ""),
-                "distance": 0.0,
-                "metadata": {
-                    "subject": sibling.get("subject", ""),
-                    "action": sibling.get("action", ""),
-                    "constraint_text": sibling.get("constraint_text", ""),
-                },
-            }
-            matches.append(fake_match)
-
-        eval_tasks = [_evaluate_candidate_match(atom_dict, match) for match in matches]
-        eval_results = await asyncio.gather(*eval_tasks) if eval_tasks else []
-        evaluations = [r for r in eval_results if r is not None]
-
-        return (atom_dict, evaluations)
-
-    tasks = [_process_single_atom(a, extracted_atoms) for a in extracted_atoms]
-    atom_contradiction_pairs = await asyncio.gather(*tasks) if tasks else []
-
-    try:
-        if is_flagged:
-            from app.models.audit_log import AuditLog
-            audit_log = AuditLog(
-                user_id=current_user.id,
-                action="suspicious_input_flagged",
-                entity_type="message",
-                metadata_={"original_content_snippet": body.content[:100]},
-                request_id=request_id
-            )
-            db.add(audit_log)
-
-        user_msg = Message(
-            session_id=session_id,
-            sender=body.sender,
-            content=sanitized_content,
-            message_type=body.message_type,
-        )
-        db.add(user_msg)
-
-        aria_msg = Message(
-            session_id=session_id,
-            sender="aria",
-            content=aria_content,
-            message_type="normal",
-        )
-        db.add(aria_msg)
-
-        session.total_messages = (session.total_messages or 0) + 2
-        db.add(session)
-
-        persisted_atoms = []
-        for atom_dict, evaluations in atom_contradiction_pairs:
-            ra = RequirementAtom(
-                session_id=session_id,
+        if not history:
+            await SessionMemory.seed_from_prior_session(
+                current_session_id=session_id,
                 project_id=session.project_id,
-                subject=atom_dict.get("subject"),
-                action=atom_dict.get("action"),
-                constraint_text=atom_dict.get("constraint_text"),
-                raw_text=atom_dict.get("raw_text", sanitized_content),
-                status="active",
+                db=db,
             )
-            db.add(ra)
-            await db.flush()
-            ra.embedding_id = str(ra.id)
-            persisted_atoms.append((atom_dict, ra))
+            history = await SessionMemory.get_messages(session_id, db=db)
 
-            if ra.subject and ra.action:
-                feature_title = f"{ra.subject}: {ra.action}"[:255]
-                db.add(FeatureStatus(
-                    project_id=session.project_id,
-                    atom_id=ra.id,
-                    title=feature_title,
-                    description=ra.raw_text,
-                    status="planned",
-                    version=1,
-                    created_by=current_user.id,
-                    updated_by=current_user.id,
-                ))
+        project_context = {
+            "name": project.name if project else "",
+            "description": project.description if project else "",
+            "domain": project.domain if project else "",
+            "atom_summary": atom_summary[:3000] if atom_summary else "",
+            "feature_summary": feature_summary[:1500] if feature_summary else "",
+        }
 
-            for chroma_match, contradiction_result in evaluations:
-                conf = contradiction_result.get("confidence") or 0.0
-                conflict_type = contradiction_result.get("conflict_type", "none")
+        loop = asyncio.get_event_loop()
+        import functools as _functools
 
-                if (
-                    conflict_type not in ("none", "check_failed")
-                    and conf >= settings.CONTRADICTION_CONFIDENCE_THRESHOLD
-                ):
-                    import uuid as _uuid
-                    c_id = _uuid.uuid4()
-                    atom_1_id = chroma_match.get("id") if chroma_match else None
-                    if atom_1_id and isinstance(atom_1_id, str):
-                        try:
-                            atom_1_id = _uuid.UUID(atom_1_id)
-                        except Exception:
-                            atom_1_id = None
-                    similarity_score = (
-                        float(chroma_match.get("distance", 0.0))
-                        if (chroma_match and chroma_match.get("distance") is not None)
-                        else None
-                    )
-
-                    if atom_1_id:
-                        conflicted_atom_1 = await db.get(RequirementAtom, atom_1_id)
-                        if conflicted_atom_1 and conflicted_atom_1.status == "active":
-                            conflicted_atom_1.status = "conflicted"
-                            db.add(conflicted_atom_1)
-                            logger.info(
-                                "Marked atom %s as 'conflicted' (older side of contradiction).",
-                                atom_1_id,
-                            )
-
-                    ra.status = "conflicted"
-                    db.add(ra)
-                    logger.info(
-                        "Marked atom %s as 'conflicted' (newer side of contradiction).",
-                        ra.id,
-                    )
-
-                    c = Contradiction(
-                        id=c_id,
-                        session_id=session_id,
-                        atom_1_id=atom_1_id,
-                        atom_2_id=ra.id,
-                        similarity_score=similarity_score,
-                        confidence=conf,
-                        conflict_type=conflict_type,
-                        aria_message=contradiction_result.get("aria_message", ""),
-                        status="pending",
-                    )
-                    db.add(c)
-
-                    conflict_msg = Message(
-                        session_id=session_id,
-                        sender="aria",
-                        message_type="conflict_alert",
-                        content=json.dumps({
-                            "contradiction_id": str(c_id),
-                            "conflict_type": conflict_type,
-                            "aria_message": contradiction_result.get("aria_message", ""),
-                            "confidence": conf,
-                        }),
-                    )
-                    db.add(conflict_msg)
-
-                    session.contradiction_events = (session.contradiction_events or 0) + 1
-                    session.stability_score = max(0.0, (session.stability_score or 100.0) - 10.0)
-                else:
-                    pass
-
-        await db.commit()
-        await db.refresh(user_msg)
-        await db.refresh(aria_msg)
-
-    except Exception as exc:
-        await db.rollback()
-        logger.exception("DB transaction failed for message in session %s", session_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to persist message.",
-        ) from exc
-
-    try:
-        await SessionMemory.add_message(
-            session_id, {"sender": body.sender, "content": sanitized_content}
+        aria_task = loop.run_in_executor(
+            None,
+            functools.partial(
+                AriaAgent.generate_response,
+                history,
+                sanitized_content,
+                project_context,
+            ),
         )
-        await SessionMemory.add_message(
-            session_id, {"sender": "aria", "content": aria_content}
-        )
-    except Exception as exc:
-        logger.warning("Failed to update Redis session memory: %s", exc)
 
-    if not settings.chroma_is_mocked:
-        for atom_dict, ra in persisted_atoms:
-            try:
-                raw_text = atom_dict.get("raw_text", sanitized_content)
-                embedding = EmbeddingService.embed(raw_text)
-                VectorStore.upsert_atoms(
-                    session_id=session.project_id,
-                    atoms=[{
-                        "id": ra.id,
-                        "embedding": embedding,
-                        "document": raw_text,
-                        "metadata": {
-                            "atom_id": str(ra.id),
-                            "subject": atom_dict.get("subject", ""),
-                            "action": atom_dict.get("action", ""),
-                            "constraint_text": atom_dict.get("constraint_text", ""),
-                            "session_id": str(session_id),
-                        },
-                    }],
+        async def _empty_list():
+            return []
+
+        atoms_task = (
+            loop.run_in_executor(None, RDCDLayer.extract_atoms, sanitized_content)
+            if body.sender in ("client", "user") and not is_flagged
+            else _empty_list()
+        )
+
+        aria_content = ""
+        prompt_tokens = 0
+        completion_tokens = 0
+        extracted_atoms: list = []
+
+        try:
+            results = await asyncio.gather(aria_task, atoms_task, return_exceptions=True)
+            aria_res = results[0]
+            atoms_res = results[1]
+
+            if isinstance(aria_res, Exception):
+                logger.error("ARIA call failed: %s", aria_res)
+                aria_content = (
+                    "I'm sorry, I'm having trouble processing your request right now. "
+                    "Please try again in a moment."
                 )
-            except Exception as exc:
-                logger.warning("Chroma upsert failed for atom: %s", exc)
+            elif isinstance(aria_res, dict):
+                aria_content = aria_res.get("content", "")
+                prompt_tokens = aria_res.get("prompt_tokens", 0)
+                completion_tokens = aria_res.get("completion_tokens", 0)
 
-    return user_msg
+            if isinstance(atoms_res, Exception):
+                logger.warning("Atom extraction failed: %s", atoms_res)
+            elif isinstance(atoms_res, list):
+                extracted_atoms = atoms_res
+        except Exception as exc:
+            logger.error("Parallel ARIA/Atom execution error: %s", exc)
+            aria_content = "I'm sorry, an error occurred while processing your message."
+
+        async def _evaluate_candidate_match(atom_dict: dict, match: dict):
+            existing_atom_dict = {
+                "raw_text": match.get("document", ""),
+                "subject": match.get("metadata", {}).get("subject", ""),
+                "action": match.get("metadata", {}).get("action", ""),
+                "constraint_text": match.get("metadata", {}).get("constraint_text", ""),
+            }
+            if atom_summary:
+                existing_atom_dict["project_atom_summary"] = atom_summary[:1500]
+            try:
+                c_result = await loop.run_in_executor(
+                    None,
+                    functools.partial(RDCDLayer.detect_contradiction, existing_atom_dict, atom_dict),
+                )
+                if c_result and c_result.get("conflict_type") != "check_failed":
+                    return (match, c_result)
+            except Exception as exc:
+                logger.warning("Contradiction detect evaluation failed: %s", exc)
+            return None
+
+        async def _process_single_atom(atom_dict: dict, sibling_atoms: list[dict]):
+            raw_text = atom_dict.get("raw_text", sanitized_content)
+            matches = []
+            try:
+                if not settings.chroma_is_mocked:
+                    embedding = await loop.run_in_executor(None, EmbeddingService.embed, raw_text)
+                    results = await loop.run_in_executor(
+                        None,
+                        lambda: VectorStore.query_similar_atoms(
+                            session_id=session.project_id,
+                            query_embedding=embedding,
+                            limit=5,
+                            status_filter="active",
+                        )
+                    )
+                    logger.debug(
+                        "Chroma returned %d candidates for atom '%s...' (threshold=%.2f)",
+                        len(results), raw_text[:60], chroma_threshold,
+                    )
+                    for res in results:
+                        logger.debug("  candidate distance=%.4f  doc='%s...'" , res["distance"], str(res.get("document", ""))[:60])
+                        if res["distance"] < chroma_threshold:
+                            matches.append(res)
+                else:
+                    logger.debug("Chroma is mocked — skipping vector similarity for atom.")
+            except Exception as exc:
+                logger.warning("Chroma query failed for atom '%s...': %s", raw_text[:60], exc)
+
+            if not matches and prior_atoms:
+                fb = _find_keyword_match(atom_dict, prior_atoms)
+                if fb:
+                    logger.debug("Keyword fallback matched prior atom for contradiction check.")
+                    matches.append(fb)
+
+            # Check against sibling atoms extracted from the same message
+            for sibling in sibling_atoms:
+                if sibling is atom_dict:
+                    continue
+                fake_match = {
+                    "id": None,
+                    "document": sibling.get("raw_text", ""),
+                    "distance": 0.0,
+                    "metadata": {
+                        "subject": sibling.get("subject", ""),
+                        "action": sibling.get("action", ""),
+                        "constraint_text": sibling.get("constraint_text", ""),
+                    },
+                }
+                matches.append(fake_match)
+
+            eval_tasks = [_evaluate_candidate_match(atom_dict, match) for match in matches]
+            eval_results = await asyncio.gather(*eval_tasks) if eval_tasks else []
+            evaluations = [r for r in eval_results if r is not None]
+
+            return (atom_dict, evaluations)
+
+        tasks = [_process_single_atom(a, extracted_atoms) for a in extracted_atoms]
+        atom_contradiction_pairs = await asyncio.gather(*tasks) if tasks else []
+
+        try:
+            if is_flagged:
+                from app.models.audit_log import AuditLog
+                audit_log = AuditLog(
+                    user_id=current_user.id,
+                    action="suspicious_input_flagged",
+                    entity_type="message",
+                    metadata_={"original_content_snippet": body.content[:100]},
+                    request_id=request_id
+                )
+                db.add(audit_log)
+
+            user_msg = Message(
+                session_id=session_id,
+                sender=body.sender,
+                content=sanitized_content,
+                message_type=body.message_type,
+            )
+            db.add(user_msg)
+
+            aria_msg = Message(
+                session_id=session_id,
+                sender="aria",
+                content=aria_content,
+                message_type="normal",
+            )
+            db.add(aria_msg)
+
+            session.total_messages = (session.total_messages or 0) + 2
+            db.add(session)
+
+            persisted_atoms = []
+            for atom_dict, evaluations in atom_contradiction_pairs:
+                ra = RequirementAtom(
+                    session_id=session_id,
+                    project_id=session.project_id,
+                    subject=atom_dict.get("subject"),
+                    action=atom_dict.get("action"),
+                    constraint_text=atom_dict.get("constraint_text"),
+                    raw_text=atom_dict.get("raw_text", sanitized_content),
+                    status="active",
+                )
+                db.add(ra)
+                await db.flush()
+                ra.embedding_id = str(ra.id)
+                persisted_atoms.append((atom_dict, ra))
+
+                if ra.subject and ra.action:
+                    feature_title = f"{ra.subject}: {ra.action}"[:255]
+                    db.add(FeatureStatus(
+                        project_id=session.project_id,
+                        atom_id=ra.id,
+                        title=feature_title,
+                        description=ra.raw_text,
+                        status="planned",
+                        version=1,
+                        created_by=current_user.id,
+                        updated_by=current_user.id,
+                    ))
+
+                for chroma_match, contradiction_result in evaluations:
+                    conf = contradiction_result.get("confidence") or 0.0
+                    conflict_type = contradiction_result.get("conflict_type", "none")
+
+                    if (
+                        conflict_type not in ("none", "check_failed")
+                        and conf >= settings.CONTRADICTION_CONFIDENCE_THRESHOLD
+                    ):
+                        import uuid as _uuid
+                        c_id = _uuid.uuid4()
+                        atom_1_id = chroma_match.get("id") if chroma_match else None
+                        if atom_1_id and isinstance(atom_1_id, str):
+                            try:
+                                atom_1_id = _uuid.UUID(atom_1_id)
+                            except Exception:
+                                atom_1_id = None
+                        similarity_score = (
+                            float(chroma_match.get("distance", 0.0))
+                            if (chroma_match and chroma_match.get("distance") is not None)
+                            else None
+                        )
+
+                        if atom_1_id:
+                            conflicted_atom_1 = await db.get(RequirementAtom, atom_1_id)
+                            if conflicted_atom_1 and conflicted_atom_1.status == "active":
+                                conflicted_atom_1.status = "conflicted"
+                                db.add(conflicted_atom_1)
+                                logger.info(
+                                    "Marked atom %s as 'conflicted' (older side of contradiction).",
+                                    atom_1_id,
+                                )
+
+                        ra.status = "conflicted"
+                        db.add(ra)
+                        logger.info(
+                            "Marked atom %s as 'conflicted' (newer side of contradiction).",
+                            ra.id,
+                        )
+
+                        c = Contradiction(
+                            id=c_id,
+                            session_id=session_id,
+                            atom_1_id=atom_1_id,
+                            atom_2_id=ra.id,
+                            similarity_score=similarity_score,
+                            confidence=conf,
+                            conflict_type=conflict_type,
+                            aria_message=contradiction_result.get("aria_message", ""),
+                            status="pending",
+                        )
+                        db.add(c)
+
+                        conflict_msg = Message(
+                            session_id=session_id,
+                            sender="aria",
+                            message_type="conflict_alert",
+                            content=json.dumps({
+                                "contradiction_id": str(c_id),
+                                "conflict_type": conflict_type,
+                                "aria_message": contradiction_result.get("aria_message", ""),
+                                "confidence": conf,
+                            }),
+                        )
+                        db.add(conflict_msg)
+
+                        session.contradiction_events = (session.contradiction_events or 0) + 1
+                        session.stability_score = max(0.0, (session.stability_score or 100.0) - 10.0)
+                    else:
+                        pass
+
+            await db.commit()
+            await db.refresh(user_msg)
+            await db.refresh(aria_msg)
+
+        except Exception as exc:
+            await db.rollback()
+            logger.exception("DB transaction failed for message in session %s", session_id)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to persist message.",
+            ) from exc
+
+        try:
+            await SessionMemory.add_message(
+                session_id, {"sender": body.sender, "content": sanitized_content}
+            )
+            await SessionMemory.add_message(
+                session_id, {"sender": "aria", "content": aria_content}
+            )
+        except Exception as exc:
+            logger.warning("Failed to update Redis session memory: %s", exc)
+
+        if not settings.chroma_is_mocked:
+            for atom_dict, ra in persisted_atoms:
+                try:
+                    raw_text = atom_dict.get("raw_text", sanitized_content)
+                    embedding = EmbeddingService.embed(raw_text)
+                    VectorStore.upsert_atoms(
+                        session_id=session.project_id,
+                        atoms=[{
+                            "id": ra.id,
+                            "embedding": embedding,
+                            "document": raw_text,
+                            "metadata": {
+                                "atom_id": str(ra.id),
+                                "subject": atom_dict.get("subject", ""),
+                                "action": atom_dict.get("action", ""),
+                                "constraint_text": atom_dict.get("constraint_text", ""),
+                                "session_id": str(session_id),
+                            },
+                        }],
+                    )
+                except Exception as exc:
+                    logger.warning("Chroma upsert failed for atom: %s", exc)
+
+        return user_msg
+    finally:
+        if acquired and r:
+            try:
+                await r.delete(lock_key)
+            except Exception:
+                pass
 
 @router.get("", response_model=List[MessageRead])
 async def list_messages(
