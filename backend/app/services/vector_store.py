@@ -1,6 +1,7 @@
 import logging
 import uuid
 from typing import List, Dict, Any, Optional
+# pyrefly: ignore [missing-import]
 import chromadb
 from app.config import get_settings
 
@@ -21,19 +22,12 @@ def get_chroma_client():
                 logger.info("Chroma API key is mock/empty, initializing EphemeralClient for testing")
                 _chroma_client = chromadb.EphemeralClient()
             else:
-                headers = {}
-                if settings.CHROMA_API_KEY:
-                    headers["Authorization"] = f"Bearer {settings.CHROMA_API_KEY}"
-                
-                host = "https://api.trychroma.com"
-                _chroma_client = chromadb.HttpClient(
-                    host=host,
-                    headers=headers,
+                _chroma_client = chromadb.CloudClient(
+                    api_key=settings.CHROMA_API_KEY,
                     tenant=settings.CHROMA_TENANT,
-                    database=settings.CHROMA_DATABASE
+                    database=settings.CHROMA_DATABASE,
                 )
     return _chroma_client
-
 
 class VectorStore:
     @staticmethod
@@ -49,11 +43,6 @@ class VectorStore:
 
     @classmethod
     def upsert_atoms(cls, collection_id: uuid.UUID, atoms: List[Dict[str, Any]]) -> None:
-        """
-        Upsert requirement atoms into project-scoped Chroma collection.
-        Each atom dict should have: 'id', 'embedding', 'document' (raw_text), and optional 'metadata'.
-        Automatically ensures 'status': 'active' is present in metadata if omitted.
-        """
         if not atoms:
             return
 
@@ -61,7 +50,7 @@ class VectorStore:
         ids = [str(atom["id"]) for atom in atoms]
         embeddings = [atom["embedding"] for atom in atoms]
         documents = [atom["document"] for atom in atoms]
-        
+
         metadatas = []
         for atom in atoms:
             meta = dict(atom.get("metadata", {}))
@@ -79,9 +68,6 @@ class VectorStore:
 
     @classmethod
     def update_atom_status(cls, collection_id: uuid.UUID, atom_id: uuid.UUID, new_status: str) -> None:
-        """
-        Update the status metadata field of an atom in ChromaDB without re-embedding.
-        """
         try:
             collection = cls.get_or_create_collection(collection_id)
             existing = collection.get(ids=[str(atom_id)])
@@ -96,21 +82,13 @@ class VectorStore:
     @classmethod
     def query_similar_atoms(
         cls,
-        session_id: uuid.UUID,  # project_id
+        session_id: uuid.UUID,
         query_embedding: List[float],
         limit: int = 5,
         status_filter: str = "active"
     ) -> List[Dict[str, Any]]:
-        """
-        Query the project collection for active atoms similar to the query embedding.
-        Guards against ChromaDB InvalidArgumentError when the collection has fewer
-        items than requested — caps n_results to the actual collection count.
-        Returns empty list immediately when no atoms are stored yet.
-        """
         try:
             collection = cls.get_or_create_collection(session_id)
-            # ChromaDB raises InvalidArgumentError if n_results > index size.
-            # Count only once and bail early when nothing is stored yet.
             count = collection.count()
             if count == 0:
                 logger.debug("Chroma collection for %s is empty — skipping query.", session_id)
@@ -129,8 +107,6 @@ class VectorStore:
             try:
                 results = _do_query(safe_limit, where_clause)
             except Exception as inner_exc:
-                # Filtered count may be lower than safe_limit (status mismatch).
-                # Retry with limit=1 and no where-filter as a last resort.
                 logger.debug(
                     "Chroma filtered query failed (%s) — retrying without where-filter.", inner_exc
                 )

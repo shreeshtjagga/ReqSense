@@ -1,7 +1,3 @@
-"""
-Health router — GET /health and GET /health/ready
-"""
-
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
@@ -13,30 +9,22 @@ from app.tasks.celery_app import celery_app
 
 router = APIRouter(tags=["health"])
 
-
 @router.get("/health", summary="Liveness check")
 async def health() -> JSONResponse:
     return JSONResponse(content={"status": "ok"})
 
-
 @router.get("/health/ready", summary="Readiness check")
 async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
-    """
-    Readiness check reporting live DB, Redis, and Celery status.
-    It does NOT make any external API calls to Groq, S3, or Chroma per spec.
-    """
     db_ok = False
     redis_ok = False
     celery_ok = False
 
-    # 1. Check DB
     try:
         await db.execute(select(1))
         db_ok = True
     except Exception:
         pass
 
-    # 2. Check Redis
     try:
         r = get_redis_client()
         await r.ping()
@@ -44,7 +32,6 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     except Exception:
         pass
 
-    # 3. Check Celery Broker connection
     try:
         conn = celery_app.connection()
         conn.connect()

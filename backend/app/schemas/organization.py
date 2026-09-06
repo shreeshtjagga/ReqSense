@@ -1,12 +1,9 @@
-"""Organization schemas."""
 import uuid
 from datetime import datetime
 from pydantic import BaseModel, Field
 
-
 class OrganizationCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
-
 
 class OrganizationRead(BaseModel):
     id: uuid.UUID

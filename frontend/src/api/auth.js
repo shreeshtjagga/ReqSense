@@ -34,4 +34,3 @@ export const acceptInvite = async (token) => {
   const response = await api.post('/projects/invites/accept', { token });
   return response.data;
 };
-

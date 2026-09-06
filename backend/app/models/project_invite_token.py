@@ -1,4 +1,3 @@
-"""ProjectInviteToken model — single-use signup invites for clients/developers."""
 from __future__ import annotations
 
 import uuid
@@ -9,7 +8,6 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
-
 
 class ProjectInviteToken(Base):
     __tablename__ = "project_invite_tokens"

@@ -1,9 +1,7 @@
-"""Message schemas."""
 import uuid
 from datetime import datetime
 from typing import Literal
 from pydantic import BaseModel, Field
-
 
 class MessageCreate(BaseModel):
     content: str = Field(..., min_length=1, max_length=4000)
@@ -11,7 +9,6 @@ class MessageCreate(BaseModel):
     message_type: Literal[
         "normal", "question", "conflict_alert", "clarification", "summary"
     ] = "normal"
-
 
 class MessageRead(BaseModel):
     id: uuid.UUID

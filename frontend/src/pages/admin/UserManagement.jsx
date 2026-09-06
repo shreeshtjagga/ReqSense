@@ -44,14 +44,12 @@ export const UserManagement = () => {
   const [createOpen, setCreateOpen] = useState(false);
   const [currentAdmin, setCurrentAdmin] = useState(null);
 
-  // Form state
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('client');
   const [submitting, setSubmitting] = useState(false);
 
-  // Delete modal state
   const [selectedUserForDelete, setSelectedUserForDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
 

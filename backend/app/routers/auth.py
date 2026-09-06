@@ -1,12 +1,3 @@
-"""
-Auth router — register, login, refresh, logout, forgot-password, reset-password.
-
-Rate limiting via slowapi:
-  - Login:          RATE_LIMIT_LOGIN_PER_MINUTE (default 5/min)
-  - Register:       10/min (generous for dev, reasonable for prod)
-  - Forgot-password: 3/min (prevent abuse of email sending)
-"""
-
 import logging
 
 from fastapi import APIRouter, Depends, Request, status
@@ -32,7 +23,6 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-
 @router.post(
     "/register",
     response_model=RegisterResponse,
@@ -57,7 +47,6 @@ async def register(
 
     return RegisterResponse(id=user.id, email=user.email, role=user.role)
 
-
 @router.post(
     "/login",
     response_model=TokenResponse,
@@ -71,7 +60,6 @@ async def login(
 ) -> TokenResponse:
     return await auth_service.login_user(db, email=body.email, password=body.password)
 
-
 @router.post(
     "/refresh",
     response_model=TokenResponse,
@@ -82,7 +70,6 @@ async def refresh(
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     return await auth_service.refresh_tokens(db, raw_refresh_token=body.refresh_token)
-
 
 @router.post(
     "/logout",
@@ -95,7 +82,6 @@ async def logout(
 ) -> None:
     await auth_service.logout_user(db, raw_refresh_token=body.refresh_token)
 
-
 @router.post(
     "/forgot-password",
     status_code=status.HTTP_200_OK,
@@ -105,7 +91,6 @@ async def forgot_password(
     body: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
-    # Always 200 — don't reveal whether the email exists
     raw_token = await auth_service.initiate_password_reset(db, email=body.email)
     if raw_token:
         from app.services.notification_service import send_password_reset_email
@@ -117,7 +102,6 @@ async def forgot_password(
     return JSONResponse(
         content={"message": "If this email is registered, a reset link has been sent."}
     )
-
 
 @router.post(
     "/reset-password",
@@ -132,4 +116,3 @@ async def reset_password(
         db, raw_token=body.token, new_password=body.new_password
     )
     return JSONResponse(content={"message": "Password reset successful."})
-

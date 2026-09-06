@@ -1,6 +1,3 @@
-"""
-Users router — user profile self-service + full admin CRUD.
-"""
 import uuid
 from typing import List, Optional
 
@@ -17,11 +14,9 @@ from app.services.auth_service import hash_password
 
 router = APIRouter(prefix="/users", tags=["users"])
 
-
 @router.get("/me", response_model=UserResponse, summary="Get current user profile")
 async def get_me(current_user: CurrentUser) -> UserResponse:
     return UserResponse.model_validate(current_user)
-
 
 @router.get("/lookup", response_model=UserLookupResponse, summary="Look up user by email")
 async def lookup_user(
@@ -29,9 +24,6 @@ async def lookup_user(
     current_user: User = Depends(require_roles("admin", "developer")),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Look up user by email, scoped to the current user's organization.
-    """
     query = select(User).where(User.email == email)
     if current_user.organization_id:
         query = query.where(User.organization_id == current_user.organization_id)
@@ -44,17 +36,12 @@ async def lookup_user(
         )
     return user
 
-
-# ── Platform / Organization Admin CRUD ────────────────────────────────────────
-
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def admin_create_user(
     body: UserAdminCreate,
     current_user: User = Depends(require_roles("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    # Determine organization scoping:
-    # If the admin belongs to an org, they can only create users in that same org.
     org_id = current_user.organization_id
     if org_id and body.organization_id and body.organization_id != org_id:
         raise HTTPException(
@@ -63,7 +50,6 @@ async def admin_create_user(
         )
     target_org_id = org_id or body.organization_id
 
-    # Check duplicate email
     res = await db.execute(select(User).where(User.email == body.email))
     if res.scalar_one_or_none():
         raise HTTPException(
@@ -71,7 +57,6 @@ async def admin_create_user(
             detail="Email already registered."
         )
 
-    # Validating role
     if body.role not in ("admin", "developer", "client"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -87,7 +72,7 @@ async def admin_create_user(
         is_active=True,
     )
     db.add(user)
-    await db.flush()  # get the new user's ID before committing
+    await db.flush()
     db.add(AuditLog(
         user_id=current_user.id,
         action="admin_create_user",
@@ -98,7 +83,6 @@ async def admin_create_user(
     await db.commit()
     await db.refresh(user)
     return user
-
 
 @router.get("", response_model=List[UserResponse])
 async def admin_list_users(
@@ -111,7 +95,6 @@ async def admin_list_users(
     limit = min(max(limit, 1), 200)
 
     q = select(User)
-    # Scoping filter: platform admin sees all, org admin sees their own org
     if current_user.organization_id:
         q = q.where(User.organization_id == current_user.organization_id)
 
@@ -121,7 +104,6 @@ async def admin_list_users(
     q = q.offset(offset).limit(limit)
     res = await db.execute(q)
     return res.scalars().all()
-
 
 @router.get("/{user_id}", response_model=UserResponse)
 async def admin_get_user(
@@ -134,12 +116,10 @@ async def admin_get_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
-    # Scoping check
     if current_user.organization_id and user.organization_id != current_user.organization_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
     return user
-
 
 @router.patch("/{user_id}", response_model=UserResponse)
 async def admin_update_user(
@@ -153,7 +133,6 @@ async def admin_update_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
-    # Scoping check
     if current_user.organization_id and user.organization_id != current_user.organization_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
@@ -176,14 +155,12 @@ async def admin_update_user(
     await db.refresh(user)
     return user
 
-
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def admin_delete_user(
     user_id: uuid.UUID,
     current_user: User = Depends(require_roles("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    # Prevents deleting oneself
     if current_user.id == user_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -195,7 +172,6 @@ async def admin_delete_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
-    # Scoping check
     if current_user.organization_id and user.organization_id != current_user.organization_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 

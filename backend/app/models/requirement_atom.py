@@ -1,9 +1,3 @@
-"""
-RequirementAtom — extracted, structured requirement unit from a session turn.
-Linked to a ChromaDB embedding for semantic similarity search.
-Phase 3 (RDCD layer) populates these; model added now so FK refs work.
-"""
-
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -13,7 +7,6 @@ from sqlalchemy import Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
-
 
 class RequirementAtom(Base):
     __tablename__ = "requirement_atoms"
@@ -28,13 +21,13 @@ class RequirementAtom(Base):
     subject: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     action: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     constraint_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    raw_text: Mapped[str] = mapped_column(Text, nullable=False)  # max 5000 chars (app layer)
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False)
     embedding_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     embedding_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     embedding_version: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     status: Mapped[str] = mapped_column(
         String(50), default="active", nullable=False
-    )  # 'active', 'superseded', 'conflicted', 'resolved'
+    )
     turn_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

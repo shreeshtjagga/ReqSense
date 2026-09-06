@@ -20,5 +20,3 @@ export const getConflictTypeDistribution = async () => {
   const response = await api.get('/analytics/conflict-types');
   return response.data;
 };
-
-

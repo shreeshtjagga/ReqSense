@@ -1,15 +1,12 @@
-"""Session schemas."""
 import uuid
 from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field
 
-
 class SessionCreate(BaseModel):
     project_id: uuid.UUID
     client_id: Optional[uuid.UUID] = None
-
 
 class SessionRead(BaseModel):
     id: uuid.UUID
@@ -25,7 +22,6 @@ class SessionRead(BaseModel):
     srs_status: Optional[str] = "generated"
 
     model_config = {"from_attributes": True}
-
 
 class SessionEnd(BaseModel):
     status: str = Field(default="completed", pattern="^(completed|abandoned)$")

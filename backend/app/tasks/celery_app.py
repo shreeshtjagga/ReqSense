@@ -1,7 +1,3 @@
-"""
-Celery app configuration.
-"""
-
 from celery import Celery
 from app.config import get_settings
 
@@ -21,7 +17,6 @@ celery_app.conf.update(
     enable_utc=True,
 )
 
-# Autodiscover tasks from the app.tasks package
 celery_app.conf.update(
     imports=[
         "app.tasks.email_tasks",
@@ -30,4 +25,3 @@ celery_app.conf.update(
     ]
 )
 celery_app.autodiscover_tasks(["app.tasks"])
-

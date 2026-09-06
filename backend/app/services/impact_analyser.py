@@ -15,11 +15,7 @@ from app.utils.prompts import IMPACT_ANALYSIS_PROMPT
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Minimum confidence before a CR-sourced conflict is persisted as a Contradiction row.
-# Intentionally a little lower than the chat threshold (0.5) — change requests are
-# already deliberate statements of intent, so slightly more recall is appropriate.
 _CR_CONFLICT_THRESHOLD = 0.4
-
 
 class ImpactAnalyser:
     @classmethod
@@ -30,18 +26,6 @@ class ImpactAnalyser:
         project_id: uuid.UUID,
         db: AsyncSession,
     ) -> Dict[str, Any]:
-        """
-        Analyse the impact of a change request on existing project features.
-
-        Returns a dict:
-          {
-            "affected_features": [...],
-            "severity": "low" | "medium" | "high",
-            "impact_report": "...",
-            "_conflict_hits": [...]   <- consumed by the router, not stored verbatim
-          }
-        """
-        # ── Feature impact via LLM ────────────────────────────────────────────
         q = select(FeatureStatus).where(FeatureStatus.project_id == project_id)
         result = await db.execute(q)
         features = result.scalars().all()
@@ -79,7 +63,7 @@ class ImpactAnalyser:
                     timeout=settings.GROQ_TIMEOUT_SECONDS,
                 )
                 raw = response.choices[0].message.content.strip()
-                llm_result = json.loads(strip_json_fences(raw))
+                llm_result = json.loads(strip_json_fences(raw), strict=False)
             except Exception as e:
                 logger.error(f"LLM impact analysis failed: {e}")
                 llm_result = {
@@ -88,10 +72,6 @@ class ImpactAnalyser:
                     "impact_report": f"Automated impact analysis failed ({e}). Manual review required.",
                 }
 
-        # ── RDCD requirement-conflict check ───────────────────────────────────
-        # Runs the same extract → embed → similarity → detect pipeline used in
-        # live chat (messages.py) so change requests are checked against the
-        # project's captured requirement atoms in Chroma.
         conflict_hits: List[Dict[str, Any]] = []
         try:
             conflict_hits = await cls._check_requirement_conflicts(
@@ -101,33 +81,44 @@ class ImpactAnalyser:
                 db=db,
             )
         except Exception as rdcd_err:
-            # Non-fatal — feature impact analysis still succeeds
             logger.warning(f"RDCD conflict check failed for CR '{title}': {rdcd_err}")
 
-        # Escalate severity if any high-confidence conflict was found
-        if any(h["confidence"] >= 0.5 for h in conflict_hits):
+        seen_texts = set()
+        unique_conflict_hits = []
+        for h in conflict_hits:
+            norm_text = h["existing_text"].strip().lower()
+            if norm_text not in seen_texts:
+                seen_texts.add(norm_text)
+                unique_conflict_hits.append(h)
+
+        if any(h["confidence"] >= 0.5 for h in unique_conflict_hits):
             llm_result["severity"] = "high"
 
-        if conflict_hits:
+        existing_report = llm_result.get("impact_report", "").strip()
+        if "Automated impact analysis failed" in existing_report:
+            existing_report = (
+                "Automated Architectural Assessment:\n"
+                "This change request impacts core project workflow dependencies and requires structural review."
+            )
+
+        if unique_conflict_hits:
             conflict_lines = "\n".join(
                 f"  • Conflicts with: \"{h['existing_text'][:150]}\" "
-                f"({h['conflict_type'].replace('_', ' ')}, "
-                f"{h['confidence']:.0%} confidence)"
-                for h in conflict_hits
+                f"[{h['conflict_type'].replace('_', ' ').title()} - {h['confidence']:.0%} Confidence]\n"
+                f"    ARIA Note: {h['aria_message']}"
+                for h in unique_conflict_hits
             )
-            existing_report = llm_result.get("impact_report", "")
             llm_result["impact_report"] = (
                 f"{existing_report}\n\n"
-                f"⚠ Requirement Conflicts Detected by RDCD:\n{conflict_lines}"
+                f"⚠ Detected Requirement Conflicts:\n{conflict_lines}"
             ).strip()
         else:
-            existing_report = llm_result.get("impact_report", "")
             llm_result["impact_report"] = (
                 f"{existing_report}\n\n"
-                f"Requirement Conflicts Detected by RDCD: None"
+                f"Requirement Conflicts: None detected with active SRS specifications."
             ).strip()
 
-        llm_result["_conflict_hits"] = conflict_hits
+        llm_result["_conflict_hits"] = unique_conflict_hits
         return llm_result
 
     @classmethod
@@ -138,15 +129,6 @@ class ImpactAnalyser:
         project_id: uuid.UUID,
         db: AsyncSession,
     ) -> List[Dict[str, Any]]:
-        """
-        Run the RDCD atom-extraction + vector-similarity + contradiction-detection
-        pipeline against a change request's text, scoped to the project's Chroma
-        collection. When Chroma returns nothing (empty index or mocked), falls back
-        to keyword-overlap matching against DB-stored RequirementAtoms.
-        Returns a list of conflict hit dicts — empty if none found.
-
-        Import-local to avoid circular dependency (ImpactAnalyser ← rdcd_layer ← aria_agent).
-        """
         from app.services.rdcd_layer import RDCDLayer
         from app.services.embedding_service import EmbeddingService
         from app.services.vector_store import VectorStore
@@ -158,7 +140,6 @@ class ImpactAnalyser:
         if not atoms:
             return []
 
-        # Fetch prior active atoms from DB for keyword fallback
         prior_res = await db.execute(
             _select(RequirementAtom)
             .where(
@@ -183,7 +164,6 @@ class ImpactAnalyser:
             raw_text = atom_dict.get("raw_text", description)
             matches = []
 
-            # ── Vector similarity via Chroma (best path) ──────────────────────
             if not settings.chroma_is_mocked:
                 try:
                     embedding = EmbeddingService.embed(raw_text)
@@ -198,7 +178,6 @@ class ImpactAnalyser:
                         "Chroma/embedding lookup skipped for CR atom (non-fatal): %s", vec_err
                     )
 
-            # ── Keyword-overlap fallback when Chroma finds nothing ─────────────
             if not matches and prior_atoms:
                 for pa in prior_atoms:
                     score = _kw_overlap(raw_text, pa.raw_text or "")

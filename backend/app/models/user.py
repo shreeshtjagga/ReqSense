@@ -1,5 +1,3 @@
-"""User model — roles: client, developer, admin. Includes lockout fields."""
-
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
@@ -13,7 +11,6 @@ if TYPE_CHECKING:
     from app.models.organization import Organization
     from app.models.password_reset_token import PasswordResetToken
     from app.models.refresh_token import RefreshToken
-
 
 class User(Base):
     __tablename__ = "users"
@@ -30,7 +27,7 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    role: Mapped[str] = mapped_column(String(50), nullable=False)  # client | developer | admin
+    role: Mapped[str] = mapped_column(String(50), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     locked_until: Mapped[Optional[datetime]] = mapped_column(
@@ -43,7 +40,6 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    # relationships
     organization: Mapped["Organization"] = relationship(back_populates="users")
     refresh_tokens: Mapped[List["RefreshToken"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

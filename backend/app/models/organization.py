@@ -1,5 +1,3 @@
-"""Organization model."""
-
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, List
@@ -13,7 +11,6 @@ if TYPE_CHECKING:
     from app.models.project import Project
     from app.models.user import User
 
-
 class Organization(Base):
     __tablename__ = "organizations"
 
@@ -25,6 +22,5 @@ class Organization(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    # relationships (back-populated by child models)
     users: Mapped[List["User"]] = relationship(back_populates="organization")
     projects: Mapped[List["Project"]] = relationship(back_populates="organization")

@@ -21,7 +21,6 @@ def get_groq_client():
         _groq_client = groq.Groq(api_key=api_key)
     return _groq_client
 
-
 class AriaAgent:
     @staticmethod
     def _build_messages(
@@ -29,10 +28,6 @@ class AriaAgent:
         user_message: str,
         project_context: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
-        """
-        Build the full message list for the Groq API call.
-        Cap conversational history to the last 16 turns to prevent token window explosion.
-        """
         ctx = project_context or {}
         system_prompt = build_aria_system_prompt(
             project_name=ctx.get("name", ""),
@@ -43,7 +38,6 @@ class AriaAgent:
         )
 
         messages = [{"role": "system", "content": system_prompt}]
-        # Cap to last 16 turns
         recent_history = history[-16:] if len(history) > 16 else history
         for msg in recent_history:
             role = "user" if msg.get("sender") in ("client", "user") else "assistant"
@@ -64,10 +58,6 @@ class AriaAgent:
         user_message: str,
         project_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """
-        Generates a full response from ARIA.
-        Returns a dict: {"content": str, "prompt_tokens": int, "completion_tokens": int}
-        """
         if settings.groq_is_mocked:
             logger.info("[MOCK GROQ] Generating mock response")
             project_name = (project_context or {}).get("name", "this project")
@@ -103,4 +93,3 @@ class AriaAgent:
         except groq.APIStatusError as ase:
             logger.error(f"Groq APIStatusError (status {ase.status_code}): {ase.message}")
             raise
-

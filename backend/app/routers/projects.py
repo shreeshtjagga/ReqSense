@@ -1,4 +1,3 @@
-"""Projects router — full Phase 2 CRUD with scoped access."""
 import uuid
 from datetime import datetime, timezone
 from typing import List
@@ -26,7 +25,6 @@ from app.models.user import User
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
-
 @router.post("", response_model=ProjectRead, status_code=status.HTTP_201_CREATED)
 async def create_project(
     body: ProjectCreate,
@@ -42,7 +40,7 @@ async def create_project(
         or (current_user.id if current_user.role == "developer" else None),
     )
     db.add(project)
-    await db.flush()  # Get the project ID before commit
+    await db.flush()
     db.add(AuditLog(
         user_id=current_user.id,
         action="create_project",
@@ -53,7 +51,6 @@ async def create_project(
     await db.commit()
     await db.refresh(project)
     return project
-
 
 @router.get("", response_model=List[ProjectRead])
 async def list_projects(
@@ -70,7 +67,6 @@ async def list_projects(
             select(Project).where(or_(*conditions))
         )
     else:
-        # client — projects where they are invited
         result = await db.execute(
             select(Project)
             .join(ProjectClient, ProjectClient.project_id == Project.id)
@@ -78,13 +74,11 @@ async def list_projects(
         )
     return result.scalars().all()
 
-
 @router.get("/{project_id}", response_model=ProjectRead)
 async def get_project(
     project: Project = Depends(get_scoped_project),
 ):
     return project
-
 
 @router.patch("/{project_id}", response_model=ProjectRead)
 async def update_project(
@@ -107,7 +101,6 @@ async def update_project(
     await db.refresh(project)
     return project
 
-
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(
     project: Project = Depends(get_scoped_project),
@@ -129,7 +122,6 @@ async def delete_project(
     await db.delete(project)
     await db.commit()
 
-
 @router.post("/{project_id}/clients", response_model=ProjectClientRead, status_code=201)
 async def add_client_to_project(
     body: ProjectClientAdd,
@@ -137,7 +129,6 @@ async def add_client_to_project(
     current_user: User = Depends(require_roles("admin", "developer")),
     db: AsyncSession = Depends(get_db),
 ):
-    # Ensure the client being added exists and belongs to the same org
     from app.models.user import User
     client_res = await db.execute(select(User).where(User.id == body.client_id))
     client_user = client_res.scalar_one_or_none()
@@ -152,7 +143,6 @@ async def add_client_to_project(
             detail="That user is not a client account. Each email has one role — use a separate client email.",
         )
 
-    # Check if client is already invited
     existing_res = await db.execute(
         select(ProjectClient).where(
             ProjectClient.project_id == project.id,
@@ -170,7 +160,6 @@ async def add_client_to_project(
     await db.commit()
     await db.refresh(pc)
 
-    # Queue invite email via Celery task
     from app.services.notification_service import send_project_invite_email
     from app.config import get_settings
     settings = get_settings()
@@ -181,7 +170,6 @@ async def add_client_to_project(
     )
 
     return pc
-
 
 @router.delete("/{project_id}/clients/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_client_from_project(
@@ -202,15 +190,12 @@ async def remove_client_from_project(
     await db.delete(pc)
     await db.commit()
 
-
 @router.post("/{project_id}/request-close", response_model=ProjectRead)
 async def request_close_project(
     project: Project = Depends(get_scoped_project),
     current_user: User = Depends(require_roles("admin", "developer", "client")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Either party (client or developer) can request to close a project.
-    The OTHER party must confirm via /approve-close before status changes."""
     if project.closure_requested_by:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -228,15 +213,12 @@ async def request_close_project(
     await db.refresh(project)
     return project
 
-
 @router.post("/{project_id}/approve-close", response_model=ProjectRead)
 async def approve_close_project(
     project: Project = Depends(get_scoped_project),
     current_user: User = Depends(require_roles("admin", "developer", "client")),
     db: AsyncSession = Depends(get_db),
 ):
-    """The counterpart confirms closure. The original requester cannot
-    self-approve their own request."""
     if not project.closure_requested_by:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -260,20 +242,17 @@ async def approve_close_project(
     await db.refresh(project)
     return project
 
-
 @router.post("/{project_id}/cancel-close", response_model=ProjectRead)
 async def cancel_close_project(
     project: Project = Depends(get_scoped_project),
     current_user: User = Depends(require_roles("admin", "developer", "client")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Either party can cancel a pending closure request."""
     project.closure_requested_by = None
     project.closure_requested_at = None
     await db.commit()
     await db.refresh(project)
     return project
-
 
 @router.get("/{project_id}/clients", response_model=List[UserResponse])
 async def list_project_clients(
@@ -281,7 +260,6 @@ async def list_project_clients(
     current_user: User = Depends(require_roles("admin", "developer")),
     db: AsyncSession = Depends(get_db),
 ):
-    """List every client currently invited to this project."""
     from app.models.user import User as UserModel
     result = await db.execute(
         select(UserModel)
@@ -290,7 +268,6 @@ async def list_project_clients(
         .order_by(UserModel.name)
     )
     return result.scalars().all()
-
 
 @router.post(
     "/{project_id}/invites",
@@ -312,7 +289,6 @@ async def create_project_invite(
 
     email = body.email.strip().lower()
 
-    # If user already exists in this org, tell the developer to use Add Client instead
     existing = await db.execute(select(User).where(User.email == email))
     existing_user = existing.scalar_one_or_none()
     if existing_user:
@@ -361,18 +337,15 @@ async def create_project_invite(
 
     return invite
 
-
 from pydantic import BaseModel
 
 class AcceptInviteRequest(BaseModel):
     token: str
 
-
 def _as_utc(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt
-
 
 @router.post("/invites/accept", summary="Accept a project invite token")
 async def accept_project_invite(

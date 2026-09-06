@@ -21,9 +21,6 @@ async def get_latest_srs(
     current_user: User = Depends(require_roles("admin", "developer", "client")),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get the latest SRS version with extracted requirement atoms and dynamic sections.
-    """
     await get_scoped_project(project_id, current_user, db)
 
     q = (
@@ -41,7 +38,6 @@ async def get_latest_srs(
             detail="No SRS document found for this project."
         )
 
-    # Fetch active requirement atoms for this project/session
     atoms_res = await db.execute(
         select(RequirementAtom)
         .where(
@@ -93,7 +89,6 @@ async def get_latest_srs(
         "change_summary": srs.change_summary
     }
 
-
 import os
 from pathlib import Path
 from fastapi.responses import FileResponse, RedirectResponse
@@ -104,11 +99,6 @@ async def download_srs_file(
     key: str,
     current_user: User = Depends(require_roles("admin", "developer", "client")),
 ):
-    """
-    Serves the SRS Word .docx file for local/mock storage mode or redirects to S3.
-    Requires authentication — same as all other SRS endpoints.
-    """
-    # Basic path-traversal guard
     if ".." in key:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -135,7 +125,6 @@ async def download_srs_file(
         url = StorageService.get_download_url(key)
         return RedirectResponse(url=url)
 
-
 @router.get("/project/{project_id}/versions", response_model=List[SRSVersionRead])
 async def list_srs_versions(
     project_id: uuid.UUID,
@@ -144,9 +133,6 @@ async def list_srs_versions(
     offset: int = 0,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    List all SRS versions for a project with valid download URLs.
-    """
     await get_scoped_project(project_id, current_user, db)
 
     q = (
@@ -182,9 +168,6 @@ async def get_srs_version_details(
     current_user: User = Depends(require_roles("admin", "developer", "client")),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get full details (sections, atoms, download URL) for a specific SRS revision version.
-    """
     srs = await db.get(SRSVersion, version_id)
     if not srs:
         raise HTTPException(
@@ -245,7 +228,6 @@ async def get_srs_version_details(
         "change_summary": srs.change_summary
     }
 
-
 from app.services.srs_generator import SRSGenerator
 
 @router.post("/project/{project_id}/generate")
@@ -254,9 +236,6 @@ async def generate_project_srs(
     current_user: User = Depends(require_roles("admin", "developer", "client")),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Generate an SRS document for the project's most recent session.
-    """
     await get_scoped_project(project_id, current_user, db)
 
     from app.models.session import Session
@@ -277,7 +256,6 @@ async def generate_project_srs(
         "created_at": srs.created_at
     }
 
-
 @router.get("/project/{project_id}/diff")
 async def diff_srs_versions(
     project_id: uuid.UUID,
@@ -286,9 +264,6 @@ async def diff_srs_versions(
     current_user: User = Depends(require_roles("admin", "developer", "client")),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Compare two SRS versions for a project and list added/removed requirement statements.
-    """
     await get_scoped_project(project_id, current_user, db)
 
     srs_v1 = await db.get(SRSVersion, v1_id)
@@ -334,4 +309,3 @@ async def diff_srs_versions(
         "removed_requirements": removed,
         "net_change_count": len(added) - len(removed)
     }
-

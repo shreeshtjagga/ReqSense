@@ -27,8 +27,6 @@ export const ChatSession = () => {
   const [error, setError] = useState(null);
 
   const pollingIntervalRef = useRef(null);
-  // Mirror session into a ref so the polling interval callback always reads
-  // the latest status — avoids stale closure where session is null at mount time.
   const sessionRef = useRef(session);
   useEffect(() => { sessionRef.current = session; }, [session]);
 
@@ -48,7 +46,6 @@ export const ChatSession = () => {
       }
       setMessages(msgs);
 
-      // Fetch project details
       if (sessionData?.project_id) {
         const proj = await getProject(sessionData.project_id);
         setProject(proj);
@@ -64,8 +61,6 @@ export const ChatSession = () => {
   useEffect(() => {
     fetchSessionAndMessages();
 
-    // Set up polling for new messages (e.g. system warnings or external changes).
-    // Gated on tab visibility and raised to 8s interval.
     pollingIntervalRef.current = setInterval(() => {
       if (sessionRef.current?.status === 'active' && document.visibilityState === 'visible') {
         const fetchFn = sessionRef.current?.project_id
@@ -85,7 +80,6 @@ export const ChatSession = () => {
   }, [sessionId]);
 
   const handleSendMessage = async (content) => {
-    // Optimistically add client message
     const tempClientMsg = {
       id: `temp-${Date.now()}`,
       sender: 'client',
@@ -98,19 +92,16 @@ export const ChatSession = () => {
     setSending(true);
 
     try {
-      // Send message to backend (triggers AI response, atom extraction and contradiction check)
       await createMessage(sessionId, {
         content,
         sender: 'client',
         message_type: 'normal',
       });
 
-      // Refetch messages to get both client message (sanitized) and ARIA's reply
       const updatedMsgs = await listMessages(sessionId);
       setMessages(updatedMsgs);
     } catch (err) {
       showToast('Failed to send requirement. Please try again.', 'error');
-      // Rollback optimism
       setMessages((prev) => prev.filter((m) => m.id !== tempClientMsg.id));
     } finally {
       setSending(false);
@@ -126,7 +117,6 @@ export const ChatSession = () => {
       } else {
         showToast('Session ended. Your SRS document was generated successfully!', 'success');
       }
-      // Navigate to project hub if we have the project id, else dashboard
       if (session?.project_id) {
         navigate(`/client/projects/${session.project_id}`);
       } else {
@@ -139,9 +129,6 @@ export const ChatSession = () => {
     }
   };
 
-  // Handler wired from ChatWindow → ChatMessage → ConflictAlert → "Resolve Contradiction" button.
-  // contradiction here is the parsed JSON from the conflict_alert message content:
-  //   { contradiction_id, conflict_type, aria_message, confidence }
   const handleResolveConflict = async (contradiction) => {
     const contradictionId = contradiction?.contradiction_id;
     if (!contradictionId) {
@@ -151,7 +138,6 @@ export const ChatSession = () => {
     try {
       await resolveContradiction(contradictionId, { action: 'resolved', resolution: 'Resolved directly from chat session.' });
       showToast('Contradiction marked as resolved.', 'success');
-      // Refetch messages so the conflict_alert bubble can be replaced/updated.
       const updatedMsgs = await listMessages(sessionId);
       setMessages(updatedMsgs);
     } catch (err) {

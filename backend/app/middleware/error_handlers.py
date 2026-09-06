@@ -1,20 +1,3 @@
-"""
-Standard error envelope middleware + exception handlers.
-
-Every error response from the API has this shape:
-{
-    "error": {
-        "code": "VALIDATION_ERROR",       # machine-readable
-        "message": "...",                  # human-readable
-        "request_id": "uuid",
-        "detail": [...]                    # optional, e.g. pydantic field errors
-    }
-}
-
-This means the frontend always knows exactly where to find the error message
-and request_id regardless of which endpoint produced the error.
-"""
-
 import logging
 from typing import Any
 
@@ -28,7 +11,6 @@ from app.middleware.request_id import get_request_id
 
 logger = logging.getLogger(__name__)
 
-
 def _error_envelope(
     code: str,
     message: str,
@@ -40,16 +22,12 @@ def _error_envelope(
         body["detail"] = detail
     return {"error": body}
 
-
 def register_error_handlers(app: FastAPI) -> None:
-    """Attach all exception handlers to the FastAPI app."""
-
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(
         request: Request, exc: StarletteHTTPException
     ) -> JSONResponse:
         request_id = get_request_id()
-        # Map common HTTP codes to machine-readable codes
         code_map = {
             400: "BAD_REQUEST",
             401: "UNAUTHORIZED",
@@ -74,14 +52,11 @@ def register_error_handlers(app: FastAPI) -> None:
             ),
         )
 
-
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         request_id = get_request_id()
-        # Pydantic v2 errors() can contain non-serializable objects (ValueError);
-        # convert each error's 'ctx' values to strings for safe JSON encoding.
         safe_errors = []
         for err in exc.errors():
             safe_err = dict(err)
@@ -109,9 +84,6 @@ def register_error_handlers(app: FastAPI) -> None:
             request.method,
             request.url.path,
         )
-        # Capture explicitly so 500s always reach Sentry even when
-        # traces_sample_rate < 1 (the FastAPI integration only samples traces,
-        # not error events, but being explicit here removes all ambiguity).
         with sentry_sdk.push_scope() as scope:
             scope.set_tag("request_id", request_id)
             scope.set_context("request", {

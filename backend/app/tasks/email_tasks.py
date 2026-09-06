@@ -8,23 +8,20 @@ from sendgrid.helpers.mail import Mail
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.config import get_settings
-import app.database as _app_database  # late-binding: test overrides AsyncSessionLocal on this module
+import app.database as _app_database
 from app.models.email_log import EmailLog
 from app.tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-
 def run_sync(coro):
-    """Run an async coroutine synchronously. Safe to call from a running event loop (e.g. in tests)."""
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         loop = None
 
     if loop and loop.is_running():
-        # Event loop is running (e.g. in pytest-asyncio). Run in a separate thread.
         result = [None]
         exception = [None]
 
@@ -47,14 +44,7 @@ def run_sync(coro):
     else:
         return asyncio.run(coro)
 
-
 async def _save_email_log(to_email: str, template: str, status: str, error_message: str = None) -> None:
-    """Save an email log entry to the database.
-
-    Uses app.database.AsyncSessionLocal via the module reference so that the
-    test conftest override (app_database.AsyncSessionLocal = TestSessionLocal)
-    is picked up even when this coroutine runs in a new thread/event-loop.
-    """
     async with _app_database.AsyncSessionLocal() as db:
         log_entry = EmailLog(
             to_email=to_email,
@@ -65,14 +55,12 @@ async def _save_email_log(to_email: str, template: str, status: str, error_messa
         db.add(log_entry)
         await db.commit()
 
-
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=10),
     reraise=True
 )
 def _send_via_sendgrid(to_email: str, subject: str, content: str) -> None:
-    """Sends the email using SendGrid API with retry backoff."""
     message = Mail(
         from_email=settings.FROM_EMAIL,
         to_emails=to_email,
@@ -82,12 +70,8 @@ def _send_via_sendgrid(to_email: str, subject: str, content: str) -> None:
     sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
     sg.send(message)
 
-
 @celery_app.task(name="app.tasks.email_tasks.send_email_task")
 def send_email_task(to_email: str, template: str, context: Dict[str, Any]) -> None:
-    """
-    Background task to send email using SendGrid.
-    """
     subject = "Notification from ReqSense"
     body = ""
 
@@ -112,7 +96,6 @@ def send_email_task(to_email: str, template: str, context: Dict[str, Any]) -> No
     else:
         body = f"Notification content context: {context}"
 
-    # Check if we are running in test / dummy mode
     is_dummy_key = (
         not settings.SENDGRID_API_KEY or
         not settings.SENDGRID_API_KEY.startswith("SG.") or
@@ -124,7 +107,6 @@ def send_email_task(to_email: str, template: str, context: Dict[str, Any]) -> No
         logger.info(
             f"[DUMMY EMAIL] To: {to_email} | Template: {template} | Subject: {subject} | Body: {body}"
         )
-        # Log to email_logs database table
         run_sync(_save_email_log(to_email, template, "sent"))
         return
 

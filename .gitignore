@@ -1,4 +1,4 @@
-# ── Python ───────────────────────────────────────────────────────────────────
+# ── Python & Virtual Envs ───────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
@@ -12,14 +12,13 @@ dist/
 pip-wheel-metadata/
 MANIFEST
 
-# Virtual environments
 .venv/
 venv/
 env/
 ENV/
 .env.bak
 
-# ── Secrets / environment ─────────────────────────────────────────────────────
+# ── Secrets / Environment Files ───────────────────────────────────────────────
 .env
 .env.local
 .env.*.local
@@ -28,13 +27,15 @@ ENV/
 
 # ── Node / Frontend ───────────────────────────────────────────────────────────
 node_modules/
-.pnp
-.pnp.js
+frontend/node_modules/
 frontend/dist/
+frontend/dist-ssr/
 frontend/build/
 frontend/.vite/
+.pnp
+.pnp.js
 
-# ── Testing / Coverage ────────────────────────────────────────────────────────
+# ── Testing & Coverage ────────────────────────────────────────────────────────
 .pytest_cache/
 .coverage
 htmlcov/
@@ -45,12 +46,25 @@ coverage.xml
 *.lcov
 nosetests.xml
 test-results/
+tests/artifacts/
 
-# ── Alembic generated ─────────────────────────────────────────────────────────
-# (versions/ IS committed — only the cache is ignored)
+# ── Alembic & Storage ─────────────────────────────────────────────────────────
 backend/alembic/__pycache__/
+backend/data/chroma_db/
+backend/chroma_data/
+backend/storage_files/
+*.docx
+*.pdf
 
-# ── IDEs / editors ────────────────────────────────────────────────────────────
+# ── Logs & Debug ──────────────────────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── IDEs & System Files ───────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
@@ -59,21 +73,7 @@ backend/alembic/__pycache__/
 .DS_Store
 Thumbs.db
 
-# ── Logs ─────────────────────────────────────────────────────────────────────
-*.log
-logs/
-
-# ── Chroma local persistence (only used in CHROMA_MODE=local) ─────────────────
-backend/data/chroma_db/
-backend/chroma_data/
-
-# ── Generated SRS docs (uploaded to R2 — don't commit binaries) ───────────────
-*.docx
-*.pdf
-
-# ── Celery ───────────────────────────────────────────────────────────────────
+# ── Celery & Sentry ───────────────────────────────────────────────────────────
 celerybeat-schedule
 celerybeat.pid
-
-# ── Sentry ───────────────────────────────────────────────────────────────────
 .sentryclirc

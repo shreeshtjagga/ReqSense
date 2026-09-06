@@ -65,7 +65,6 @@ Please follow these instructions:
 """
 
 
-# Keep backward-compatible constant for any code that still imports ARIA_SYSTEM_PROMPT directly
 ARIA_SYSTEM_PROMPT = build_aria_system_prompt()
 
 ATOM_EXTRACTION_PROMPT = """You are a requirements analyst. Your job is to extract structured requirement atoms from a client's message.

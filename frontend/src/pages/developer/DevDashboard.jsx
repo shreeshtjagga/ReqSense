@@ -43,7 +43,6 @@ export const DevDashboard = () => {
   const [createOpen, setCreateOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Create Project form state
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [domain, setDomain] = useState('web_app');

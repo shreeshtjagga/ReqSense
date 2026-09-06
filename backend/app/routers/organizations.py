@@ -1,4 +1,3 @@
-"""Organizations router."""
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -14,7 +13,6 @@ from app.models.user import User
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
-
 @router.post("", response_model=OrganizationRead, status_code=status.HTTP_201_CREATED)
 async def create_organization(
     body: OrganizationCreate,
@@ -27,14 +25,12 @@ async def create_organization(
     await db.refresh(org)
     return org
 
-
 @router.get("/{org_id}", response_model=OrganizationRead)
 async def get_organization(
     org_id: uuid.UUID,
     current_user: User = Depends(require_roles("admin", "developer", "client")),
     db: AsyncSession = Depends(get_db),
 ):
-    # Non-admins can only see their own organization
     if current_user.role != "admin" and current_user.organization_id != org_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

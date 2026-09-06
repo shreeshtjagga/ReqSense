@@ -13,9 +13,6 @@ async def _async_generate_srs(session_id: uuid.UUID) -> None:
 
 @celery_app.task(name="app.tasks.srs_tasks.generate_srs_task")
 def generate_srs_task(session_id_str: str) -> None:
-    """
-    Celery background task to generate SRS document for finished session.
-    """
     logger.info(f"Celery task generate_srs_task started for session: {session_id_str}")
     try:
         session_id = uuid.UUID(session_id_str)

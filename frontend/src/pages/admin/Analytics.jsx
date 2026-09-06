@@ -46,7 +46,6 @@ export const Analytics = () => {
       const sessions = await listSessionsForProject(pid);
       setSessionTrend(sessions || []);
 
-      // Load counts of contradictions for the pie chart
       try {
         const contradictionsRes = await axios.get(`/contradictions/project/${pid}`);
         const list = contradictionsRes.data || [];

@@ -1,9 +1,3 @@
-"""
-audit_logs.py — Read-only audit log endpoints (admin only).
-
-Audit logs are append-only records created by app.services.audit_service.
-No writes happen through this router — it is purely a read interface.
-"""
 from __future__ import annotations
 
 import uuid
@@ -20,7 +14,6 @@ from app.models.user import User
 
 router = APIRouter(prefix="/audit-logs", tags=["audit-logs"])
 
-
 @router.get("", summary="List audit log entries (admin only)")
 async def list_audit_logs(
     entity_type: Optional[str] = Query(None, description="Filter by entity_type"),
@@ -31,10 +24,6 @@ async def list_audit_logs(
     current_user: User = Depends(require_roles("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> List[dict]:
-    """
-    Returns audit log entries in reverse chronological order.
-    Only accessible by admins — audit logs are organisation-wide.
-    """
     q = select(AuditLog).order_by(AuditLog.created_at.desc())
 
     if entity_type:

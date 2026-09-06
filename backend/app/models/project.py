@@ -1,11 +1,3 @@
-"""
-Project + ProjectClient models.
-
-ProjectClient is defined here (not a separate file) because the spec folder
-structure lists only project.py in models/ — the join table lives alongside
-the model it extends.
-"""
-
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
@@ -21,10 +13,7 @@ if TYPE_CHECKING:
     from app.models.session import Session
     from app.models.user import User
 
-
 class ProjectClient(Base):
-    """Many-to-many join: clients invited to a project."""
-
     __tablename__ = "project_clients"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)
@@ -41,7 +30,6 @@ class ProjectClient(Base):
     project: Mapped["Project"] = relationship(back_populates="project_clients")
     client: Mapped["User"] = relationship()
 
-
 class Project(Base):
     __tablename__ = "projects"
 
@@ -56,7 +44,7 @@ class Project(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     domain: Mapped[Optional[str]] = mapped_column(
         String(100), nullable=True
-    )  # 'mobile_app', 'web_app', 'software', 'api'
+    )
     developer_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(),
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -65,14 +53,13 @@ class Project(Base):
     )
     status: Mapped[str] = mapped_column(
         String(50), default="active", nullable=False
-    )  # 'active', 'completed', 'on_hold', 'archived'
+    )
     closure_requested_by: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     closure_requested_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    # Chroma distance threshold for contradiction recall (lower = stricter)
     chroma_similarity_threshold: Mapped[float] = mapped_column(
         Float, default=0.55, nullable=False
     )

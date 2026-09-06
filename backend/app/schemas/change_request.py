@@ -1,10 +1,8 @@
-"""ChangeRequest schemas."""
 import uuid
 from datetime import datetime
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
-
 
 class ChangeRequestCreate(BaseModel):
     project_id: Optional[uuid.UUID] = None
@@ -13,13 +11,10 @@ class ChangeRequestCreate(BaseModel):
     affected_features: List[str] = Field(default_factory=list)
     severity: Optional[Literal["low", "medium", "high"]] = None
 
-
-
 class ChangeRequestReview(BaseModel):
     status: Literal["approved", "rejected"]
     developer_note: Optional[str] = None
-    version: int  # optimistic lock
-
+    version: int
 
 class ChangeRequestRead(BaseModel):
     id: uuid.UUID
@@ -27,7 +22,7 @@ class ChangeRequestRead(BaseModel):
     client_id: Optional[uuid.UUID]
     title: str
     description: str
-    affected_features: Optional[str]  # JSON-encoded list
+    affected_features: Optional[str]
     impact_report: Optional[str]
     severity: Optional[str]
     status: str

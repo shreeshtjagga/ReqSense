@@ -4,7 +4,6 @@ import { loginUser } from '../../api/auth';
 import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
 
-// ── Static Isometric Cube with Edge Spark Animations ───────────────────────
 const AnimatedCube = () => {
   const canvasRef = useRef(null);
   const animRef   = useRef(null);
@@ -22,27 +21,20 @@ const AnimatedCube = () => {
     resize();
     window.addEventListener('resize', resize);
 
-    // ── Fixed isometric cube geometry ────────────────────────────────────────
-    // All coordinates are in CSS-pixel space, computed each frame from canvas size.
-    // The cube is a static isometric projection — never rotates.
     const getCubePoints = (W, H) => {
       const cx = W * 0.45;
       const cy = H * 0.48;
       const s  = Math.min(W, H) * 0.22; // half-width of cube
 
-      // Isometric offsets: 30° angle
       const dx = s;        // horizontal half-width
       const dy = s * 0.5;  // vertical foreshortening
       const h  = s * 1.0;  // cube height
 
-      // Top face diamond: TL, TC(top), TR, TC(bottom)
-      // Isometric: top-center → left → bottom-center → right
       const top    = { x: cx,      y: cy - h       };
       const left   = { x: cx - dx, y: cy - h + dy  };
       const bottom = { x: cx,      y: cy - h + 2*dy };
       const right  = { x: cx + dx, y: cy - h + dy  };
 
-      // Bottom row (directly below top face)
       const bleft   = { x: cx - dx, y: cy + dy  };
       const bbottom = { x: cx,      y: cy + 2*dy };
       const bright  = { x: cx + dx, y: cy + dy  };
@@ -50,19 +42,14 @@ const AnimatedCube = () => {
       return { top, left, bottom, right, bleft, bbottom, bright, cx, cy, h, dx, dy };
     };
 
-    // ── Sparks: each travels along one of the 9 visible edges back-and-forth ─
-    // Edges defined as pairs of point-getter functions
     const EDGE_DEFS = [
-      // Top face
       (p) => [p.top,    p.left  ],
       (p) => [p.left,   p.bottom],
       (p) => [p.bottom, p.right ],
       (p) => [p.right,  p.top   ],
-      // Left face
       (p) => [p.left,   p.bleft ],
       (p) => [p.bleft,  p.bbottom],
       (p) => [p.bbottom,p.bottom],
-      // Right face
       (p) => [p.right,  p.bright],
       (p) => [p.bright, p.bbottom],
     ];
@@ -79,7 +66,6 @@ const AnimatedCube = () => {
       width:  1.8 + Math.random() * 1.4,
     }));
 
-    // Extra ambient sparks on random edges for density
     for (let k = 0; k < 8; k++) {
       sparks.push({
         edgeFn:  EDGE_DEFS[Math.floor(Math.random() * EDGE_DEFS.length)],
@@ -103,18 +89,15 @@ const AnimatedCube = () => {
 
       const p = getCubePoints(W, H);
 
-      // ── Draw isometric grid floor ─────────────────────────────────────────
       ctx.save();
       const rows = 6, cols = 6;
       for (let r = 0; r <= rows; r++) {
         const frac = r / rows;
         const x0 = p.cx - p.dx + p.dx * frac * 0;
-        // Draw grid lines on the floor platform
         const startX = p.bleft.x + (p.bbottom.x - p.bleft.x) * frac;
         const startY = p.bleft.y + (p.bbottom.y - p.bleft.y) * frac;
         const endX   = p.bbottom.x + (p.bright.x - p.bbottom.x) * frac;
         const endY   = p.bbottom.y + (p.bright.y - p.bbottom.y) * frac;
-        // extend slightly past cube
         const ext = 0.38;
         const lx0 = startX + (startX - p.cx) * ext;
         const ly0 = startY + (startY - (p.cy + p.dy)) * ext * 0.5;
@@ -141,8 +124,6 @@ const AnimatedCube = () => {
       }
       ctx.restore();
 
-      // ── Draw cube faces (filled) ──────────────────────────────────────────
-      // Left face
       ctx.save();
       const leftGrad = ctx.createLinearGradient(p.left.x, p.left.y, p.bbottom.x, p.bbottom.y);
       leftGrad.addColorStop(0, 'rgba(29,78,216,0.85)');
@@ -157,7 +138,6 @@ const AnimatedCube = () => {
       ctx.fill();
       ctx.restore();
 
-      // Right face
       ctx.save();
       const rightGrad = ctx.createLinearGradient(p.right.x, p.right.y, p.bbottom.x, p.bbottom.y);
       rightGrad.addColorStop(0, 'rgba(17,50,160,0.80)');
@@ -172,7 +152,6 @@ const AnimatedCube = () => {
       ctx.fill();
       ctx.restore();
 
-      // Top face
       ctx.save();
       const topGrad = ctx.createLinearGradient(p.top.x, p.top.y, p.bottom.x, p.bottom.y);
       topGrad.addColorStop(0, 'rgba(96,165,250,0.92)');
@@ -188,7 +167,6 @@ const AnimatedCube = () => {
       ctx.fill();
       ctx.restore();
 
-      // ── Draw cube edges ───────────────────────────────────────────────────
       const drawEdge = (a, b, color, width, blur) => {
         ctx.save();
         ctx.strokeStyle = color;
@@ -203,30 +181,24 @@ const AnimatedCube = () => {
         ctx.restore();
       };
 
-      // Top face edges — bright highlight
       drawEdge(p.top,  p.left,   'rgba(224,242,254,0.95)', 2.5, 14);
       drawEdge(p.left, p.bottom, 'rgba(147,197,253,0.65)', 1.8, 8);
       drawEdge(p.bottom,p.right, 'rgba(147,197,253,0.65)', 1.8, 8);
       drawEdge(p.right, p.top,  'rgba(224,242,254,0.90)', 2.5, 14);
-      // Vertical left
       drawEdge(p.left,  p.bleft,  'rgba(96,165,250,0.55)', 1.5, 6);
       drawEdge(p.bottom,p.bbottom,'rgba(96,165,250,0.70)', 1.8, 8);
       drawEdge(p.right, p.bright, 'rgba(96,165,250,0.45)', 1.2, 4);
-      // Bottom edges
       drawEdge(p.bleft, p.bbottom,'rgba(59,130,246,0.40)', 1.2, 4);
       drawEdge(p.bright,p.bbottom,'rgba(59,130,246,0.35)', 1.0, 3);
 
-      // ── Draw sparks along edges ───────────────────────────────────────────
       sparks.forEach((spark) => {
         spark.t += spark.speed * dt;
         if (spark.t > 1) { spark.t = 0; }
         if (spark.t < 0) { spark.t = 1; }
 
         const [A, B] = spark.edgeFn(p);
-        // Head position
         const hx = A.x + (B.x - A.x) * spark.t;
         const hy = A.y + (B.y - A.y) * spark.t;
-        // Tail position
         const tailT = Math.max(0, spark.t - spark.tailLen);
         const tx = A.x + (B.x - A.x) * tailT;
         const ty = A.y + (B.y - A.y) * tailT;
@@ -248,7 +220,6 @@ const AnimatedCube = () => {
         ctx.lineTo(hx, hy);
         ctx.stroke();
 
-        // Head glow dot
         ctx.shadowBlur = 18;
         ctx.fillStyle = spark.color;
         ctx.globalAlpha = spark.alpha * 0.9;
@@ -276,7 +247,6 @@ const AnimatedCube = () => {
   );
 };
 
-// ── Logo ───────────────────────────────────────────────────────────────────
 const ReqSenseLogo = ({ size = 40 }) => (
   <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path fill="url(#lt)" d="M50 12 L85 32 L50 52 L15 32 Z" />
@@ -298,7 +268,6 @@ const ReqSenseLogo = ({ size = 40 }) => (
   </svg>
 );
 
-// ── Google Icon ────────────────────────────────────────────────────────────
 const GoogleIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24">
     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -308,7 +277,6 @@ const GoogleIcon = () => (
   </svg>
 );
 
-// ── EyeIcon ───────────────────────────────────────────────────────────────
 const EyeIcon = ({ open }) => open ? (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
@@ -322,7 +290,6 @@ const EyeIcon = ({ open }) => open ? (
   </svg>
 );
 
-// ── Main Login Component ───────────────────────────────────────────────────
 export const Login = () => {
   const [email, setEmail]         = useState('');
   const [password, setPassword]   = useState('');
@@ -492,7 +459,6 @@ export const Login = () => {
   );
 };
 
-// ── Inline small SVG icons ─────────────────────────────────────────────────
 const MailIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2" strokeLinecap="round">
     <rect x="2" y="4" width="20" height="16" rx="2" /><polyline points="2,4 12,13 22,4" />
@@ -530,7 +496,6 @@ const SpinnerIcon = () => (
   </svg>
 );
 
-// ── Styles ─────────────────────────────────────────────────────────────────
 const styles = {
   root: {
     minHeight: '100vh',
@@ -855,7 +820,6 @@ const styles = {
   },
 };
 
-// Inject keyframe animation for spinner
 if (typeof document !== 'undefined' && !document.getElementById('login-keyframes')) {
   const style = document.createElement('style');
   style.id = 'login-keyframes';

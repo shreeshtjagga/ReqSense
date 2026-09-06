@@ -1,4 +1,4 @@
-"""Sessions router — full Phase 2 CRUD with scoped access checking."""
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import List
@@ -11,14 +11,16 @@ from app.database import get_db
 from app.dependencies import CurrentUser, get_scoped_project, require_roles
 from app.models.message import Message
 from app.models.session import Session
+from app.models.user import User
 from app.schemas.message import MessageRead
 from app.schemas.session import SessionCreate, SessionEnd, SessionRead
 from app.services.session_memory import SessionMemory
+from app.services.srs_generator import SRSGenerator
+from app.tasks.srs_tasks import generate_srs_task
 
-from app.models.user import User
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
-
 
 @router.post("", response_model=SessionRead, status_code=status.HTTP_201_CREATED)
 async def create_session(
@@ -26,7 +28,6 @@ async def create_session(
     current_user: User = Depends(require_roles("admin", "developer", "client")),
     db: AsyncSession = Depends(get_db),
 ):
-    # Verify the user has access to the project
     await get_scoped_project(project_id=body.project_id, user=current_user, db=db)
 
     session = Session(
@@ -40,8 +41,6 @@ async def create_session(
     await db.commit()
     await db.refresh(session)
 
-    # ── Carry conversational memory forward from the project's most recent
-    #    prior sessions so ARIA doesn't "forget" everything on a new session ──
     try:
         prev_res = await db.execute(
             select(Message)
@@ -54,7 +53,6 @@ async def create_session(
         )
         prev_msgs = list(reversed(prev_res.scalars().all()))
         if prev_msgs:
-            # Prepend context marker so ARIA acknowledges history without re-asking
             marker = {
                 "sender": "aria",
                 "content": (
@@ -63,7 +61,6 @@ async def create_session(
                 ),
             }
             all_msgs = [marker] + [{"sender": m.sender, "content": m.content} for m in prev_msgs]
-            # Single pipeline batch-write — far more efficient than N round-trips
             from app.services.session_memory import get_redis_client
             import json as _json
             try:
@@ -76,18 +73,14 @@ async def create_session(
                     pipe.expire(key, 86400)
                     await pipe.execute()
             except Exception as redis_err:
-                # Non-fatal — worst case ARIA uses DB fallback on first message
                 import logging as _logging
                 _logging.getLogger(__name__).warning(
                     "Session pre-seed Redis write failed (non-fatal): %s", redis_err
                 )
     except Exception:
-        # Non-fatal — worst case ARIA just starts with less context this time
         pass
 
     return session
-
-
 
 @router.get("/project/{project_id}", response_model=List[SessionRead])
 async def list_sessions_for_project(
@@ -95,7 +88,6 @@ async def list_sessions_for_project(
     current_user: User = Depends(require_roles("admin", "developer", "client")),
     db: AsyncSession = Depends(get_db),
 ):
-    # Verify access to the project
     await get_scoped_project(project_id=project_id, user=current_user, db=db)
 
     q = select(Session).where(Session.project_id == project_id)
@@ -104,16 +96,12 @@ async def list_sessions_for_project(
     result = await db.execute(q)
     return result.scalars().all()
 
-
 @router.get("/project/{project_id}/messages", response_model=List[MessageRead])
 async def list_all_project_messages(
     project_id: uuid.UUID,
     current_user: User = Depends(require_roles("admin", "developer", "client")),
     db: AsyncSession = Depends(get_db),
 ):
-    """All messages across every session of a project, in order. Used so the
-    client sees continuity of their requirements conversation even after
-    starting a new session."""
     await get_scoped_project(project_id=project_id, user=current_user, db=db)
     result = await db.execute(
         select(Message)
@@ -123,14 +111,11 @@ async def list_all_project_messages(
     )
     return result.scalars().all()
 
-
-
 async def _get_scoped_session(
     session_id: uuid.UUID,
     user: User,
     db: AsyncSession,
 ) -> Session:
-    """Helper to fetch a session and verify the user has access to its project."""
     result = await db.execute(select(Session).where(Session.id == session_id))
     session = result.scalar_one_or_none()
     if not session:
@@ -138,10 +123,8 @@ async def _get_scoped_session(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Session not found.",
         )
-    # Perform scoping check via the session's project
     await get_scoped_project(project_id=session.project_id, user=user, db=db)
     return session
-
 
 @router.get("/{session_id}", response_model=SessionRead)
 async def get_session(
@@ -151,12 +134,6 @@ async def get_session(
 ):
     return await _get_scoped_session(session_id, current_user, db)
 
-
-import logging
-from app.tasks.srs_tasks import generate_srs_task
-from app.services.srs_generator import SRSGenerator
-
-logger = logging.getLogger(__name__)
 
 @router.patch("/{session_id}/end", response_model=SessionRead)
 async def end_session(
@@ -177,7 +154,6 @@ async def end_session(
     await db.refresh(session)
 
     srs_status = "generated"
-    # Automatically generate SRS document on completion
     if body.status == "completed":
         try:
             await SRSGenerator.generate_srs(session_id, db)
@@ -195,7 +171,6 @@ async def end_session(
     session_dict["srs_status"] = srs_status
     return session_dict
 
-
 @router.post("/{session_id}/generate-srs", response_model=SessionRead)
 async def trigger_srs_generation(
     session_id: uuid.UUID,
@@ -212,5 +187,3 @@ async def trigger_srs_generation(
         except Exception as celery_err:
             logger.error(f"Celery task dispatch failed: {celery_err}")
     return session
-
-

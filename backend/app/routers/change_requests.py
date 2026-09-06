@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/change-requests", tags=["change-requests"])
 
-
 @router.post("", response_model=ChangeRequestRead, status_code=status.HTTP_201_CREATED)
 async def create_change_request(
     body: ChangeRequestCreate,
@@ -28,12 +27,6 @@ async def create_change_request(
     current_user: User = Depends(require_roles("admin", "developer", "client")),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Create a new change request and immediately run impact analysis inline.
-    Falls back to Celery if the inline call fails (e.g. Groq timeout).
-    Any requirement conflicts detected by the RDCD pipeline are persisted as
-    Contradiction rows so they surface in the same Contradictions tab as live-chat conflicts.
-    """
     pid = body.project_id or project_id
     if not pid:
         raise HTTPException(
@@ -41,7 +34,6 @@ async def create_change_request(
             detail="Must provide project_id either in request body or as a query parameter."
         )
 
-    # Scoped access check — raises 403 if user has no access to this project
     await get_scoped_project(pid, current_user, db)
 
     cr = ChangeRequest(
@@ -58,9 +50,6 @@ async def create_change_request(
     await db.commit()
     await db.refresh(cr)
 
-    # ── Inline impact analysis (mirrors sessions.py SRS pattern) ─────────────
-    # Runs synchronously so the CR is returned with severity + impact_report
-    # already populated. Only falls back to Celery if the inline call itself fails.
     analysis_result: dict = {}
     try:
         analysis_result = await ImpactAnalyser.analyze_impact(
@@ -85,8 +74,6 @@ async def create_change_request(
         except Exception as celery_err:
             logger.error(f"Celery fallback also failed for {cr.id}: {celery_err}")
 
-    # ── Persist RDCD-detected requirement contradictions ──────────────────────
-    # conflict_hits is a list of dicts set by ImpactAnalyser._check_requirement_conflicts
     conflict_hits = analysis_result.get("_conflict_hits", [])
     if conflict_hits:
         for hit in conflict_hits:
@@ -111,7 +98,6 @@ async def create_change_request(
 
     return cr
 
-
 @router.get("/project/{project_id}", response_model=List[ChangeRequestRead])
 async def list_change_requests(
     project_id: uuid.UUID,
@@ -120,9 +106,6 @@ async def list_change_requests(
     offset: int = 0,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    List all change requests for a project.
-    """
     await get_scoped_project(project_id, current_user, db)
 
     q = (
@@ -135,16 +118,12 @@ async def list_change_requests(
     result = await db.execute(q)
     return result.scalars().all()
 
-
 @router.get("/{id}", response_model=ChangeRequestRead)
 async def get_change_request(
     id: uuid.UUID,
     current_user: User = Depends(require_roles("admin", "developer", "client")),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get change request details.
-    """
     cr = await db.get(ChangeRequest, id)
     if not cr:
         raise HTTPException(
@@ -155,7 +134,6 @@ async def get_change_request(
     await get_scoped_project(cr.project_id, current_user, db)
     return cr
 
-
 @router.patch("/{id}", response_model=ChangeRequestRead)
 async def review_change_request(
     id: uuid.UUID,
@@ -163,9 +141,6 @@ async def review_change_request(
     current_user: User = Depends(require_roles("admin", "developer")),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Review (approve/reject) a change request with optimistic locking.
-    """
     cr = await db.get(ChangeRequest, id)
     if not cr:
         raise HTTPException(
@@ -175,7 +150,6 @@ async def review_change_request(
 
     await get_scoped_project(cr.project_id, current_user, db)
 
-    # Optimistic locking check
     if cr.version != body.version:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

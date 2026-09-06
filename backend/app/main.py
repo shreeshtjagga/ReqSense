@@ -1,26 +1,25 @@
-"""
-ReqSense AI — FastAPI application factory.
-
-Middleware order (outermost → innermost):
-  1. RequestIDMiddleware  — attaches/propagates X-Request-ID
-  2. CORSMiddleware       — handles preflight before any auth runs
-  3. Route handlers
-  4. Error handlers       — catch everything that reaches the edge
-"""
+import asyncio
+import logging
+from contextlib import asynccontextmanager
 
 import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import get_settings
 from app.middleware.error_handlers import register_error_handlers
 from app.middleware.request_id import RequestIDMiddleware
+from app.services.embedding_service import EmbeddingService
+from app.services.rate_limit_service import limiter
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# ── Sentry (skipped if DSN is blank — safe for local dev) ────────────────────
 if settings.SENTRY_DSN:
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
@@ -29,43 +28,27 @@ if settings.SENTRY_DSN:
         environment=settings.ENV,
     )
 
-import asyncio
-from contextlib import asynccontextmanager
-from app.services.embedding_service import EmbeddingService
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Pre-warm embedding model in background thread on server startup
     loop = asyncio.get_event_loop()
     loop.run_in_executor(None, EmbeddingService.preload_model)
     yield
 
 
-# ── App factory ───────────────────────────────────────────────────────────────
 app = FastAPI(
     title="ReqSense AI",
     version="1.0.0",
     description="AI-powered requirements gathering with ARIA",
     lifespan=lifespan,
-    # Hide docs in production
     docs_url="/docs" if settings.docs_enabled else None,
     redoc_url="/redoc" if settings.docs_enabled else None,
     openapi_url="/openapi.json" if settings.docs_enabled else None,
 )
 
-# ── Rate limiting (slowapi) ───────────────────────────────────────────────────
-# Wire the limiter to the FastAPI app so @limiter.limit decorators are enforced.
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
-from app.services.rate_limit_service import limiter
-
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
-
-# ── Middleware (added in reverse — last added = outermost) ────────────────────
 
 app.add_middleware(
     CORSMiddleware,
@@ -76,10 +59,8 @@ app.add_middleware(
 )
 app.add_middleware(RequestIDMiddleware)
 
-# ── Error handlers ────────────────────────────────────────────────────────────
 register_error_handlers(app)
 
-# ── Routers ───────────────────────────────────────────────────────────────────
 from app.routers import (
     health, auth, users, organizations, projects, sessions, messages,
     contradictions, srs, feature_status, change_requests,
@@ -100,4 +81,3 @@ app.include_router(change_requests.router, prefix="/api/v1")
 app.include_router(analytics.router, prefix="/api/v1")
 app.include_router(audit_logs.router, prefix="/api/v1")
 app.include_router(requirement_atoms.router, prefix="/api/v1")
-

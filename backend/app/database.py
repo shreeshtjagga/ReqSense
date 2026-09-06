@@ -1,8 +1,3 @@
-"""
-ReqSense AI — Async SQLAlchemy engine, session factory, and Base.
-All models import Base from here.
-"""
-
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -17,7 +12,8 @@ engine = create_async_engine(
     echo=settings.ENV == "development",
     pool_size=10,
     max_overflow=20,
-    pool_pre_ping=True,  # drops stale connections before use
+    pool_pre_ping=True,
+    connect_args={"statement_cache_size": 0, "prepared_statement_cache_size": 0},
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -28,13 +24,10 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
 )
 
-
 class Base(DeclarativeBase):
     pass
 
-
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """FastAPI dependency — yields an async DB session, rolls back on error."""
     async with AsyncSessionLocal() as session:
         try:
             yield session

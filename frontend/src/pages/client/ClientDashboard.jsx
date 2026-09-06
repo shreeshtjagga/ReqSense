@@ -14,7 +14,6 @@ import LockIcon from '@mui/icons-material/Lock';
 import FolderOffIcon from '@mui/icons-material/FolderOff';
 import SendIcon from '@mui/icons-material/Send';
 
-// ── Demo preview messages shown when no project is assigned ──────────────────
 const DEMO_MESSAGES = [
   { id: 1, sender: 'aria', content: 'Hi! I\'m ARIA — your AI Requirements Analyst. I\'ll guide you through gathering the requirements for your project. When your developer assigns you to a project, we can begin!' },
   { id: 2, sender: 'client', content: 'Can I see what this will look like?' },
@@ -52,7 +51,6 @@ const DemoMessage = ({ msg }) => {
   );
 };
 
-// ── Locked chat preview shown when no projects exist ─────────────────────────
 const LockedChatPreview = () => (
   <Box sx={{ position: 'relative', mt: 4 }}>
     {/* Section header */}
@@ -143,7 +141,6 @@ const LockedChatPreview = () => (
   </Box>
 );
 
-// ── Main ClientDashboard ──────────────────────────────────────────────────────
 export const ClientDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

@@ -1,15 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Box, TextField, IconButton, Typography, InputAdornment } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 
 export const ChatInput = ({ onSendMessage, disabled }) => {
   const [text, setText] = useState('');
   const maxLength = 4000;
+  const isSendingRef = useRef(false);
 
   const handleSend = () => {
     if (!text.trim() || text.length > maxLength || disabled) return;
-    onSendMessage(text);
+    if (isSendingRef.current) return;
+    isSendingRef.current = true;
+    const toSend = text;
     setText('');
+    Promise.resolve(onSendMessage(toSend)).finally(() => {
+      isSendingRef.current = false;
+    });
   };
 
   const handleKeyDown = (e) => {
@@ -38,7 +44,7 @@ export const ChatInput = ({ onSendMessage, disabled }) => {
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder={disabled ? 'Chat session completed' : 'Describe a requirement or answer ARIA\'s question... (Press Enter to send)'}
+        placeholder={disabled ? 'Chat session completed' : "Describe a requirement or answer ARIA's question... (Press Enter to send)"}
         disabled={disabled}
         error={isOverLimit}
         sx={{

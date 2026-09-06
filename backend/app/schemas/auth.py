@@ -1,15 +1,8 @@
-"""
-Auth schemas — Pydantic v2 models for all auth-related request/response bodies.
-"""
-
 import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional
-
-
-# ── Registration ──────────────────────────────────────────────────────────────
 
 class RegisterRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
@@ -28,45 +21,30 @@ class RegisterRequest(BaseModel):
             raise ValueError("Password must contain at least one digit.")
         return v
 
-
 class RegisterResponse(BaseModel):
     id: uuid.UUID
     email: str
     role: str
     message: str = "Registration successful."
 
-
-# ── Login ─────────────────────────────────────────────────────────────────────
-
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=1, max_length=128)
-
 
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
-    expires_in: int  # access token lifetime in seconds
-
-
-# ── Refresh ───────────────────────────────────────────────────────────────────
+    expires_in: int
 
 class RefreshRequest(BaseModel):
     refresh_token: str
 
-
-# ── Logout ────────────────────────────────────────────────────────────────────
-
 class LogoutRequest(BaseModel):
     refresh_token: str
 
-
-# ── Forgot / Reset password ───────────────────────────────────────────────────
-
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
-
 
 class ResetPasswordRequest(BaseModel):
     token: str
@@ -81,13 +59,9 @@ class ResetPasswordRequest(BaseModel):
             raise ValueError("Password must contain at least one digit.")
         return v
 
-
-# ── JWT payload ───────────────────────────────────────────────────────────────
-
 class TokenPayload(BaseModel):
-    sub: str          # user UUID as string
+    sub: str
     role: str
-    org: Optional[str]   # organization UUID as string, nullable
+    org: Optional[str]
     exp: datetime
-    type: str         # "access" or "stream"
-
+    type: str

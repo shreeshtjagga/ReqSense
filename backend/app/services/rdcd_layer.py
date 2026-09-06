@@ -24,11 +24,6 @@ SUSPICIOUS_PHRASES = [
 class RDCDLayer:
     @staticmethod
     def sanitize_input(content: str) -> Tuple[str, bool]:
-        """
-        Pure function: Sanitize input by stripping instruction override attempts.
-        Returns tuple: (sanitized_content, was_flagged).
-        Does no DB access so it can be called safely in pre-transaction phase.
-        """
         lower_content = content.lower()
         flagged = False
         sanitized = content
@@ -48,10 +43,6 @@ class RDCDLayer:
         reraise=False
     )
     def extract_atoms(cls, message_content: str) -> List[Dict[str, Any]]:
-        """
-        Calls Groq to extract requirement atoms from message content.
-        Returns a list of atom dicts: [{"subject": ..., "action": ..., "constraint_text": ..., "raw_text": ...}]
-        """
         if settings.groq_is_mocked:
             if "order" in message_content.lower() or "deliver" in message_content.lower():
                 return [{
@@ -76,12 +67,18 @@ class RDCDLayer:
             )
             raw_response = response.choices[0].message.content.strip()
             clean_json = strip_json_fences(raw_response)
-            extracted = json.loads(clean_json)
-            # Basic validation: ensure list of dicts with raw_text
+            extracted = json.loads(clean_json, strict=False)
             if isinstance(extracted, list):
                 valid_atoms = []
                 for item in extracted:
                     if isinstance(item, dict) and item.get("raw_text"):
+                        # Quality filter: skip atoms with no structured fields
+                        if not item.get("subject") and not item.get("action"):
+                            logger.debug(
+                                "Skipping low-quality atom (no subject or action): '%s...'",
+                                item["raw_text"][:60],
+                            )
+                            continue
                         valid_atoms.append(item)
                 return valid_atoms
             return []
@@ -101,10 +98,6 @@ class RDCDLayer:
         existing_atom: Dict[str, Any],
         candidate_atom: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """
-        Compares two atoms using Groq to detect contradictions.
-        Returns dict with keys: conflict_type, confidence, aria_message.
-        """
         if settings.groq_is_mocked:
             existing_text = existing_atom.get("raw_text", "").lower()
             candidate_text = candidate_atom.get("raw_text", "").lower()
@@ -145,7 +138,7 @@ class RDCDLayer:
             )
             raw_response = response.choices[0].message.content.strip()
             clean_json = strip_json_fences(raw_response)
-            parsed = json.loads(clean_json)
+            parsed = json.loads(clean_json, strict=False)
             if isinstance(parsed, dict) and "conflict_type" in parsed:
                 return parsed
             return {
@@ -155,10 +148,8 @@ class RDCDLayer:
             }
         except Exception as e:
             logger.error(f"Failed to detect contradiction: {e}")
-            # Sentinel return on final failure: distinguishes transient failure from 'no conflict'
             return {
                 "conflict_type": "check_failed",
                 "confidence": None,
                 "aria_message": ""
             }
-
