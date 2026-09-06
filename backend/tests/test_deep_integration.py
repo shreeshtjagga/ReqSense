@@ -1,4 +1,4 @@
-﻿"""
+"""
 Deep Integration Tests - Senior QA Perspective
 Tests the full pipeline: ARIA Chat -> Atoms -> RDCD Contradictions -> Features -> SRS -> Change Requests
 All routes are under /api/v1/ (no trailing slashes)
@@ -176,6 +176,39 @@ async def test_contradiction_detected_via_api_messages(client, test_db):
         f"Contradictions in DB: {len(contradictions)}, "
         f"conflict_alert messages: {len(conflict_msgs)}"
     )
+
+
+# ===========================================================================
+# TEST 6B: Single message with internal contradiction -> contradiction in DB
+# ===========================================================================
+@pytest.mark.asyncio
+async def test_intra_message_contradiction_detected(client, test_db):
+    token = await _register_and_login(client, "qa_intra@test.com", "DevPass123")
+    project = await _create_project(client, token, "Intra Conflict Project")
+    session = await _create_session(client, token, project["id"])
+    sess_id = uuid.UUID(session["id"])
+    proj_id = uuid.UUID(project["id"])
+
+    # Single turn with both statements
+    resp = await _post_msg(
+        client, token, session["id"],
+        "Managers deliver orders. Actually, customers place orders."
+    )
+    assert resp.status_code == 201
+
+    contradictions = (await test_db.execute(
+        select(Contradiction).where(Contradiction.session_id == sess_id)
+    )).scalars().all()
+
+    assert len(contradictions) >= 1, "Expected at least 1 intra-message contradiction"
+    assert any(c.status == "pending" for c in contradictions)
+
+    # Both atoms should be marked conflicted
+    atoms = (await test_db.execute(
+        select(RequirementAtom).where(RequirementAtom.project_id == proj_id)
+    )).scalars().all()
+    assert len(atoms) == 2
+    assert all(a.status == "conflicted" for a in atoms)
 
 
 # ===========================================================================

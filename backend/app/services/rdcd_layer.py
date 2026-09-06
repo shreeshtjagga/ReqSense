@@ -44,7 +44,23 @@ class RDCDLayer:
     )
     def extract_atoms(cls, message_content: str) -> List[Dict[str, Any]]:
         if settings.groq_is_mocked:
-            if "order" in message_content.lower() or "deliver" in message_content.lower():
+            lower = message_content.lower()
+            if "manager" in lower and "customer" in lower and ("order" in lower or "deliver" in lower):
+                return [
+                    {
+                        "subject": "manager",
+                        "action": "deliver order",
+                        "constraint_text": "",
+                        "raw_text": "Managers deliver orders."
+                    },
+                    {
+                        "subject": "customer",
+                        "action": "place order",
+                        "constraint_text": "",
+                        "raw_text": "Customers place orders."
+                    }
+                ]
+            if "order" in lower or "deliver" in lower:
                 return [{
                     "subject": "customer",
                     "action": "place order",

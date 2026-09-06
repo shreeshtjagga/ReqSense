@@ -255,7 +255,7 @@ async def create_message(
             logger.warning("Contradiction detect evaluation failed: %s", exc)
         return None
 
-    async def _process_single_atom(atom_dict: dict):
+    async def _process_single_atom(atom_dict: dict, sibling_atoms: list[dict]):
         raw_text = atom_dict.get("raw_text", sanitized_content)
         matches = []
         try:
@@ -289,13 +289,29 @@ async def create_message(
                 logger.debug("Keyword fallback matched prior atom for contradiction check.")
                 matches.append(fb)
 
+        # Check against sibling atoms extracted from the same message
+        for sibling in sibling_atoms:
+            if sibling is atom_dict:
+                continue
+            fake_match = {
+                "id": None,
+                "document": sibling.get("raw_text", ""),
+                "distance": 0.0,
+                "metadata": {
+                    "subject": sibling.get("subject", ""),
+                    "action": sibling.get("action", ""),
+                    "constraint_text": sibling.get("constraint_text", ""),
+                },
+            }
+            matches.append(fake_match)
+
         eval_tasks = [_evaluate_candidate_match(atom_dict, match) for match in matches]
         eval_results = await asyncio.gather(*eval_tasks) if eval_tasks else []
         evaluations = [r for r in eval_results if r is not None]
 
         return (atom_dict, evaluations)
 
-    tasks = [_process_single_atom(a) for a in extracted_atoms]
+    tasks = [_process_single_atom(a, extracted_atoms) for a in extracted_atoms]
     atom_contradiction_pairs = await asyncio.gather(*tasks) if tasks else []
 
     try:
@@ -369,7 +385,16 @@ async def create_message(
                     import uuid as _uuid
                     c_id = _uuid.uuid4()
                     atom_1_id = chroma_match.get("id") if chroma_match else None
-                    similarity_score = float(chroma_match.get("distance", 0.0)) if chroma_match else None
+                    if atom_1_id and isinstance(atom_1_id, str):
+                        try:
+                            atom_1_id = _uuid.UUID(atom_1_id)
+                        except Exception:
+                            atom_1_id = None
+                    similarity_score = (
+                        float(chroma_match.get("distance", 0.0))
+                        if (chroma_match and chroma_match.get("distance") is not None)
+                        else None
+                    )
 
                     if atom_1_id:
                         conflicted_atom_1 = await db.get(RequirementAtom, atom_1_id)

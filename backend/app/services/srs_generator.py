@@ -169,6 +169,13 @@ class SRSGenerator:
         h2 = doc.add_heading("2. Functional Requirements", level=1)
         h2.runs[0].font.color.rgb = RGBColor(30, 58, 138)
 
+        if conflicted_count:
+            doc.add_paragraph(
+                f"Note: {conflicted_count} requirement(s) are currently excluded from this specification "
+                f"pending resolution of an active contradiction. Review the Contradictions tab before "
+                f"treating this document as final."
+            ).runs[0].font.italic = True
+
         if not atoms:
             doc.add_paragraph("No requirements captured for this project yet.")
         else:
