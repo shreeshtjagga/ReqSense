@@ -314,6 +314,13 @@ export const Register = () => {
   const navigate  = useNavigate();
   const showToast = useToastStore((s) => s.showToast);
 
+  const pwRules = [
+    { label: 'At least 8 characters', ok: password.length >= 8 },
+    { label: 'One uppercase letter (A-Z)', ok: /[A-Z]/.test(password) },
+    { label: 'One number (0-9)', ok: /[0-9]/.test(password) },
+  ];
+  const pwValid = pwRules.every((r) => r.ok);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name.trim() || !email.trim() || !password || !confirmPassword) {
@@ -322,8 +329,8 @@ export const Register = () => {
     if (password !== confirmPassword) {
       showToast('Passwords do not match.', 'error'); return;
     }
-    if (password.length < 8) {
-      showToast('Password must be at least 8 characters long.', 'error'); return;
+    if (!pwValid) {
+      showToast('Password must be at least 8 characters, include one uppercase letter and one number.', 'error'); return;
     }
     const isValidUuid = (v) => !v || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
     if (!isInviteFlow && orgId.trim() && !isValidUuid(orgId.trim())) {
@@ -342,7 +349,14 @@ export const Register = () => {
       showToast('Registration successful! Please log in.', 'success');
       navigate('/login');
     } catch (err) {
-      showToast(err.response?.data?.detail || 'Registration failed. Please try again.', 'error');
+      // Extract message from Pydantic 422 detail array or plain string
+      const detail = err.response?.data?.detail;
+      let msg = 'Registration failed. Please try again.';
+      if (typeof detail === 'string') msg = detail;
+      else if (Array.isArray(detail) && detail.length > 0) {
+        msg = detail.map((d) => d.msg || d.message || JSON.stringify(d)).join(' | ');
+      }
+      showToast(msg, 'error');
     } finally {
       setLoading(false);
     }
@@ -479,6 +493,33 @@ export const Register = () => {
                 </div>
               </div>
             </div>
+            {/* Password strength hints — shown only when user starts typing */}
+            {password.length > 0 && (
+              <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+                {pwRules.map((rule) => (
+                  <span
+                    key={rule.label}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      fontSize: '0.75rem', fontWeight: 500,
+                      color: rule.ok ? '#15803D' : '#94A3B8',
+                      transition: 'color 0.2s',
+                    }}
+                  >
+                    <span style={{
+                      width: 14, height: 14, borderRadius: '50%', display: 'inline-flex',
+                      alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem',
+                      background: rule.ok ? '#DCFCE7' : '#F1F5F9',
+                      color: rule.ok ? '#15803D' : '#CBD5E1',
+                      transition: 'all 0.2s',
+                    }}>
+                      {rule.ok ? '✓' : '·'}
+                    </span>
+                    {rule.label}
+                  </span>
+                ))}
+              </div>
+            )}
 
             {/* Role Radio Group */}
             {!isInviteFlow && (
@@ -678,6 +719,8 @@ const s = {
     display: 'flex', alignItems: 'center', padding: 0,
   },
   roleRow: { display: 'flex', gap: 8, width: '100%' },
+  roleGrid: { display: 'flex', gap: 8, width: '100%' },
+
   roleOption: {
     flex: 1, textAlign: 'center', padding: '8px 4px', borderRadius: 10,
     border: '1.5px solid #E2E8F0', fontSize: '0.83rem', fontWeight: 600,

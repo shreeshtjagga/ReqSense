@@ -39,9 +39,26 @@ export class ErrorBoundary extends Component {
             <Typography variant="h3" sx={{ fontWeight: 700, mb: 2 }}>
               Something went wrong
             </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
               An unexpected error occurred in the application interface.
             </Typography>
+            {this.state.error?.message && (
+              <Typography
+                variant="caption"
+                sx={{
+                  mb: 4,
+                  p: 1.5,
+                  bgcolor: '#FEF2F2',
+                  color: '#991B1B',
+                  borderRadius: 2,
+                  fontFamily: 'monospace',
+                  wordBreak: 'break-word',
+                  maxWidth: '100%',
+                }}
+              >
+                {this.state.error.message}
+              </Typography>
+            )}
             <Button variant="contained" size="large" onClick={this.handleReset}>
               Go to Home Page
             </Button>

@@ -3,11 +3,12 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { CircularProgress, Box } from '@mui/material';
 import { useAuth } from './hooks/useAuth';
 
-import Login from './pages/auth/Login';
-import Register from './pages/auth/Register';
-import ForgotPassword from './pages/auth/ForgotPassword';
-import ResetPassword from './pages/auth/ResetPassword';
-import AcceptInvite from './pages/auth/AcceptInvite';
+const Login = lazy(() => import('./pages/auth/Login'));
+const Register = lazy(() => import('./pages/auth/Register'));
+const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/auth/ResetPassword'));
+const AcceptInvite = lazy(() => import('./pages/auth/AcceptInvite'));
+
 
 const ClientDashboard = lazy(() => import('./pages/client/ClientDashboard'));
 const ClientProjectHub = lazy(() => import('./pages/client/ClientProjectHub'));

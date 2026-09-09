@@ -1,4 +1,4 @@
-# ── Python & Virtual Envs ───────────────────────────────────────────────────
+# ── Python & Virtual Envs ────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
@@ -55,6 +55,11 @@ backend/chroma_data/
 backend/storage_files/
 *.docx
 *.pdf
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+backend/*.db
 
 # ── Logs & Debug ──────────────────────────────────────────────────────────────
 *.log
@@ -77,3 +82,8 @@ Thumbs.db
 celerybeat-schedule
 celerybeat.pid
 .sentryclirc
+
+# ── Dev/QA Artifacts (not for production) ────────────────────────────────────
+REVIEW.md
+TEST_STATE.json
+backend/check_connections.py

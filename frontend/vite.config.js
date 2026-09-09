@@ -11,28 +11,48 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       proxy: {
-        // Proxy /api requests to the FastAPI backend during local dev
-        '/api': {
-          target: apiBase,
-          changeOrigin: true,
-        },
-        '/health': {
-          target: apiBase,
-          changeOrigin: true,
-        },
+        '/api': { target: apiBase, changeOrigin: true },
+        '/health': { target: apiBase, changeOrigin: true },
       },
     },
+    optimizeDeps: {
+      include: [
+        '@mui/material',
+        '@mui/icons-material',
+        '@emotion/react',
+        '@emotion/styled',
+        'react',
+        'react-dom',
+        'react-router-dom',
+        'axios',
+        'zustand',
+      ],
+    },
     build: {
-      chunkSizeWarningLimit: 800,
+      chunkSizeWarningLimit: 600,
+      target: 'esnext',
       rollupOptions: {
         output: {
-          manualChunks: {
-            'mui-vendor': ['@mui/material', '@mui/icons-material', '@emotion/react', '@emotion/styled'],
-            'chart-vendor': ['recharts'],
-            'motion-vendor': ['framer-motion'],
+          manualChunks(id) {
+            if (id.includes('node_modules/@mui') || id.includes('node_modules/@emotion')) {
+              return 'mui-vendor';
+            }
+            if (id.includes('node_modules/recharts') || id.includes('node_modules/d3-')) {
+              return 'chart-vendor';
+            }
+            if (id.includes('node_modules/framer-motion')) {
+              return 'motion-vendor';
+            }
+            if (id.includes('node_modules/react-router') || id.includes('node_modules/react-dom')) {
+              return 'react-vendor';
+            }
+            if (id.includes('node_modules/axios') || id.includes('node_modules/zustand') || id.includes('node_modules/@tanstack')) {
+              return 'data-vendor';
+            }
           },
         },
       },
     },
   }
 })
+

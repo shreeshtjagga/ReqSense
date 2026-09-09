@@ -329,13 +329,20 @@ const ProjectChangeRequestsTab = ({ projectId }) => {
   const [action, setAction] = useState('approved');
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchChangeRequests = async () => {
-    setLoading(true);
+  const fetchChangeRequests = async (isInitial = false) => {
+    if (isInitial) setLoading(true);
     try {
+      if (!projectId) {
+        setLoading(false);
+        return;
+      }
       const data = await listChangeRequests(projectId);
-      setChangeRequests(data);
+      setChangeRequests(data || []);
     } catch (err) {
-      showToast('Failed to load change requests.', 'error');
+      console.error('[ProjectDetail] fetch change requests failed:', err);
+      if (isInitial) {
+        showToast('Failed to load change requests.', 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -343,8 +350,8 @@ const ProjectChangeRequestsTab = ({ projectId }) => {
 
   useEffect(() => {
     if (projectId) {
-      fetchChangeRequests();
-      const interval = setInterval(fetchChangeRequests, 15000);
+      fetchChangeRequests(true);
+      const interval = setInterval(() => fetchChangeRequests(false), 15000);
       return () => clearInterval(interval);
     }
   }, [projectId]);
@@ -529,7 +536,7 @@ const ProjectChangeRequestsTab = ({ projectId }) => {
   );
 };
 
-const ProjectSRSTab = ({ projectId }) => {
+const ProjectSRSTab = ({ projectId, project }) => {
   const showToast = useToastStore((s) => s.showToast);
   const [activeSrs, setActiveSrs] = useState(null);
   const [versions, setVersions] = useState([]);
@@ -539,16 +546,33 @@ const ProjectSRSTab = ({ projectId }) => {
   const fetchSrsData = async () => {
     setLoading(true);
     try {
-      const latest = await getLatestSrs(projectId);
-      setActiveSrs(latest);
-      const list = await listSrsVersions(projectId);
-      setVersions(list);
-    } catch (err) {
-      setActiveSrs(null);
-      setVersions([]);
-      if (err.response?.status !== 404) {
-        showToast('Error loading SRS document versions.', 'error');
+      let latestDoc = null;
+      try {
+        latestDoc = await getLatestSrs(projectId);
+        setActiveSrs(latestDoc);
+      } catch (err) {
+        setActiveSrs(null);
       }
+
+      let versionList = [];
+      try {
+        const list = await listSrsVersions(projectId);
+        versionList = Array.isArray(list) ? list : [];
+        setVersions(versionList);
+      } catch (err) {
+        setVersions([]);
+      }
+
+      if (!latestDoc && versionList.length > 0) {
+        try {
+          const firstDetails = await getSrsVersionDetails(versionList[0].id);
+          setActiveSrs(firstDetails);
+        } catch {
+          setActiveSrs(versionList[0]);
+        }
+      }
+    } catch (err) {
+      console.error('[ProjectSRSTab] Error loading SRS data:', err);
     } finally {
       setLoading(false);
     }
@@ -561,11 +585,14 @@ const ProjectSRSTab = ({ projectId }) => {
   const handleGenerateSrs = async () => {
     setGenerating(true);
     try {
+      showToast('Generating formal SRS document...', 'info');
       await generateProjectSrs(projectId);
       showToast('SRS document generated successfully!', 'success');
       await fetchSrsData();
     } catch (err) {
-      showToast('Failed to generate SRS document.', 'error');
+      console.error('[ProjectSRSTab] Generate SRS error:', err);
+      const detail = err?.response?.data?.detail || 'Failed to generate SRS document.';
+      showToast(detail, 'error');
     } finally {
       setGenerating(false);
     }
@@ -576,40 +603,51 @@ const ProjectSRSTab = ({ projectId }) => {
     try {
       const details = await getSrsVersionDetails(vItem.id);
       setActiveSrs(details);
+      showToast(`Viewing revision v${vItem.version}`, 'info');
     } catch (err) {
       setActiveSrs({
         id: vItem.id,
         version: vItem.version,
         created_at: vItem.created_at,
         download_url: vItem.file_url,
+        change_summary: vItem.change_summary,
+        generated_by: vItem.generated_by,
       });
+      showToast(`Viewing revision v${vItem.version}`, 'info');
     }
   };
 
-  if (loading) return <Skeleton variant="rectangular" height={280} sx={{ borderRadius: 3 }} />;
+  if (loading) {
+    return <Skeleton variant="rectangular" height={360} sx={{ borderRadius: 3 }} />;
+  }
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }} flexWrap="wrap" gap={2}>
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>
-          Software Requirements Specification (SRS)
-        </Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>
+            Software Requirements Specification (SRS)
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Formal technical specification auto-generated from all captured gathering sessions.
+          </Typography>
+        </Box>
         <Stack direction="row" spacing={2} alignItems="center">
           {versions.length > 0 && (
-            <FormControl sx={{ minWidth: 180 }}>
+            <FormControl size="small" sx={{ minWidth: 160 }}>
               <InputLabel id="srs-version-label">Revision Version</InputLabel>
               <Select
                 labelId="srs-version-label"
                 value={activeSrs?.id || ''}
                 label="Revision Version"
                 onChange={(e) => {
-                  const sel = versions.find((v) => v.id === e.target.value);
-                  if (sel) handleSelectVersion(sel);
+                  const found = versions.find((v) => v.id === e.target.value);
+                  if (found) handleSelectVersion(found);
                 }}
               >
                 {versions.map((v) => (
                   <MenuItem key={v.id} value={v.id}>
-                    Version v{v.version} ({formatDateTime(v.created_at)})
+                    v{v.version} ({formatDateTime(v.created_at)})
                   </MenuItem>
                 ))}
               </Select>
@@ -617,9 +655,10 @@ const ProjectSRSTab = ({ projectId }) => {
           )}
           <Button
             variant="contained"
+            color="primary"
             startIcon={<DescriptionIcon />}
-            onClick={handleGenerateSrs}
             loading={generating}
+            onClick={handleGenerateSrs}
           >
             Generate SRS Document
           </Button>
@@ -635,12 +674,13 @@ const ProjectSRSTab = ({ projectId }) => {
         />
       ) : (
         <Stack spacing={4}>
-          <SRSViewer srsData={activeSrs} onShowHistory={null} />
+          <SRSViewer srsData={activeSrs} onShowHistory={null} projectName={project?.name} />
           {versions.length > 1 && (
             <VersionHistory
               versions={versions}
               onSelectVersion={handleSelectVersion}
               currentVersionId={activeSrs?.id}
+              projectName={project?.name}
             />
           )}
         </Stack>
@@ -649,14 +689,13 @@ const ProjectSRSTab = ({ projectId }) => {
   );
 };
 
-
 const ProjectDashboardTab = ({ project, sessions, contradictions, atoms, engagement }) => {
   return (
     <Box>
       <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
         Project Overview & Analytics
       </Typography>
-      
+
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={4}>
           <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
@@ -796,7 +835,7 @@ export const ProjectDetail = () => {
       if (projectId) {
         axios.get(`/contradictions/project/${projectId}`)
           .then((res) => setContradictions(res.data || []))
-          .catch(() => {});
+          .catch(() => { });
       }
     }, 15000);
 
@@ -1076,138 +1115,138 @@ export const ProjectDetail = () => {
           />
         )}
 
-            {tabValue === 1 && (
-              <Box>
-                <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-                  Gathering Sessions History
-                </Typography>
-                {sessions.length === 0 ? (
-                  <EmptyState
-                    title="No Sessions Recorded"
-                    description="No client gathering sessions have been started for this project yet."
-                  />
-                ) : (
-                  <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
-                    <Table aria-label="sessions-table">
-                      <TableHead sx={{ bgcolor: 'action.hover' }}>
-                        <TableRow>
-                          <TableCell><strong>#</strong></TableCell>
-                          <TableCell><strong>Status</strong></TableCell>
-                          <TableCell><strong>Stability</strong></TableCell>
-                          <TableCell><strong>Msg Count</strong></TableCell>
-                          <TableCell><strong>Started At</strong></TableCell>
-                          <TableCell align="right"><strong>Actions</strong></TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {sessions.map((sess, idx) => (
-                          <TableRow key={sess.id}>
-                            <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }}>#{idx + 1}</TableCell>
-                            <TableCell sx={{ textTransform: 'capitalize' }}>{sess.status}</TableCell>
-                            <TableCell>{sess.stability_score ? `${Math.round(sess.stability_score)}%` : '100%'}</TableCell>
-                            <TableCell>{sess.total_messages ?? 0}</TableCell>
-                            <TableCell>{formatDateTime(sess.started_at)}</TableCell>
-                            <TableCell align="right">
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={() => navigate(`/client/sessions/${sess.id}`)}
-                              >
-                                Watch Session
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                )}
-              </Box>
+        {tabValue === 1 && (
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+              Gathering Sessions History
+            </Typography>
+            {sessions.length === 0 ? (
+              <EmptyState
+                title="No Sessions Recorded"
+                description="No client gathering sessions have been started for this project yet."
+              />
+            ) : (
+              <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+                <Table aria-label="sessions-table">
+                  <TableHead sx={{ bgcolor: 'action.hover' }}>
+                    <TableRow>
+                      <TableCell><strong>#</strong></TableCell>
+                      <TableCell><strong>Status</strong></TableCell>
+                      <TableCell><strong>Stability</strong></TableCell>
+                      <TableCell><strong>Msg Count</strong></TableCell>
+                      <TableCell><strong>Started At</strong></TableCell>
+                      <TableCell align="right"><strong>Actions</strong></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {sessions.map((sess, idx) => (
+                      <TableRow key={sess.id}>
+                        <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }}>#{idx + 1}</TableCell>
+                        <TableCell sx={{ textTransform: 'capitalize' }}>{sess.status}</TableCell>
+                        <TableCell>{sess.stability_score ? `${Math.round(sess.stability_score)}%` : '100%'}</TableCell>
+                        <TableCell>{sess.total_messages ?? 0}</TableCell>
+                        <TableCell>{formatDateTime(sess.started_at)}</TableCell>
+                        <TableCell align="right">
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => navigate(`/client/sessions/${sess.id}`)}
+                          >
+                            Watch Session
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             )}
+          </Box>
+        )}
 
-            {tabValue === 2 && (
-              <Box>
-                <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-                  Detected Requirement Contradictions
-                </Typography>
-                {contradictions.length === 0 ? (
-                  <EmptyState
-                    title="No Contradictions Found"
-                    description="ARIA has not detected any contradictions or requirement conflicts in this project."
-                  />
-                ) : (
-                  <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
-                    <Table aria-label="contradictions-table">
-                      <TableHead sx={{ bgcolor: 'action.hover' }}>
-                        <TableRow>
-                          <TableCell><strong>Source</strong></TableCell>
-                          <TableCell><strong>Conflict Type</strong></TableCell>
-                          <TableCell><strong>Confidence</strong></TableCell>
-                          <TableCell><strong>Aria Warning Message</strong></TableCell>
-                          <TableCell><strong>Status</strong></TableCell>
-                          <TableCell><strong>False +ve</strong></TableCell>
-                          <TableCell><strong>Detected Date</strong></TableCell>
-                          <TableCell align="right"><strong>Override</strong></TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {contradictions.map((c) => (
-                          <TableRow key={c.id} sx={c.is_false_positive ? { opacity: 0.6 } : {}}>
-                            <TableCell>
-                              <Chip
-                                size="small"
-                                label={c.source === 'change_request' ? 'Change Request' : 'Live Chat'}
-                                color={c.source === 'change_request' ? 'secondary' : 'default'}
-                                variant="outlined"
-                                sx={{ fontWeight: 600, fontSize: '0.72rem' }}
-                              />
-                            </TableCell>
-                            <TableCell sx={{ textTransform: 'capitalize', fontWeight: 600 }}>
-                              {c.conflict_type?.replace(/_/g, ' ') || 'direct contradiction'}
-                            </TableCell>
-                            <TableCell>{c.confidence != null ? `${Math.round(c.confidence * 100)}%` : 'N/A'}</TableCell>
-                            <TableCell sx={{ maxWidth: 280 }}>{c.aria_message}</TableCell>
-                            <TableCell>
-                              <Badge label={c.status} type="conflict" />
-                            </TableCell>
-                            <TableCell>
-                              {c.is_false_positive ? (
-                                <Tooltip title="Tagged as AI False Positive" arrow>
-                                  <Typography variant="caption" color="warning.main" sx={{ fontWeight: 700 }}>FP</Typography>
-                                </Tooltip>
-                              ) : '—'}
-                            </TableCell>
-                            <TableCell>{formatDateTime(c.detected_at)}</TableCell>
-                            <TableCell align="right">
-                              {c.status === 'pending' ? (
-                                <Button
-                                  size="small"
-                                  variant="contained"
-                                  color="warning"
-                                  onClick={() => handleResolveContradiction(c)}
-                                >
-                                  Resolve
-                                </Button>
-                              ) : (
-                                <Typography variant="caption" color="text.secondary">
-                                  {c.is_false_positive ? 'False Positive' : 'Resolved'}
-                                </Typography>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                )}
-              </Box>
+        {tabValue === 2 && (
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+              Detected Requirement Contradictions
+            </Typography>
+            {contradictions.length === 0 ? (
+              <EmptyState
+                title="No Contradictions Found"
+                description="ARIA has not detected any contradictions or requirement conflicts in this project."
+              />
+            ) : (
+              <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+                <Table aria-label="contradictions-table">
+                  <TableHead sx={{ bgcolor: 'action.hover' }}>
+                    <TableRow>
+                      <TableCell><strong>Source</strong></TableCell>
+                      <TableCell><strong>Conflict Type</strong></TableCell>
+                      <TableCell><strong>Confidence</strong></TableCell>
+                      <TableCell><strong>Aria Warning Message</strong></TableCell>
+                      <TableCell><strong>Status</strong></TableCell>
+                      <TableCell><strong>False +ve</strong></TableCell>
+                      <TableCell><strong>Detected Date</strong></TableCell>
+                      <TableCell align="right"><strong>Override</strong></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {contradictions.map((c) => (
+                      <TableRow key={c.id} sx={c.is_false_positive ? { opacity: 0.6 } : {}}>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            label={c.source === 'change_request' ? 'Change Request' : 'Live Chat'}
+                            color={c.source === 'change_request' ? 'secondary' : 'default'}
+                            variant="outlined"
+                            sx={{ fontWeight: 600, fontSize: '0.72rem' }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ textTransform: 'capitalize', fontWeight: 600 }}>
+                          {c.conflict_type?.replace(/_/g, ' ') || 'direct contradiction'}
+                        </TableCell>
+                        <TableCell>{c.confidence != null ? `${Math.round(c.confidence * 100)}%` : 'N/A'}</TableCell>
+                        <TableCell sx={{ maxWidth: 280 }}>{c.aria_message}</TableCell>
+                        <TableCell>
+                          <Badge label={c.status} type="conflict" />
+                        </TableCell>
+                        <TableCell>
+                          {c.is_false_positive ? (
+                            <Tooltip title="Tagged as AI False Positive" arrow>
+                              <Typography variant="caption" color="warning.main" sx={{ fontWeight: 700 }}>FP</Typography>
+                            </Tooltip>
+                          ) : '—'}
+                        </TableCell>
+                        <TableCell>{formatDateTime(c.detected_at)}</TableCell>
+                        <TableCell align="right">
+                          {c.status === 'pending' ? (
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color="warning"
+                              onClick={() => handleResolveContradiction(c)}
+                            >
+                              Resolve
+                            </Button>
+                          ) : (
+                            <Typography variant="caption" color="text.secondary">
+                              {c.is_false_positive ? 'False Positive' : 'Resolved'}
+                            </Typography>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             )}
+          </Box>
+        )}
 
-            {tabValue === 3 && <ProjectFeatureTrackerTab projectId={projectId} />}
-            {tabValue === 4 && <ProjectChangeRequestsTab projectId={projectId} />}
-            {tabValue === 5 && <ProjectSRSTab projectId={projectId} />}
+        {tabValue === 3 && <ProjectFeatureTrackerTab projectId={projectId} />}
+        {tabValue === 4 && <ProjectChangeRequestsTab projectId={projectId} />}
+        {tabValue === 5 && <ProjectSRSTab projectId={projectId} project={project} />}
 
-          </Paper>
+      </Paper>
 
       <ConflictOverridePanel
         open={Boolean(selectedContradiction)}

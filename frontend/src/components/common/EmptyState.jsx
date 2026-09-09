@@ -7,8 +7,17 @@ export const EmptyState = ({
   description = 'There are no items to display at the moment.',
   actionLabel,
   onAction,
-  icon: IconComponent = InfoOutlinedIcon,
+  icon: IconProp = InfoOutlinedIcon,
 }) => {
+  const renderIcon = () => {
+    if (!IconProp) return null;
+    if (React.isValidElement(IconProp)) {
+      return IconProp;
+    }
+    const IconComponent = IconProp;
+    return <IconComponent sx={{ fontSize: 60, color: 'text.secondary', mb: 2, opacity: 0.6 }} />;
+  };
+
   return (
     <Box
       sx={{
@@ -25,7 +34,7 @@ export const EmptyState = ({
         borderColor: 'divider',
       }}
     >
-      <IconComponent sx={{ fontSize: 60, color: 'text.secondary', mb: 2, opacity: 0.6 }} />
+      {renderIcon()}
       <Typography variant="h5" sx={{ fontWeight: 600, mb: 1 }}>
         {title}
       </Typography>

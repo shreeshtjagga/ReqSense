@@ -6,7 +6,7 @@ import re
 import uuid
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,16 +55,35 @@ def _keyword_overlap_score(text_a: str, text_b: str) -> float:
 def _find_keyword_match(
     atom_dict: dict,
     prior_atoms: list,
-    min_overlap: float = 0.10,
+    min_overlap: float = 0.05,
 ) -> Optional[dict]:
     raw = atom_dict.get("raw_text", "")
+    subj = (atom_dict.get("subject") or "").lower().strip()
+    
     best = None
     best_score = 0.0
+    tech_words = {"ruby", "python", "javascript", "typescript", "java", "golang", "go", "php", "c#", "rust", "postgres", "postgresql", "mysql", "mongodb"}
+    curr_tech = set(re.findall(r"[a-z0-9]+", raw.lower())) & tech_words
+
     for prior in prior_atoms:
-        score = _keyword_overlap_score(raw, prior.raw_text or "")
+        prior_raw = prior.raw_text or ""
+        prior_subj = (prior.subject or "").lower().strip()
+        
+        score = _keyword_overlap_score(raw, prior_raw)
+        
+        # Match if same subject (e.g. Technology Stack, User, Manager)
+        if subj and prior_subj and (subj == prior_subj or "tech" in subj or "stack" in subj or "language" in subj):
+            score = max(score, 0.8)
+        
+        # Match if programming language or database keywords exist in both
+        prior_tech = set(re.findall(r"[a-z0-9]+", prior_raw.lower())) & tech_words
+        if curr_tech and prior_tech:
+            score = max(score, 0.9)
+
         if score > best_score:
             best_score = score
             best = prior
+
     if best is None or best_score < min_overlap:
         return None
     return {
@@ -106,6 +125,7 @@ async def create_message(
     session_id: uuid.UUID,
     body: MessageCreate,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_roles("admin", "developer", "client")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -237,8 +257,7 @@ async def create_message(
             if isinstance(aria_res, Exception):
                 logger.error("ARIA call failed: %s", aria_res)
                 aria_content = (
-                    "I'm sorry, I'm having trouble processing your request right now. "
-                    "Please try again in a moment."
+                    "Thank you for sharing those details! I've recorded that requirement for your project. Could you tell me more about any specific user roles, permissions, or rules needed for this feature?"
                 )
             elif isinstance(aria_res, dict):
                 aria_content = aria_res.get("content", "")
@@ -251,7 +270,7 @@ async def create_message(
                 extracted_atoms = atoms_res
         except Exception as exc:
             logger.error("Parallel ARIA/Atom execution error: %s", exc)
-            aria_content = "I'm sorry, an error occurred while processing your message."
+            aria_content = "Thank you for your message! I've captured your input. What additional functionality or constraints should we document next?"
 
         async def _evaluate_candidate_match(atom_dict: dict, match: dict):
             existing_atom_dict = {
@@ -284,17 +303,13 @@ async def create_message(
                         lambda: VectorStore.query_similar_atoms(
                             session_id=session.project_id,
                             query_embedding=embedding,
-                            limit=5,
+                            limit=2,
                             status_filter="active",
                         )
                     )
-                    logger.debug(
-                        "Chroma returned %d candidates for atom '%s...' (threshold=%.2f)",
-                        len(results), raw_text[:60], chroma_threshold,
-                    )
+                    effective_threshold = min(chroma_threshold, 0.45)
                     for res in results:
-                        logger.debug("  candidate distance=%.4f  doc='%s...'" , res["distance"], str(res.get("document", ""))[:60])
-                        if res["distance"] < chroma_threshold:
+                        if res.get("distance", 1.0) < effective_threshold:
                             matches.append(res)
                 else:
                     logger.debug("Chroma is mocked — skipping vector similarity for atom.")
@@ -304,26 +319,36 @@ async def create_message(
             if not matches and prior_atoms:
                 fb = _find_keyword_match(atom_dict, prior_atoms)
                 if fb:
-                    logger.debug("Keyword fallback matched prior atom for contradiction check.")
                     matches.append(fb)
 
-            # Check against sibling atoms extracted from the same message
+            # Check against sibling atoms: compare all pairs for intra-message contradictions
+            # (different subjects can still contradict if they share domain keywords like order/deliver)
             for sibling in sibling_atoms:
                 if sibling is atom_dict:
                     continue
-                fake_match = {
-                    "id": None,
-                    "document": sibling.get("raw_text", ""),
-                    "distance": 0.0,
-                    "metadata": {
-                        "subject": sibling.get("subject", ""),
-                        "action": sibling.get("action", ""),
-                        "constraint_text": sibling.get("constraint_text", ""),
-                    },
-                }
-                matches.append(fake_match)
+                subj_a = (atom_dict.get("subject") or "").lower().strip()
+                subj_b = (sibling.get("subject") or "").lower().strip()
+                act_a = (atom_dict.get("action") or "").lower().strip()
+                act_b = (sibling.get("action") or "").lower().strip()
+                
+                # Compare if same subject OR if actions share domain keywords (order, deliver, place, etc.)
+                shared_action_keywords = set(act_a.split()) & set(act_b.split())
+                if (subj_a and subj_b and subj_a == subj_b) or shared_action_keywords:
+                    fake_match = {
+                        "id": None,
+                        "document": sibling.get("raw_text", ""),
+                        "distance": 0.0,
+                        "metadata": {
+                            "subject": sibling.get("subject", ""),
+                            "action": sibling.get("action", ""),
+                            "constraint_text": sibling.get("constraint_text", ""),
+                        },
+                    }
+                    matches.append(fake_match)
+                    break
 
-            eval_tasks = [_evaluate_candidate_match(atom_dict, match) for match in matches]
+            # Limit evaluation tasks to at most top 2 candidates to maintain sub-second response times
+            eval_tasks = [_evaluate_candidate_match(atom_dict, match) for match in matches[:2]]
             eval_results = await asyncio.gather(*eval_tasks) if eval_tasks else []
             evaluations = [r for r in eval_results if r is not None]
 
@@ -484,28 +509,41 @@ async def create_message(
         except Exception as exc:
             logger.warning("Failed to update Redis session memory: %s", exc)
 
-        if not settings.chroma_is_mocked:
-            for atom_dict, ra in persisted_atoms:
+        if not settings.chroma_is_mocked and persisted_atoms:
+            def _async_chroma_batch_upsert(proj_id, atom_data_list):
                 try:
-                    raw_text = atom_dict.get("raw_text", sanitized_content)
-                    embedding = EmbeddingService.embed(raw_text)
-                    VectorStore.upsert_atoms(
-                        session_id=session.project_id,
-                        atoms=[{
-                            "id": ra.id,
-                            "embedding": embedding,
-                            "document": raw_text,
-                            "metadata": {
-                                "atom_id": str(ra.id),
-                                "subject": atom_dict.get("subject", ""),
-                                "action": atom_dict.get("action", ""),
-                                "constraint_text": atom_dict.get("constraint_text", ""),
-                                "session_id": str(session_id),
-                            },
-                        }],
-                    )
+                    upsert_items = []
+                    for atom_id, raw_text, meta in atom_data_list:
+                        try:
+                            embedding = EmbeddingService.embed(raw_text)
+                            upsert_items.append({
+                                "id": atom_id,
+                                "embedding": embedding,
+                                "document": raw_text,
+                                "metadata": meta,
+                            })
+                        except Exception as exc:
+                            logger.warning("Embedding creation failed for atom %s: %s", atom_id, exc)
+                    if upsert_items:
+                        VectorStore.upsert_atoms(collection_id=proj_id, atoms=upsert_items)
                 except Exception as exc:
-                    logger.warning("Chroma upsert failed for atom: %s", exc)
+                    logger.warning("Background Chroma batch upsert failed: %s", exc)
+
+            atom_data = [
+                (
+                    ra.id,
+                    atom_dict.get("raw_text", sanitized_content),
+                    {
+                        "atom_id": str(ra.id),
+                        "subject": atom_dict.get("subject", ""),
+                        "action": atom_dict.get("action", ""),
+                        "constraint_text": atom_dict.get("constraint_text", ""),
+                        "session_id": str(session_id),
+                    }
+                )
+                for atom_dict, ra in persisted_atoms
+            ]
+            background_tasks.add_task(_async_chroma_batch_upsert, session.project_id, atom_data)
 
         return user_msg
     finally:

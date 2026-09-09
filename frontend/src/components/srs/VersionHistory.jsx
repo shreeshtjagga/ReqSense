@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Table,
   TableBody,
@@ -11,12 +11,14 @@ import {
   Typography,
   Box,
   Chip,
+  CircularProgress,
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { formatDateTime } from '../../utils/helpers';
-
 import { API_URL, API_PREFIX } from '../../utils/constants';
+import { downloadSrsDocx } from '../../api/srs';
+import { useToastStore } from '../../store/toastStore';
 
 export const getFullDownloadUrl = (url) => {
   if (!url) return '';
@@ -28,8 +30,30 @@ export const getFullDownloadUrl = (url) => {
   return `${API_URL}${API_PREFIX}${cleanUrl}`;
 };
 
-export const VersionHistory = ({ versions = [], onSelectVersion, currentVersionId }) => {
+export const VersionHistory = ({ versions = [], onSelectVersion, currentVersionId, projectName = 'Project' }) => {
   const safeVersions = Array.isArray(versions) ? versions : [];
+  const showToast = useToastStore((s) => s.showToast);
+  const [downloadingId, setDownloadingId] = useState(null);
+
+  const handleDownload = async (ver) => {
+    if (!ver?.file_url) {
+      showToast('Download link not available for this revision.', 'warning');
+      return;
+    }
+    setDownloadingId(ver.id);
+    try {
+      showToast(`Downloading SRS revision v${ver.version || ''}...`, 'info');
+      const safeProjectName = (projectName || 'Project').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const filename = `${safeProjectName}_SRS_v${ver.version || '1.0'}.docx`;
+      await downloadSrsDocx(ver.file_url, filename);
+      showToast(`SRS v${ver.version} downloaded successfully!`, 'success');
+    } catch (err) {
+      console.error('[VersionHistory] Download failed:', err);
+      showToast('Failed to download SRS document.', 'error');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   return (
     <Box sx={{ mt: 2 }}>
@@ -58,6 +82,7 @@ export const VersionHistory = ({ versions = [], onSelectVersion, currentVersionI
             <TableBody>
               {safeVersions.map((ver) => {
                 const isActive = ver.id === currentVersionId;
+                const isDownloading = downloadingId === ver.id;
                 
                 return (
                   <TableRow
@@ -92,12 +117,11 @@ export const VersionHistory = ({ versions = [], onSelectVersion, currentVersionI
                             size="small"
                             variant="outlined"
                             color="secondary"
-                            startIcon={<DownloadIcon />}
-                            href={getFullDownloadUrl(ver.file_url)}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                            startIcon={isDownloading ? <CircularProgress size={14} color="inherit" /> : <DownloadIcon />}
+                            disabled={isDownloading}
+                            onClick={() => handleDownload(ver)}
                           >
-                            Download
+                            {isDownloading ? 'Downloading...' : 'Download'}
                           </Button>
                         )}
                       </Box>

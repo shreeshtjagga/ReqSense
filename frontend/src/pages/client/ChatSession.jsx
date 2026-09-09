@@ -1,9 +1,9 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { Typography, Box, Alert, Button, Grid, Stack, Divider, Paper, Skeleton } from '@mui/material';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { Typography, Box, Alert, Button, Grid, Stack, Divider, Paper, Skeleton, Chip } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
 import ChatWindow from '../../components/chat/ChatWindow';
-import { getSession, endSession, listAllProjectMessages } from '../../api/sessions';
+import { getSession, endSession } from '../../api/sessions';
 import { listMessages, createMessage } from '../../api/messages';
 import { getProject } from '../../api/projects';
 import { resolveContradiction } from '../../api/contradictions';
@@ -24,62 +24,93 @@ export const ChatSession = () => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [ending, setEnding] = useState(false);
   const [error, setError] = useState(null);
 
   const pollingIntervalRef = useRef(null);
   const sessionRef = useRef(session);
+  const sendingRef = useRef(false);
+
   useEffect(() => { sessionRef.current = session; }, [session]);
 
-
-  const fetchSessionAndMessages = async () => {
+  const fetchSessionAndMessages = useCallback(async () => {
+    if (!sessionId) return;
     try {
-      const sessionData = await getSession(sessionId);
+      const [sessionData, msgs] = await Promise.all([
+        getSession(sessionId),
+        listMessages(sessionId),
+      ]);
+
       setSession(sessionData);
 
-      let msgs;
-      try {
-        msgs = sessionData?.project_id
-          ? await listAllProjectMessages(sessionData.project_id)
-          : await listMessages(sessionId);
-      } catch {
-        msgs = await listMessages(sessionId);
+      if (!sendingRef.current) {
+        setMessages(Array.isArray(msgs) ? msgs : []);
       }
-      setMessages(msgs);
 
-      if (sessionData?.project_id) {
-        const proj = await getProject(sessionData.project_id);
-        setProject(proj);
+      if (sessionData?.project_id && !project) {
+        try {
+          const proj = await getProject(sessionData.project_id);
+          setProject(proj);
+        } catch {
+          // Project load is non-fatal
+        }
       }
     } catch (err) {
-      setError('Could not load requirements gathering session.');
+      const detail = err?.response?.data?.detail || 'Could not load requirements gathering session.';
+      setError(detail);
       showToast('Error loading session details.', 'error');
     } finally {
       setLoading(false);
     }
-  };
+  }, [sessionId, showToast]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    // Reset state for new session
+    setSession(null);
+    setProject(null);
+    setMessages([]);
+    setError(null);
+    setLoading(true);
+    sendingRef.current = false;
+    setSending(false);
+
     fetchSessionAndMessages();
 
+    // Poll for new messages while session is active
     pollingIntervalRef.current = setInterval(() => {
-      if (sessionRef.current?.status === 'active' && document.visibilityState === 'visible') {
-        const fetchFn = sessionRef.current?.project_id
-          ? () => listAllProjectMessages(sessionRef.current.project_id)
-          : () => listMessages(sessionId);
-        fetchFn()
-          .then((msgs) => setMessages(msgs))
-          .catch((e) => console.error('Error polling messages:', e));
+      if (
+        sessionRef.current?.status === 'active' &&
+        document.visibilityState === 'visible' &&
+        !sendingRef.current
+      ) {
+        listMessages(sessionId)
+          .then((msgs) => {
+            if (!sendingRef.current && Array.isArray(msgs)) {
+              setMessages((prev) => {
+                if (
+                  prev.length !== msgs.length ||
+                  (msgs.length > 0 && prev[prev.length - 1]?.id !== msgs[msgs.length - 1]?.id)
+                ) {
+                  return msgs;
+                }
+                return prev;
+              });
+            }
+          })
+          .catch((e) => console.warn('Polling error (non-fatal):', e));
       }
-    }, 8000);
+    }, 5000);
 
     return () => {
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
       }
     };
-  }, [sessionId]);
+  }, [sessionId, fetchSessionAndMessages]);
 
   const handleSendMessage = async (content) => {
+    if (!content?.trim()) return;
+
     const tempClientMsg = {
       id: `temp-${Date.now()}`,
       sender: 'client',
@@ -87,9 +118,10 @@ export const ChatSession = () => {
       message_type: 'normal',
       created_at: new Date().toISOString(),
     };
-    
-    setMessages((prev) => [...prev, tempClientMsg]);
+
+    sendingRef.current = true;
     setSending(true);
+    setMessages((prev) => [...prev, tempClientMsg]);
 
     try {
       await createMessage(sessionId, {
@@ -99,34 +131,40 @@ export const ChatSession = () => {
       });
 
       const updatedMsgs = await listMessages(sessionId);
-      setMessages(updatedMsgs);
+      setMessages(Array.isArray(updatedMsgs) ? updatedMsgs : []);
     } catch (err) {
-      showToast('Failed to send requirement. Please try again.', 'error');
+      const detail = err?.response?.data?.detail || 'Failed to send requirement. Please try again.';
+      showToast(detail, 'error');
+      // Remove optimistic message on failure
       setMessages((prev) => prev.filter((m) => m.id !== tempClientMsg.id));
-      throw err; // re-throw so ChatInput's .catch() keeps the text
+      throw err; // re-throw so ChatInput can keep the text
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   };
 
   const handleEndSession = async () => {
+    if (ending) return;
+    setEnding(true);
     try {
-      setLoading(true);
       const res = await endSession(sessionId, 'completed');
       if (res?.srs_status === 'failed' || res?.srs_status === 'queued') {
-        showToast('Session ended. SRS generation is queued/delayed — generate manually in Project SRS tab.', 'warning');
+        showToast('Session ended. SRS generation queued — generate manually from Project SRS tab.', 'warning');
       } else {
-        showToast('Session ended. Your SRS document was generated successfully!', 'success');
+        showToast('Session ended. SRS document generated successfully!', 'success');
       }
-      if (session?.project_id) {
-        navigate(`/client/projects/${session.project_id}`);
+      const projectId = session?.project_id;
+      if (projectId) {
+        navigate(`/client/projects/${projectId}`);
       } else {
         navigate('/');
       }
     } catch (err) {
-      showToast('Failed to end the session.', 'error');
+      const detail = err?.response?.data?.detail || 'Failed to end the session.';
+      showToast(detail, 'error');
     } finally {
-      setLoading(false);
+      setEnding(false);
     }
   };
 
@@ -137,10 +175,13 @@ export const ChatSession = () => {
       return;
     }
     try {
-      await resolveContradiction(contradictionId, { action: 'resolved', resolution: 'Resolved directly from chat session.' });
+      await resolveContradiction(contradictionId, {
+        action: 'resolved',
+        resolution: 'Resolved directly from chat session.',
+      });
       showToast('Contradiction marked as resolved.', 'success');
       const updatedMsgs = await listMessages(sessionId);
-      setMessages(updatedMsgs);
+      setMessages(Array.isArray(updatedMsgs) ? updatedMsgs : []);
     } catch (err) {
       showToast('Failed to resolve contradiction. Try from the Project Detail page.', 'error');
     }
@@ -159,27 +200,43 @@ export const ChatSession = () => {
     );
   }
 
+  const isActive = session?.status === 'active';
+  const canChat = Boolean(isActive);
+
   return (
     <Layout>
-      <Grid container spacing={3} sx={{ height: 'calc(100vh - 120px)' }}>
+      <Grid
+        container
+        spacing={3}
+        sx={{
+          height: { xs: 'auto', md: 'calc(100vh - 140px)' },
+          minHeight: 0,
+          flexGrow: 1,
+        }}
+      >
         {/* Left Side: Session Details Panel */}
-        <Grid item xs={12} md={3} sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <Grid
+          item
+          xs={12}
+          md={3}
+          sx={{ display: 'flex', flexDirection: 'column', height: { xs: 'auto', md: '100%' } }}
+        >
           <Stack spacing={2} sx={{ height: '100%' }}>
             <Button
               variant="outlined"
               color="inherit"
               startIcon={<ArrowBackIcon />}
-              onClick={() => navigate('/')}
+              onClick={() => session?.project_id ? navigate(`/client/projects/${session.project_id}`) : navigate('/')}
               sx={{ alignSelf: 'flex-start' }}
             >
-              Back to Dashboard
+              Back to Project
             </Button>
-            
+
             <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, flexGrow: 1, overflowY: 'auto' }}>
               <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }}>
                 Session Info
               </Typography>
-              
+
               <Stack spacing={2} divider={<Divider />}>
                 <Box>
                   <Typography variant="caption" color="text.secondary">Project</Typography>
@@ -188,46 +245,79 @@ export const ChatSession = () => {
 
                 <Box>
                   <Typography variant="caption" color="text.secondary">Status</Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 600, textTransform: 'capitalize' }}>
-                    {session?.status}
+                  <Box sx={{ mt: 0.5 }}>
+                    <Chip
+                      label={session?.status || 'unknown'}
+                      color={isActive ? 'success' : 'default'}
+                      size="small"
+                      sx={{ fontWeight: 700, textTransform: 'capitalize' }}
+                    />
+                  </Box>
+                </Box>
+
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Messages</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {messages.length} in session
                   </Typography>
                 </Box>
 
                 <Box>
                   <Typography variant="caption" color="text.secondary">Contradictions</Typography>
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {session?.contradiction_events ?? 0}
+                    {session?.contradiction_events ?? 0} detected
                   </Typography>
                 </Box>
               </Stack>
             </Paper>
 
-            {session?.status === 'active' && (
+            {isActive && (
               <Button
                 variant="contained"
                 color="error"
                 startIcon={<StopIcon />}
                 onClick={handleEndSession}
+                loading={ending}
                 fullWidth
                 size="large"
               >
-                End Chat
+                End Chat & Generate SRS
               </Button>
             )}
           </Stack>
         </Grid>
 
         {/* Right Side: Chat Window */}
-        <Grid item xs={12} md={9} sx={{ height: '100%' }}>
+        <Grid
+          item
+          xs={12}
+          md={9}
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            height: { xs: '600px', md: '100%' },
+            minHeight: 0,
+          }}
+        >
           {error ? (
-            <Alert severity="error">{error}</Alert>
+            <Alert
+              severity="error"
+              action={
+                <Button color="inherit" size="small" onClick={fetchSessionAndMessages}>
+                  Retry
+                </Button>
+              }
+            >
+              {error}
+            </Alert>
           ) : (
             <ChatWindow
               messages={messages}
               sending={sending}
+              loading={loading}
               onSendMessage={handleSendMessage}
               onResolveConflict={handleResolveConflict}
-              disabled={session?.status !== 'active' || user?.role !== 'client'}
+              disabled={!canChat}
               title={`Gathering session for ${project?.name || 'Project'}`}
             />
           )}

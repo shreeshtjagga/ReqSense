@@ -38,10 +38,12 @@ export const Layout = ({ children }) => {
           width: hasSidebar ? { sm: `calc(100% - ${drawerWidth}px)` } : '100%',
           display: 'flex',
           flexDirection: 'column',
+          minHeight: '100vh',
+          boxSizing: 'border-box',
         }}
       >
         <Toolbar /> {/* Spacer matching Navbar height */}
-        <Box sx={{ flexGrow: 1 }}>{children}</Box>
+        <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>{children}</Box>
       </Box>
     </Box>
   );

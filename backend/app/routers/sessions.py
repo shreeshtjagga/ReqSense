@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import CurrentUser, get_scoped_project, require_roles
 from app.models.message import Message
+from app.models.project import Project
 from app.models.session import Session
 from app.models.user import User
 from app.schemas.message import MessageRead
@@ -38,6 +39,20 @@ async def create_session(
         status="active",
     )
     db.add(session)
+    await db.commit()
+    await db.refresh(session)
+
+    project_obj = await db.scalar(select(Project).where(Project.id == body.project_id))
+    project_name = project_obj.name if project_obj else "your project"
+
+    initial_msg = Message(
+        session_id=session.id,
+        sender="aria",
+        content=f"Hello! I'm ARIA, your AI Requirements Analyst. I'm ready to help gather requirements for **{project_name}**. Please tell me what features or functionality you would like to build!",
+        message_type="normal",
+    )
+    db.add(initial_msg)
+    session.total_messages = 1
     await db.commit()
     await db.refresh(session)
 
@@ -92,7 +107,8 @@ async def list_sessions_for_project(
 
     q = select(Session).where(Session.project_id == project_id)
     if current_user.role == "client":
-        q = q.where(Session.client_id == current_user.id)
+        from sqlalchemy import or_
+        q = q.where(or_(Session.client_id == current_user.id, Session.client_id.is_(None)))
     result = await db.execute(q)
     return result.scalars().all()
 

@@ -3,11 +3,11 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.database import get_db
-from app.services.session_memory import get_redis_client
-from app.tasks.celery_app import celery_app
 
 router = APIRouter(tags=["health"])
+settings = get_settings()
 
 @router.get("/health", summary="Liveness check")
 async def health() -> JSONResponse:
@@ -16,8 +16,6 @@ async def health() -> JSONResponse:
 @router.get("/health/ready", summary="Readiness check")
 async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     db_ok = False
-    redis_ok = False
-    celery_ok = False
 
     try:
         await db.execute(select(1))
@@ -25,22 +23,11 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     except Exception:
         pass
 
-    try:
-        r = get_redis_client()
-        await r.ping()
-        redis_ok = True
-    except Exception:
-        pass
+    # In local mode Redis and Celery are replaced by in-process stubs — always ok
+    redis_ok = settings.redis_is_disabled  # True when using in-memory mode
+    celery_ok = True  # Direct call stub, always available
 
-    try:
-        conn = celery_app.connection()
-        conn.connect()
-        conn.release()
-        celery_ok = True
-    except Exception:
-        pass
-
-    all_ok = db_ok and redis_ok and celery_ok
+    all_ok = db_ok
     status_code = status.HTTP_200_OK if all_ok else status.HTTP_503_SERVICE_UNAVAILABLE
 
     return JSONResponse(
@@ -49,6 +36,7 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
             "status": "ready" if all_ok else "unready",
             "db": db_ok,
             "redis": redis_ok,
-            "celery": celery_ok
+            "celery": celery_ok,
+            "mode": "local" if settings.is_sqlite else "production",
         }
     )

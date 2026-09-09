@@ -1,16 +1,38 @@
-import React from 'react';
-import { Paper, Typography, Box, Button, Stack, Divider, Chip } from '@mui/material';
+import React, { useState } from 'react';
+import { Paper, Typography, Box, Button, Stack, Divider, Chip, CircularProgress } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import HistoryIcon from '@mui/icons-material/History';
 import { formatDateTime } from '../../utils/helpers';
 import SRSSection from './SRSSection';
-import { getFullDownloadUrl } from './VersionHistory';
+import { downloadSrsDocx } from '../../api/srs';
+import { useToastStore } from '../../store/toastStore';
 
-export const SRSViewer = ({ srsData, onShowHistory }) => {
+export const SRSViewer = ({ srsData, onShowHistory, projectName = 'Project' }) => {
   if (!srsData) return null;
 
   const { version, created_at, download_url, sections = [], atoms = [], generated_by } = srsData;
-  const targetDownloadUrl = getFullDownloadUrl(download_url);
+  const showToast = useToastStore((s) => s.showToast);
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    if (!download_url) {
+      showToast('Download link not available for this SRS version.', 'warning');
+      return;
+    }
+    setDownloading(true);
+    try {
+      showToast('Downloading SRS document (.docx)...', 'info');
+      const safeProjectName = (projectName || 'Project').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const filename = `${safeProjectName}_SRS_v${version || '1.0'}.docx`;
+      await downloadSrsDocx(download_url, filename);
+      showToast('SRS document downloaded successfully!', 'success');
+    } catch (err) {
+      console.error('[SRSViewer] Download failed:', err);
+      showToast('Failed to download SRS document. Please try again.', 'error');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const displaySections = sections.length > 0 ? sections : [
     {
@@ -45,7 +67,7 @@ export const SRSViewer = ({ srsData, onShowHistory }) => {
             Generated on {formatDateTime(created_at)}
           </Typography>
         </Box>
-        
+
         <Stack direction="row" spacing={1.5}>
           {onShowHistory && (
             <Button
@@ -57,16 +79,15 @@ export const SRSViewer = ({ srsData, onShowHistory }) => {
               History
             </Button>
           )}
-          {targetDownloadUrl && (
+          {download_url && (
             <Button
               variant="contained"
               color="secondary"
-              startIcon={<DownloadIcon />}
-              href={targetDownloadUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+              startIcon={downloading ? <CircularProgress size={18} color="inherit" /> : <DownloadIcon />}
+              disabled={downloading}
+              onClick={handleDownload}
             >
-              Download .DOCX
+              {downloading ? 'Downloading...' : 'Download .DOCX'}
             </Button>
           )}
         </Stack>

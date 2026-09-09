@@ -42,7 +42,7 @@ export const DevDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [domain, setDomain] = useState('web_app');
@@ -84,14 +84,14 @@ export const DevDashboard = () => {
       setName('');
       setDescription('');
       setDomain('web_app');
-      
+
       fetchDashboardData();
     } catch (err) {
       const errorMsg = typeof err.response?.data?.detail === 'string'
         ? err.response.data.detail
         : (Array.isArray(err.response?.data?.detail)
-            ? err.response.data.detail.map(d => d.msg).join(', ')
-            : 'Failed to create project.');
+          ? err.response.data.detail.map(d => d.msg).join(', ')
+          : 'Failed to create project.');
       showToast(errorMsg, 'error');
     } finally {
       setSubmitting(false);

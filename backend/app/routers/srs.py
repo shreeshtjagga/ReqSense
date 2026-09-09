@@ -1,6 +1,6 @@
 import uuid
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +38,30 @@ async def get_latest_srs(
             detail="No SRS document found for this project."
         )
 
+    from app.models.contradiction import Contradiction
+    from app.models.session import Session
+    from app.models.change_request import ChangeRequest
+    from sqlalchemy import or_
+
+    session_ids_q = select(Session.id).where(Session.project_id == project_id)
+    cr_ids_q = select(ChangeRequest.id).where(ChangeRequest.project_id == project_id)
+    pending_c_res = await db.execute(
+        select(Contradiction).where(
+            or_(
+                Contradiction.session_id.in_(session_ids_q),
+                Contradiction.change_request_id.in_(cr_ids_q)
+            ),
+            Contradiction.status == "pending"
+        )
+    )
+    pending_c_list = pending_c_res.scalars().all()
+    pending_atom_ids = set()
+    for pc in pending_c_list:
+        if pc.atom_1_id:
+            pending_atom_ids.add(pc.atom_1_id)
+        if pc.atom_2_id:
+            pending_atom_ids.add(pc.atom_2_id)
+
     atoms_res = await db.execute(
         select(RequirementAtom)
         .where(
@@ -45,7 +69,8 @@ async def get_latest_srs(
         )
         .where(RequirementAtom.status == "active")
     )
-    atoms = atoms_res.scalars().all()
+    all_active_atoms = atoms_res.scalars().all()
+    atoms = [a for a in all_active_atoms if a.id not in pending_atom_ids]
 
     sections = [
         {
@@ -97,7 +122,9 @@ from app.services.storage_service import get_s3_client, _BASE_DIR
 @router.get("/download-file")
 async def download_srs_file(
     key: str,
+    token: Optional[str] = Query(None),
     current_user: User = Depends(require_roles("admin", "developer", "client")),
+    db: AsyncSession = Depends(get_db),
 ):
     if ".." in key:
         raise HTTPException(
@@ -109,17 +136,29 @@ async def download_srs_file(
         file_path = _BASE_DIR / "storage_files" / key
         if not file_path.exists():
             import docx
+            from docx.shared import Pt, RGBColor
+            from docx.enum.text import WD_ALIGN_PARAGRAPH
             file_path.parent.mkdir(parents=True, exist_ok=True)
             doc = docx.Document()
-            doc.add_heading("Software Requirements Specification (SRS)", 0)
-            doc.add_paragraph("Requirements gathering specification document.")
+            title_p = doc.add_paragraph()
+            title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            r = title_p.add_run("SOFTWARE REQUIREMENTS SPECIFICATION (SRS)")
+            r.font.name = "Arial"
+            r.font.size = Pt(20)
+            r.font.bold = True
+            r.font.color.rgb = RGBColor(30, 58, 138)
+            doc.add_paragraph("ReqSense AI Requirements Specification Document.")
             doc.save(str(file_path))
 
         filename = os.path.basename(key)
+        if not filename.endswith(".docx"):
+            filename = f"{filename}.docx"
+
         return FileResponse(
             path=str(file_path),
             filename=filename,
-            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
         )
     else:
         url = StorageService.get_download_url(key)
@@ -175,7 +214,29 @@ async def get_srs_version_details(
             detail="SRS version not found."
         )
 
-    await get_scoped_project(srs.project_id, current_user, db)
+    from app.models.contradiction import Contradiction
+    from app.models.session import Session
+    from app.models.change_request import ChangeRequest
+    from sqlalchemy import or_
+
+    session_ids_q = select(Session.id).where(Session.project_id == srs.project_id)
+    cr_ids_q = select(ChangeRequest.id).where(ChangeRequest.project_id == srs.project_id)
+    pending_c_res = await db.execute(
+        select(Contradiction).where(
+            or_(
+                Contradiction.session_id.in_(session_ids_q),
+                Contradiction.change_request_id.in_(cr_ids_q)
+            ),
+            Contradiction.status == "pending"
+        )
+    )
+    pending_c_list = pending_c_res.scalars().all()
+    pending_atom_ids = set()
+    for pc in pending_c_list:
+        if pc.atom_1_id:
+            pending_atom_ids.add(pc.atom_1_id)
+        if pc.atom_2_id:
+            pending_atom_ids.add(pc.atom_2_id)
 
     atoms_res = await db.execute(
         select(RequirementAtom)
@@ -184,7 +245,8 @@ async def get_srs_version_details(
         )
         .where(RequirementAtom.status == "active")
     )
-    atoms = atoms_res.scalars().all()
+    all_active_atoms = atoms_res.scalars().all()
+    atoms = [a for a in all_active_atoms if a.id not in pending_atom_ids]
 
     sections = [
         {
@@ -246,6 +308,18 @@ async def generate_project_srs(
         .limit(1)
     )
     latest_session = sess_res.scalar_one_or_none()
+
+    if not latest_session:
+        latest_session = Session(
+            id=uuid.uuid4(),
+            project_id=project_id,
+            client_id=current_user.id if current_user.role == "client" else None,
+            status="completed",
+        )
+        db.add(latest_session)
+        await db.commit()
+        await db.refresh(latest_session)
+
     srs = await SRSGenerator.generate_srs(latest_session.id, db)
     download_url = StorageService.get_download_url(srs.file_url)
 

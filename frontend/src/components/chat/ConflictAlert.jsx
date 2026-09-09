@@ -8,13 +8,16 @@ import { ROLES } from '../../utils/constants';
 
 const STATUS_META = {
   pending: { label: 'Pending Review', color: 'warning' },
-  resolved: { label: 'Resolved', color: 'success', icon: <CheckCircleOutlineIcon fontSize="inherit" /> },
-  ignored: { label: 'Ignored / False Positive', color: 'default', icon: <RemoveCircleOutlineIcon fontSize="inherit" /> },
+  resolved: { label: 'Resolved', color: 'success' },
+  ignored: { label: 'Ignored / False Positive', color: 'default' },
 };
 
 export const ConflictAlert = ({ contradiction, onResolve }) => {
   const { user } = useAuthStore();
-  const isDeveloper = user?.role === ROLES.DEVELOPER || user?.role === ROLES.ADMIN;
+  const canResolve = Boolean(user);
+
+  // Safety: handle null/undefined contradiction gracefully
+  if (!contradiction) return null;
 
   const {
     contradiction_id,
@@ -43,11 +46,11 @@ export const ConflictAlert = ({ contradiction, onResolve }) => {
       <AlertTitle sx={{ fontWeight: 700, mb: 1 }}>
         Contradiction Detected
         {' '}
+        {/* Chip without icon prop to avoid undefined icon crash */}
         <Chip
           label={statusInfo.label}
           color={statusInfo.color}
           size="small"
-          icon={statusInfo.icon}
           sx={{ ml: 1, fontSize: '0.7rem', height: 20 }}
         />
       </AlertTitle>
@@ -59,7 +62,7 @@ export const ConflictAlert = ({ contradiction, onResolve }) => {
       <Stack spacing={1} sx={{ fontSize: '0.8rem', opacity: 0.9, mb: 2 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
           <strong>Conflict Type:</strong>
-          <span>{conflict_type || 'direct_contradiction'}</span>
+          <span>{(conflict_type || 'direct_contradiction').replace(/_/g, ' ')}</span>
         </Box>
         <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
           <strong>Confidence:</strong>
@@ -67,7 +70,7 @@ export const ConflictAlert = ({ contradiction, onResolve }) => {
         </Box>
       </Stack>
 
-      {isDeveloper && onResolve && !isAlreadyResolved && (
+      {canResolve && onResolve && !isAlreadyResolved && (
         <Box>
           <Divider sx={{ my: 1.5, borderColor: '#FDE68A' }} />
           <Button

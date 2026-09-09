@@ -28,25 +28,7 @@ export const ClosureBanner = ({ project, onUpdated }) => {
   };
 
   if (!hasPendingRequest) {
-    return (
-      <Alert
-        severity="info"
-        sx={{ mb: 3 }}
-        action={
-          <Button
-            size="small"
-            variant="contained"
-            color="error"
-            disabled={busy}
-            onClick={() => run(requestCloseProject, 'Closure request sent. Waiting for the other party to confirm.')}
-          >
-            Request to Close Project
-          </Button>
-        }
-      >
-        This project is active.
-      </Alert>
-    );
+    return null;
   }
 
   return (

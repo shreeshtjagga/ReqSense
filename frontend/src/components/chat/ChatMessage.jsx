@@ -8,11 +8,14 @@ import { formatDateTime } from '../../utils/helpers';
 import ConflictAlert from './ConflictAlert';
 
 export const ChatMessage = ({ message, onResolveConflict }) => {
+  // Safety guard: if message is null/undefined, render nothing
+  if (!message) return null;
+
   const { sender, content, message_type, created_at } = message;
 
   const isAria = sender === MESSAGE_SENDER.ARIA;
   const isSystem = sender === MESSAGE_SENDER.SYSTEM;
-  const isClient = sender === MESSAGE_SENDER.CLIENT;
+  const isClient = !isSystem && (sender === MESSAGE_SENDER.CLIENT || sender === 'user' || sender === 'client');
 
   if (isSystem) {
     return (
@@ -32,18 +35,24 @@ export const ChatMessage = ({ message, onResolveConflict }) => {
         >
           <SettingsSuggestIcon fontSize="small" sx={{ color: '#64748B' }} />
           <Typography variant="caption" sx={{ color: '#475569', fontWeight: 600 }}>
-            {content}
+            {content || ''}
           </Typography>
         </Paper>
       </Box>
     );
   }
 
+  // Parse conflict alerts safely — never crash on malformed JSON
   let conflictData = null;
-  if (message_type === 'conflict_alert') {
+  if (message_type === 'conflict_alert' && content) {
     try {
-      conflictData = JSON.parse(content);
+      const parsed = JSON.parse(content);
+      // Only use parsed data if it looks like a valid conflict object
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        conflictData = parsed;
+      }
     } catch (e) {
+      // Not valid JSON — fall through and render as text
     }
   }
 
@@ -98,7 +107,7 @@ export const ChatMessage = ({ message, onResolveConflict }) => {
             />
           ) : (
             <Typography variant="body1" sx={{ whiteSpace: 'pre-line', wordBreak: 'break-word', lineHeight: 1.6 }}>
-              {content}
+              {content || ''}
             </Typography>
           )}
         </Paper>
@@ -114,7 +123,7 @@ export const ChatMessage = ({ message, onResolveConflict }) => {
             fontWeight: 500,
           }}
         >
-          {formatDateTime(created_at)}
+          {created_at ? formatDateTime(created_at) : ''}
         </Typography>
       </Box>
 

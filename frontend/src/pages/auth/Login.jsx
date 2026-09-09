@@ -296,10 +296,18 @@ export const Login = () => {
   const [rememberMe, setRememberMe] = useState(false);
   const [showPw, setShowPw]       = useState(false);
   const [loading, setLoading]     = useState(false);
+  const [modalType, setModalType] = useState(null); // 'help' | 'contact' | null
 
   const navigate   = useNavigate();
   const login      = useAuthStore((s) => s.login);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const showToast  = useToastStore((s) => s.showToast);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/');
+    }
+  }, [isAuthenticated, navigate]);
 
   useEffect(() => {
     const saved = localStorage.getItem('reqsense_remember_email');
@@ -335,11 +343,11 @@ export const Login = () => {
           <span style={styles.logoText}>ReqSense <span style={styles.aiText}>AI</span></span>
         </div>
         <div style={styles.helpRow}>
-          <button style={styles.helpBtn} onClick={() => showToast('Help documentation available in your dashboard.', 'info')}>
+          <button style={styles.helpBtn} onClick={() => setModalType('help')}>
             <HelpIcon /> Help
           </button>
           <span style={styles.divider}>|</span>
-          <button style={styles.helpBtn} onClick={() => showToast('Contact support at support@reqsense.ai', 'info')}>
+          <button style={styles.helpBtn} onClick={() => setModalType('contact')}>
             <HeadsetIcon /> Contact Us
           </button>
         </div>
@@ -455,6 +463,87 @@ export const Login = () => {
           </p>
         </div>
       </div>
+
+      {/* ── SIMPLE HELP & CONTACT MODAL ────────────────────────────────────────── */}
+      {modalType && (
+        <div
+          style={styles.modalBackdrop}
+          onClick={() => setModalType(null)}
+        >
+          <div
+            style={styles.modalCard}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={styles.modalHeader}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <ReqSenseLogo size={28} />
+                <h3 style={styles.modalTitle}>
+                  {modalType === 'help' ? 'Help & Getting Started' : 'Contact Support'}
+                </h3>
+              </div>
+              <button
+                style={styles.closeBtn}
+                onClick={() => setModalType(null)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div style={styles.modalBody}>
+              {modalType === 'help' ? (
+                <div style={styles.simpleList}>
+                  <div style={styles.simpleItem}>
+                    <strong style={styles.itemTitle}>🤖 ARIA Requirements Gathering</strong>
+                    <p style={styles.itemDesc}>Conduct interactive conversations with the ARIA agent to automatically capture and structure functional requirements.</p>
+                  </div>
+                  <div style={styles.simpleItem}>
+                    <strong style={styles.itemTitle}>⚡ Contradiction Detection (RDCD)</strong>
+                    <p style={styles.itemDesc}>Conflicting stakeholder statements are detected in real-time and isolated until approved by an engineering lead.</p>
+                  </div>
+                  <div style={styles.simpleItem}>
+                    <strong style={styles.itemTitle}>📄 SRS Document Export</strong>
+                    <p style={styles.itemDesc}>Generate and download IEEE-standard specification documents (.docx) with executive summaries and functional tables.</p>
+                  </div>
+                </div>
+              ) : (
+                <div style={styles.simpleList}>
+                  <div style={styles.simpleItem}>
+                    <strong style={styles.itemTitle}>✉️ Direct Support Email</strong>
+                    <p style={styles.itemDesc}>
+                      For inquiries, access requests, or bug reports:
+                      <a href="mailto:support@reqsense.ai" style={styles.contactLink}>support@reqsense.ai</a>
+                    </p>
+                  </div>
+                  <div style={styles.simpleItem}>
+                    <strong style={styles.itemTitle}>⏱️ Operational Hours</strong>
+                    <p style={styles.itemDesc}>Monday – Friday, 9:00 AM – 6:00 PM EST (Response within 2 hours).</p>
+                  </div>
+                  <a
+                    href="mailto:support@reqsense.ai?subject=ReqSense%20Inquiry"
+                    style={styles.primaryActionBtn}
+                  >
+                    Open Mail App
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={styles.modalFooter}>
+              <button
+                type="button"
+                style={styles.footerCloseBtn}
+                onClick={() => setModalType(null)}
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -817,6 +906,117 @@ const styles = {
   secText: {
     fontSize: '0.8rem',
     color: 'rgba(255,255,255,0.55)',
+  },
+  modalBackdrop: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(2, 6, 23, 0.7)',
+    backdropFilter: 'blur(8px)',
+    WebkitBackdropFilter: 'blur(8px)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+    padding: 16,
+  },
+  modalCard: {
+    background: '#0F172A',
+    border: '1px solid rgba(56, 189, 248, 0.25)',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 460,
+    boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '18px 20px',
+    borderBottom: '1px solid rgba(255,255,255,0.08)',
+  },
+  modalTitle: {
+    color: '#F8FAFC',
+    fontSize: '1.05rem',
+    fontWeight: 700,
+    margin: 0,
+  },
+  closeBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#94A3B8',
+    fontSize: '1.1rem',
+    cursor: 'pointer',
+    padding: '4px 8px',
+    borderRadius: 6,
+  },
+  modalBody: {
+    padding: '20px',
+  },
+  simpleList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 14,
+  },
+  simpleItem: {
+    background: 'rgba(255,255,255,0.03)',
+    border: '1px solid rgba(255,255,255,0.06)',
+    borderRadius: 10,
+    padding: '12px 14px',
+  },
+  itemTitle: {
+    color: '#38BDF8',
+    fontSize: '0.9rem',
+    fontWeight: 600,
+    display: 'block',
+    marginBottom: 4,
+  },
+  itemDesc: {
+    color: '#CBD5E1',
+    fontSize: '0.825rem',
+    lineHeight: 1.5,
+    margin: 0,
+  },
+  contactLink: {
+    color: '#38BDF8',
+    fontWeight: 600,
+    display: 'block',
+    marginTop: 4,
+    textDecoration: 'none',
+  },
+  primaryActionBtn: {
+    display: 'inline-block',
+    textAlign: 'center',
+    background: 'linear-gradient(135deg, #2563EB 0%, #38BDF8 100%)',
+    color: '#FFFFFF',
+    fontWeight: 600,
+    fontSize: '0.85rem',
+    padding: '10px 16px',
+    borderRadius: 8,
+    textDecoration: 'none',
+    marginTop: 4,
+  },
+  modalFooter: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    padding: '12px 20px',
+    borderTop: '1px solid rgba(255,255,255,0.08)',
+    background: 'rgba(0,0,0,0.1)',
+  },
+  footerCloseBtn: {
+    background: 'rgba(255,255,255,0.08)',
+    border: '1px solid rgba(255,255,255,0.12)',
+    borderRadius: 6,
+    color: '#F8FAFC',
+    fontWeight: 600,
+    fontSize: '0.825rem',
+    padding: '6px 16px',
+    cursor: 'pointer',
   },
 };
 

@@ -96,7 +96,7 @@ instance.interceptors.response.use(
         processQueue(refreshError, null);
         useAuthStore.getState().logout();
         isRefreshing = false;
-        
+
         if (typeof window !== 'undefined') {
           window.location.href = '/login';
         }

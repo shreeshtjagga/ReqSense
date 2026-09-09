@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Typography,
   Box,
@@ -29,6 +29,9 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Alert,
+  AlertTitle,
+  Badge,
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
@@ -37,6 +40,7 @@ import EmptyState from '../../components/common/EmptyState';
 import { getProject } from '../../api/projects';
 import { listSessionsForProject, createSession } from '../../api/sessions';
 import { createChangeRequest, listChangeRequests } from '../../api/changeRequests';
+import { listContradictionsForProject } from '../../api/contradictions';
 import { useToastStore } from '../../store/toastStore';
 import { useProjectStore } from '../../store/projectStore';
 import { formatDateTime } from '../../utils/helpers';
@@ -55,8 +59,10 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import CommentIcon from '@mui/icons-material/Comment';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 
-const ProjectOverviewTab = ({ project, sessions }) => {
+const ProjectOverviewTab = ({ project, sessions, contradictions, onViewContradictions }) => {
+  const pendingCount = contradictions.filter((c) => c.status === 'pending').length;
 
   return (
     <Box>
@@ -64,8 +70,38 @@ const ProjectOverviewTab = ({ project, sessions }) => {
         Project Overview & Status
       </Typography>
 
+      {pendingCount > 0 && (
+        <Alert
+          severity="warning"
+          icon={<WarningAmberIcon fontSize="inherit" />}
+          sx={{
+            mb: 3,
+            borderRadius: 2,
+            border: '1px solid #FDE68A',
+            '& .MuiAlert-message': { width: '100%' },
+          }}
+          action={
+            <Button
+              size="small"
+              variant="outlined"
+              color="warning"
+              onClick={onViewContradictions}
+              sx={{ whiteSpace: 'nowrap', fontWeight: 700 }}
+            >
+              View Details
+            </Button>
+          }
+        >
+          <AlertTitle sx={{ fontWeight: 700 }}>
+            {pendingCount} Requirement Contradiction{pendingCount > 1 ? 's' : ''} Detected
+          </AlertTitle>
+          ARIA has flagged conflicting requirements in your project. Your developer is reviewing
+          them. You can view the details in the Contradictions tab.
+        </Alert>
+      )}
+
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6}>
+        <Grid item xs={12} sm={4}>
           <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
             <Typography variant="caption" color="text.secondary">System Domain</Typography>
             <Typography variant="h6" sx={{ fontWeight: 700, mt: 0.5 }}>
@@ -73,16 +109,36 @@ const ProjectOverviewTab = ({ project, sessions }) => {
             </Typography>
           </Paper>
         </Grid>
-        <Grid item xs={12} sm={6}>
+        <Grid item xs={12} sm={4}>
           <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
             <Typography variant="caption" color="text.secondary">Gathering Sessions</Typography>
             <Typography variant="h6" sx={{ fontWeight: 700, mt: 0.5 }}>
-              {sessions.length} Recorded Sessions
+              {sessions.length} Recorded
+            </Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 2.5,
+              borderRadius: 3,
+              borderColor: pendingCount > 0 ? '#FCD34D' : undefined,
+              bgcolor: pendingCount > 0 ? '#FFFBEB' : undefined,
+              cursor: pendingCount > 0 ? 'pointer' : 'default',
+            }}
+            onClick={pendingCount > 0 ? onViewContradictions : undefined}
+          >
+            <Typography variant="caption" color="text.secondary">Contradictions</Typography>
+            <Typography
+              variant="h6"
+              sx={{ fontWeight: 700, mt: 0.5, color: pendingCount > 0 ? '#D97706' : 'text.primary' }}
+            >
+              {pendingCount > 0 ? `${pendingCount} Pending` : contradictions.length === 0 ? 'None' : 'All Resolved'}
             </Typography>
           </Paper>
         </Grid>
       </Grid>
-
 
       <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, mb: 4 }}>
         <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
@@ -115,7 +171,9 @@ const ChatSessionsTab = ({ projectId, project, sessions, loadingSessions, onRefr
       showToast('New gathering session started!', 'success');
       navigate(`/client/sessions/${session.id}`);
     } catch (err) {
-      showToast('Failed to start a session. Please try again.', 'error');
+      console.error('[ClientProjectHub] Session creation failed:', err);
+      const detail = err?.response?.data?.detail || 'Failed to start a session. Please try again.';
+      showToast(detail, 'error');
     } finally {
       setStarting(false);
     }
@@ -125,21 +183,67 @@ const ChatSessionsTab = ({ projectId, project, sessions, loadingSessions, onRefr
     return <Skeleton variant="rectangular" height={240} sx={{ borderRadius: 3 }} />;
   }
 
+  const activeSession = sessions.find((s) => s.status === 'active');
+
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>
-          Your Gathering Sessions
-        </Typography>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>
+            ARIA Requirement Gathering Sessions
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Chat with ARIA to describe features and extract structured project requirements.
+          </Typography>
+        </Box>
         <Button
           variant="contained"
-          startIcon={<AddIcon />}
+          color="primary"
+          startIcon={<SmartToyIcon />}
           onClick={handleStartSession}
           loading={starting}
         >
-          {sessions.some((s) => s.status === 'active') ? 'Resume Active Session' : 'Start New Session'}
+          {activeSession ? 'Open Active ARIA Chat' : 'Start New ARIA Chat'}
         </Button>
       </Stack>
+
+      {activeSession && (
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 2.5,
+            mb: 3,
+            borderRadius: 3,
+            borderColor: 'primary.main',
+            bgcolor: '#F0F9FF',
+            background: 'linear-gradient(135deg, #F0F9FF 0%, #E0F2FE 100%)',
+          }}
+        >
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Stack direction="row" spacing={2} alignItems="center">
+              <SmartToyIcon color="primary" sx={{ fontSize: 36 }} />
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#0369A1' }}>
+                  Active Gathering Session in Progress
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Started {formatDateTime(activeSession.started_at || activeSession.created_at)} · {activeSession.total_messages || 0} message(s)
+                </Typography>
+              </Box>
+            </Stack>
+            <Button
+              variant="contained"
+              color="primary"
+              size="medium"
+              startIcon={<PlayArrowIcon />}
+              onClick={() => navigate(`/client/sessions/${activeSession.id}`)}
+              sx={{ fontWeight: 700 }}
+            >
+              Resume Chat Now
+            </Button>
+          </Stack>
+        </Paper>
+      )}
 
       {sessions.length === 0 ? (
         <EmptyState
@@ -232,21 +336,29 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
   const [features, setFeatures] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchRequests = async () => {
-    setLoading(true);
+  const fetchRequests = async (isInitial = false) => {
+    if (isInitial) setLoading(true);
     try {
+      if (!projectId) {
+        setLoading(false);
+        return;
+      }
       const data = await listChangeRequests(projectId);
       setRequests(data || []);
     } catch (err) {
-      showToast('Failed to load change requests.', 'error');
+      console.error('[ChangeRequest] fetch failed:', err);
+      if (isInitial) {
+        showToast('Failed to load change requests.', 'error');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchRequests();
-    const interval = setInterval(fetchRequests, 15000);
+    if (!projectId) return;
+    fetchRequests(true);
+    const interval = setInterval(() => fetchRequests(false), 15000);
     return () => clearInterval(interval);
   }, [projectId]);
 
@@ -342,7 +454,7 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
     try {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed;
-    } catch (e) {}
+    } catch (e) { }
     return [raw];
   };
 
@@ -596,6 +708,158 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
   );
 };
 
+const CONFLICT_TYPE_LABELS = {
+  direct_contradiction: 'Direct Contradiction',
+  scope_conflict: 'Scope Conflict',
+  value_conflict: 'Value Conflict',
+  temporal_conflict: 'Temporal Conflict',
+  priority_conflict: 'Priority Conflict',
+};
+
+const ContradictionsTab = ({ contradictions, loading }) => {
+  if (loading) {
+    return <Skeleton variant="rectangular" height={300} sx={{ borderRadius: 3 }} />;
+  }
+
+  if (contradictions.length === 0) {
+    return (
+      <Box>
+        <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+          Detected Contradictions
+        </Typography>
+        <EmptyState
+          icon={<CheckCircleIcon sx={{ fontSize: 48, color: '#22C55E' }} />}
+          title="No Contradictions Found"
+          description="ARIA has not detected any conflicting requirements in your project. Great work keeping your requirements consistent!"
+        />
+      </Box>
+    );
+  }
+
+  const pending = contradictions.filter((c) => c.status === 'pending');
+  const resolved = contradictions.filter((c) => c.status !== 'pending');
+
+  return (
+    <Box>
+      <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
+        Detected Contradictions
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        ARIA automatically flags conflicting requirements. Conflicting requirements remain strictly excluded from the official SRS specification until your development team reviews and approves resolution.
+      </Typography>
+
+      {pending.length > 0 && (
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#D97706', mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <WarningAmberIcon fontSize="small" />
+            Pending Developer Review ({pending.length})
+          </Typography>
+          <Stack spacing={2}>
+            {pending.map((c) => (
+              <Paper
+                key={c.id}
+                variant="outlined"
+                sx={{
+                  p: 2.5,
+                  borderRadius: 3,
+                  borderColor: '#FCD34D',
+                  bgcolor: '#FFFBEB',
+                }}
+              >
+                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1.5 }}>
+                  <Chip
+                    label={CONFLICT_TYPE_LABELS[c.conflict_type] || c.conflict_type || 'Direct Contradiction'}
+                    size="small"
+                    sx={{ bgcolor: '#FDE68A', color: '#92400E', fontWeight: 700, fontSize: '0.75rem' }}
+                  />
+                  <Chip
+                    icon={<HourglassEmptyIcon fontSize="small" />}
+                    label="Awaiting Developer Review"
+                    size="small"
+                    color="warning"
+                    variant="outlined"
+                    sx={{ fontWeight: 700, fontSize: '0.75rem' }}
+                  />
+                </Stack>
+                {c.aria_message && (
+                  <Typography variant="body2" sx={{ color: '#78350F', mb: 1.5, lineHeight: 1.6 }}>
+                    {c.aria_message}
+                  </Typography>
+                )}
+                <Stack direction="row" spacing={2} sx={{ fontSize: '0.8rem', color: '#92400E', opacity: 0.85, mb: 1.5 }}>
+                  {c.atom_1_text && (
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>Requirement A:</Typography>
+                      <Typography variant="caption">{c.atom_1_text}</Typography>
+                    </Box>
+                  )}
+                  {c.atom_2_text && (
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>Requirement B:</Typography>
+                      <Typography variant="caption">{c.atom_2_text}</Typography>
+                    </Box>
+                  )}
+                </Stack>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1, pt: 1, borderTop: '1px dashed #FDE68A' }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Detected {formatDateTime(c.detected_at)}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: '#92400E', fontWeight: 600, fontStyle: 'italic' }}>
+                    🔒 Excluded from SRS document pending developer resolution
+                  </Typography>
+                </Stack>
+              </Paper>
+            ))}
+          </Stack>
+        </Box>
+      )}
+
+      {resolved.length > 0 && (
+        <Box>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#16A34A', mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CheckCircleIcon fontSize="small" />
+            Resolved by Developer ({resolved.length})
+          </Typography>
+          <Stack spacing={1.5}>
+            {resolved.map((c) => (
+              <Paper
+                key={c.id}
+                variant="outlined"
+                sx={{ p: 2, borderRadius: 3, borderColor: '#BBF7D0', bgcolor: '#F0FDF4', opacity: 0.9 }}
+              >
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="body2" sx={{ color: '#166534', fontWeight: 600 }}>
+                    {CONFLICT_TYPE_LABELS[c.conflict_type] || 'Direct Contradiction'}
+                  </Typography>
+                  <Chip
+                    label={c.status === 'resolved' ? '✓ Resolved by Developer' : 'Marked False Positive'}
+                    size="small"
+                    color={c.status === 'resolved' ? 'success' : 'default'}
+                    sx={{ fontWeight: 700, fontSize: '0.72rem' }}
+                  />
+                </Stack>
+                {c.aria_message && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                    {c.aria_message}
+                  </Typography>
+                )}
+                {c.resolution && (
+                  <Typography variant="caption" sx={{ display: 'block', mt: 0.75, color: '#15803D', fontWeight: 600 }}>
+                    Developer Decision: {c.resolution}
+                  </Typography>
+                )}
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                  {formatDateTime(c.resolved_at || c.detected_at)}
+                </Typography>
+              </Paper>
+            ))}
+          </Stack>
+        </Box>
+      )}
+    </Box>
+  );
+};
+
 export const ClientProjectHub = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -604,8 +868,10 @@ export const ClientProjectHub = () => {
 
   const [project, setProject] = useState(null);
   const [sessions, setSessions] = useState([]);
+  const [contradictions, setContradictions] = useState([]);
   const [loadingProject, setLoadingProject] = useState(true);
   const [loadingSessions, setLoadingSessions] = useState(true);
+  const [loadingContradictions, setLoadingContradictions] = useState(true);
   const [tabValue, setTabValue] = useState(0);
   const [starting, setStarting] = useState(false);
 
@@ -656,10 +922,25 @@ export const ClientProjectHub = () => {
     }
   };
 
+  const loadContradictions = useCallback(async (isInitial = false) => {
+    try {
+      if (isInitial) setLoadingContradictions(true);
+      const data = await listContradictionsForProject(projectId);
+      setContradictions(data || []);
+    } catch (err) {
+      // silently fail — contradictions are supplementary
+    } finally {
+      if (isInitial) setLoadingContradictions(false);
+    }
+  }, [projectId]);
+
   useEffect(() => {
     loadProject();
     loadSessions();
-  }, [projectId]);
+    loadContradictions(true);
+    const interval = setInterval(() => loadContradictions(false), 15000);
+    return () => clearInterval(interval);
+  }, [projectId, loadContradictions]);
 
   if (loadingProject && !project) {
     return (
@@ -672,9 +953,17 @@ export const ClientProjectHub = () => {
     );
   }
 
+  const pendingContradictions = contradictions.filter((c) => c.status === 'pending').length;
+
   const menuItems = [
     { text: 'Project Overview', icon: <DashboardIcon /> },
     { text: 'Chat with ARIA', icon: <ChatIcon />, badge: sessions.some((s) => s.status === 'active') ? '●' : sessions.length },
+    {
+      text: 'Contradictions',
+      icon: <WarningAmberIcon sx={{ color: pendingContradictions > 0 ? '#D97706' : undefined }} />,
+      badge: pendingContradictions > 0 ? pendingContradictions : (contradictions.length > 0 ? contradictions.length : undefined),
+      badgeColor: pendingContradictions > 0 ? '#D97706' : undefined,
+    },
     { text: 'Submit Change Request', icon: <RateReviewIcon /> },
   ];
 
@@ -769,6 +1058,8 @@ export const ClientProjectHub = () => {
               <ProjectOverviewTab
                 project={project}
                 sessions={sessions}
+                contradictions={contradictions}
+                onViewContradictions={() => setTabValue(2)}
               />
             )}
             {tabValue === 1 && (
@@ -780,7 +1071,14 @@ export const ClientProjectHub = () => {
                 onRefresh={loadSessions}
               />
             )}
-            {tabValue === 2 && <ChangeRequestTab projectId={projectId} project={project} onCancel={() => setTabValue(0)} />}
+            {tabValue === 2 && (
+              <ContradictionsTab
+                contradictions={contradictions}
+                loading={loadingContradictions}
+                onRefresh={loadContradictions}
+              />
+            )}
+            {tabValue === 3 && <ChangeRequestTab projectId={projectId} project={project} onCancel={() => setTabValue(0)} />}
           </Paper>
         </Grid>
       </Grid>

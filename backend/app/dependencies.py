@@ -15,15 +15,22 @@ _bearer = HTTPBearer(auto_error=False)
 
 async def get_current_user(
     credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(_bearer)],
+    token: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    if not credentials:
+    raw_token = None
+    if credentials:
+        raw_token = credentials.credentials
+    elif token:
+        raw_token = token
+
+    if not raw_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authorization header missing.",
+            detail="Authorization header or token parameter missing.",
         )
 
-    payload = decode_token(credentials.credentials)
+    payload = decode_token(raw_token)
 
     if payload.get("type") != "access":
         raise HTTPException(

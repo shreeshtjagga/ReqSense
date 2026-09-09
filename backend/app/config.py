@@ -16,38 +16,43 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    DATABASE_URL: str = Field(..., description="PostgreSQL async URL (postgresql+asyncpg://...)")
+    DATABASE_URL: str = Field(
+        default="sqlite+aiosqlite:///./reqsense_local.db",
+        description="Async DB URL — sqlite+aiosqlite:// for local, postgresql+asyncpg:// for production",
+    )
 
-    REDIS_URL: str = Field(..., description="Redis URL for app cache")
-    CELERY_BROKER_URL: str = Field(..., description="Redis URL used as Celery broker")
-    CELERY_RESULT_BACKEND: str = Field(..., description="Redis URL for Celery result backend")
+    # Redis / Celery — optional, defaults to in-memory mode when set to 'memory://'
+    REDIS_URL: str = Field(default="memory://", description="Redis URL; 'memory://' disables Redis")
+    CELERY_BROKER_URL: str = Field(default="memory://")
+    CELERY_RESULT_BACKEND: str = Field(default="memory://")
 
-    SECRET_KEY: str = Field(..., min_length=32, description="JWT signing secret (min 32 chars)")
+    SECRET_KEY: str = Field(default="dev-secret-key-for-local-testing-only-not-for-prod", min_length=32, description="JWT signing secret (min 32 chars)")
     ALGORITHM: str = Field(default="HS256")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30)
-    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=14)
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=60)
+    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=30)
+    STREAM_TOKEN_EXPIRE_SECONDS: int = Field(default=60)
 
-    GROQ_API_KEY: str = Field(..., description="Groq API key")
-    GROQ_MODEL: str = Field(default="llama-3.1-8b-instant")
-    GROQ_TIMEOUT_SECONDS: int = Field(default=15)
+    GROQ_API_KEY: str = Field(default="", description="Groq API key")
+    GROQ_MODEL: str = Field(default="llama-3.3-70b-versatile")
+    GROQ_TIMEOUT_SECONDS: int = Field(default=30)
 
-    SENDGRID_API_KEY: str = Field(..., description="SendGrid API key")
+    SENDGRID_API_KEY: str = Field(default="mock-sendgrid-key", description="SendGrid API key; mock-* disables sending")
     SENDGRID_TIMEOUT_SECONDS: int = Field(default=5)
-    FROM_EMAIL: str = Field(..., description="Verified sender email address")
+    FROM_EMAIL: str = Field(default="noreply@reqsense.local", description="Verified sender email address")
 
-    CHROMA_MODE: Literal["hosted", "local"] = Field(default="hosted")
+    CHROMA_MODE: Literal["hosted", "local"] = Field(default="local")
     CHROMA_API_KEY: str = Field(default="")
     CHROMA_TENANT: str = Field(default="")
     CHROMA_DATABASE: str = Field(default="reqsense")
-    CHROMA_PERSIST_DIRECTORY: str = Field(default="/data/chroma_db")
+    CHROMA_PERSIST_DIRECTORY: str = Field(default="./chroma_data")
     CHROMA_TIMEOUT_SECONDS: int = Field(default=10)
 
     EMBEDDING_MODEL: str = Field(default="all-MiniLM-L6-v2")
     EMBEDDING_VERSION: str = Field(default="v1")
 
-    S3_BUCKET_NAME: str = Field(..., description="S3/R2 bucket name for SRS .docx files")
-    S3_ACCESS_KEY_ID: str = Field(..., description="S3/R2 access key")
-    S3_SECRET_ACCESS_KEY: str = Field(..., description="S3/R2 secret key")
+    S3_BUCKET_NAME: str = Field(default="local-bucket", description="S3/R2 bucket name for SRS .docx files")
+    S3_ACCESS_KEY_ID: str = Field(default="mock-key", description="S3/R2 access key")
+    S3_SECRET_ACCESS_KEY: str = Field(default="mock-secret", description="S3/R2 secret key")
     S3_ENDPOINT_URL: str = Field(default="", description="Override endpoint for R2/non-AWS; omit for AWS S3")
     S3_REGION: str = Field(default="auto")
     S3_TIMEOUT_SECONDS: int = Field(default=10)
@@ -57,15 +62,24 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = Field(default="http://localhost:5173")
     ALLOWED_ORIGINS: str = Field(default="http://localhost:5173")
 
-    RATE_LIMIT_MESSAGES_PER_MINUTE: int = Field(default=30)
-    RATE_LIMIT_LOGIN_PER_MINUTE: int = Field(default=5)
-    RATE_LIMIT_ANALYTICS_PER_MINUTE: int = Field(default=100)
-    RATE_LIMIT_DOWNLOADS_PER_MINUTE: int = Field(default=20)
+    RATE_LIMIT_MESSAGES_PER_MINUTE: int = Field(default=60)
+    RATE_LIMIT_LOGIN_PER_MINUTE: int = Field(default=20)
+    RATE_LIMIT_ANALYTICS_PER_MINUTE: int = Field(default=200)
+    RATE_LIMIT_DOWNLOADS_PER_MINUTE: int = Field(default=50)
 
     PROMPT_VERSION: str = Field(default="v1.0")
     ENV: Literal["development", "production"] = Field(default="development")
 
     CONTRADICTION_CONFIDENCE_THRESHOLD: float = Field(default=0.5, description="Minimum confidence required to surface a contradiction")
+
+    @property
+    def is_sqlite(self) -> bool:
+        return self.DATABASE_URL.startswith("sqlite")
+
+    @property
+    def redis_is_disabled(self) -> bool:
+        """True when Redis is not configured (memory:// placeholder or empty)."""
+        return not self.REDIS_URL or self.REDIS_URL.startswith("memory://")
 
     @property
     def groq_is_mocked(self) -> bool:
@@ -74,7 +88,7 @@ class Settings(BaseSettings):
     @property
     def chroma_is_mocked(self) -> bool:
         if self.CHROMA_MODE == "local":
-            return True   # local mode = no hosted Chroma = treat as mocked
+            return False  # local mode = real local ChromaDB, NOT mocked
         return not self.CHROMA_API_KEY or self.CHROMA_API_KEY.startswith(("test", "mock", "dev"))
 
     @property
@@ -83,7 +97,7 @@ class Settings(BaseSettings):
 
     @property
     def sendgrid_is_mocked(self) -> bool:
-        return not self.SENDGRID_API_KEY or self.SENDGRID_API_KEY.startswith(("test", "mock", "dev"))
+        return not self.SENDGRID_API_KEY or self.SENDGRID_API_KEY.startswith(("test", "mock", "dev", "SG.test"))
 
     @property
     def allowed_origins_list(self) -> list[str]:
@@ -108,15 +122,6 @@ class Settings(BaseSettings):
                 raise ValueError(
                     f"CHROMA_MODE=hosted requires: {', '.join(missing)}"
                 )
-        return self
-
-    @model_validator(mode="after")
-    def _validate_database_url_prefix(self) -> "Settings":
-        if self.DATABASE_URL and not self.DATABASE_URL.startswith("postgresql+asyncpg://"):
-            raise ValueError(
-                "DATABASE_URL must start with 'postgresql+asyncpg://' "
-                "(not 'postgresql://'). Rename the prefix."
-            )
         return self
 
 @lru_cache(maxsize=1)

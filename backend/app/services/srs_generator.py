@@ -80,6 +80,22 @@ class SRSGenerator:
         contradictions_res = await db.execute(contradictions_q)
         contradictions = contradictions_res.scalars().all()
 
+        pending_contradiction_atom_ids = set()
+        for c in contradictions:
+            if c.status == "pending":
+                if c.atom_1_id:
+                    pending_contradiction_atom_ids.add(c.atom_1_id)
+                if c.atom_2_id:
+                    pending_contradiction_atom_ids.add(c.atom_2_id)
+
+        # Strictly exclude any atoms tied to pending contradictions until resolved by a developer
+        verified_atoms = [
+            a for a in atoms
+            if a.status == "active" and a.id not in pending_contradiction_atom_ids
+        ]
+        atoms = verified_atoms
+        conflicted_count = max(conflicted_count, len(pending_contradiction_atom_ids))
+
         summary_text = "No summary generated."
         llm_model = settings.GROQ_MODEL
         if atoms:
