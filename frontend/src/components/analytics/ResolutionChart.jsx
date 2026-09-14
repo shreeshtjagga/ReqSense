@@ -11,9 +11,9 @@ import { Paper, Typography, Box } from '@mui/material';
 
 export const ResolutionChart = ({ pending = 0, resolved = 0, ignored = 0 }) => {
   const data = [
-    { name: 'Resolved', value: resolved, color: '#059669' }, // Success green
-    { name: 'Ignored', value: ignored, color: '#2563EB' }, // Info blue
-    { name: 'Pending', value: pending, color: '#D97706' }, // Warning amber
+    { name: 'Resolved', value: resolved, color: '#059669' },
+    { name: 'Ignored', value: ignored, color: '#2563EB' },
+    { name: 'Pending', value: pending, color: '#D97706' },
   ].filter((item) => item.value > 0);
 
   return (

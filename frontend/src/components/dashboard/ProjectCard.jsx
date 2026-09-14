@@ -25,7 +25,7 @@ export const ProjectCard = ({ project, onClick, onDeleteSuccess }) => {
       await requestDeleteProject(id);
       showToast(`Deletion request submitted for "${name}". The other party must confirm.`, 'info');
       setDeleteOpen(false);
-      // Refresh parent — the project still exists until the other party confirms
+
       if (onDeleteSuccess) onDeleteSuccess(id);
     } catch (err) {
       showToast(err.response?.data?.detail || 'Failed to submit deletion request.', 'error');

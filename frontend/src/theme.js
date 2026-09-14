@@ -4,43 +4,43 @@ const theme = createTheme({
   palette: {
     mode: 'light',
     primary: {
-      main: '#4F46E5', // Indigo 600
-      light: '#818CF8', // Indigo 400
-      dark: '#3730A3', // Indigo 800
+      main: '#4F46E5',
+      light: '#818CF8',
+      dark: '#3730A3',
       contrastText: '#FFFFFF',
     },
     secondary: {
-      main: '#06B6D4', // Cyan 500
-      light: '#67E8F9', // Cyan 300
-      dark: '#0891B2', // Cyan 600
+      main: '#06B6D4',
+      light: '#67E8F9',
+      dark: '#0891B2',
       contrastText: '#FFFFFF',
     },
     info: {
-      main: '#3B82F6', // Blue 500
+      main: '#3B82F6',
     },
     success: {
-      main: '#10B981', // Emerald 500
+      main: '#10B981',
     },
     warning: {
-      main: '#F59E0B', // Amber 500
+      main: '#F59E0B',
     },
     error: {
-      main: '#EF4444', // Red 500
+      main: '#EF4444',
     },
     custom: {
-      contradiction: '#F97316', // Orange 500
+      contradiction: '#F97316',
       glassBg: 'rgba(255, 255, 255, 0.85)',
       gradientPrimary: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
     },
     background: {
-      default: '#F8FAFC', // Slate 50
+      default: '#F8FAFC',
       paper: '#FFFFFF',
     },
     text: {
-      primary: '#0F172A', // Slate 900
-      secondary: '#64748B', // Slate 500
+      primary: '#0F172A',
+      secondary: '#64748B',
     },
-    divider: '#E2E8F0', // Slate 200
+    divider: '#E2E8F0',
   },
   typography: {
     fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',

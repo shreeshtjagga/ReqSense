@@ -52,7 +52,7 @@ export const ChatSession = () => {
           const proj = await getProject(sessionData.project_id);
           setProject(proj);
         } catch {
-          // Project load is non-fatal
+
         }
       }
     } catch (err) {
@@ -62,10 +62,10 @@ export const ChatSession = () => {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, showToast]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sessionId, showToast]);
 
   useEffect(() => {
-    // Reset state for new session
+
     setSession(null);
     setProject(null);
     setMessages([]);
@@ -76,7 +76,6 @@ export const ChatSession = () => {
 
     fetchSessionAndMessages();
 
-    // Poll for new messages while session is active
     pollingIntervalRef.current = setInterval(() => {
       if (
         sessionRef.current?.status === 'active' &&
@@ -135,9 +134,9 @@ export const ChatSession = () => {
     } catch (err) {
       const detail = err?.response?.data?.detail || 'Failed to send requirement. Please try again.';
       showToast(detail, 'error');
-      // Remove optimistic message on failure
+
       setMessages((prev) => prev.filter((m) => m.id !== tempClientMsg.id));
-      throw err; // re-throw so ChatInput can keep the text
+      throw err;
     } finally {
       sendingRef.current = false;
       setSending(false);
@@ -214,7 +213,7 @@ export const ChatSession = () => {
           flexGrow: 1,
         }}
       >
-        {/* Left Side: Session Details Panel */}
+        {}
         <Grid
           item
           xs={12}
@@ -287,7 +286,7 @@ export const ChatSession = () => {
           </Stack>
         </Grid>
 
-        {/* Right Side: Chat Window */}
+        {}
         <Grid
           item
           xs={12}

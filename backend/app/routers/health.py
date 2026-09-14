@@ -23,9 +23,8 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     except Exception:
         pass
 
-    # In local mode Redis and Celery are replaced by in-process stubs — always ok
-    redis_ok = settings.redis_is_disabled  # True when using in-memory mode
-    celery_ok = True  # Direct call stub, always available
+    redis_ok = settings.redis_is_disabled
+    celery_ok = True
 
     all_ok = db_ok
     status_code = status.HTTP_200_OK if all_ok else status.HTTP_503_SERVICE_UNAVAILABLE

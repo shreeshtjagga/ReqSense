@@ -202,7 +202,6 @@ class ImpactAnalyser:
                     pa_act = (pa.action or "").lower().strip()
                     pa_raw = (pa.raw_text or "").lower()
 
-                    # Match if: same subject domain OR shared tech/domain keywords OR word overlap
                     same_subject = bool(subj_cand and pa_subj and subj_cand == pa_subj)
                     score = _kw_overlap(raw_text, pa.raw_text or "")
                     

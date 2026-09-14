@@ -16,7 +16,6 @@ export const ConflictAlert = ({ contradiction, onResolve }) => {
   const { user } = useAuthStore();
   const canResolve = Boolean(user && (user.role === ROLES.DEVELOPER || user.role === ROLES.ADMIN));
 
-  // Safety: handle null/undefined contradiction gracefully
   if (!contradiction) return null;
 
   const {
@@ -46,7 +45,7 @@ export const ConflictAlert = ({ contradiction, onResolve }) => {
       <AlertTitle sx={{ fontWeight: 700, mb: 1 }}>
         Contradiction Detected
         {' '}
-        {/* Chip without icon prop to avoid undefined icon crash */}
+        {}
         <Chip
           label={statusInfo.label}
           color={statusInfo.color}

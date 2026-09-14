@@ -349,7 +349,7 @@ export const Register = () => {
       showToast('Registration successful! Please log in.', 'success');
       navigate('/login');
     } catch (err) {
-      // Extract message from Pydantic 422 detail array or plain string
+
       const detail = err.response?.data?.detail;
       let msg = 'Registration failed. Please try again.';
       if (typeof detail === 'string') msg = detail;
@@ -368,7 +368,7 @@ export const Register = () => {
     <div style={s.root}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
-      {/* ── TOP HEADER (Logo on left, Help/Support on right) ─────────────── */}
+      {}
       <div style={s.topHeader}>
         <div style={s.logoRow}>
           <ReqSenseLogo size={38} />
@@ -385,14 +385,14 @@ export const Register = () => {
         </div>
       </div>
 
-      {/* ── LEFT PANEL ───────────────────────────────────────────────────── */}
+      {}
       <div style={s.left}>
         <div style={s.cubeWrap}>
           <AnimatedCube />
         </div>
       </div>
 
-      {/* ── RIGHT PANEL ──────────────────────────────────────────────────── */}
+      {}
       <div style={s.right}>
         <div style={{ ...s.card, maxWidth: 460, padding: '36px 44px 28px' }}>
           <div style={s.cardLogoWrap}>
@@ -411,7 +411,7 @@ export const Register = () => {
           )}
 
           <form onSubmit={handleSubmit} noValidate style={s.form}>
-            {/* Full Name */}
+            {}
             <div style={s.fieldGroup}>
               <label style={s.label}>Full Name</label>
               <div style={s.inputWrap}>
@@ -430,7 +430,7 @@ export const Register = () => {
               </div>
             </div>
 
-            {/* Email */}
+            {}
             <div style={s.fieldGroup}>
               <label style={s.label}>Email Address</label>
               <div style={s.inputWrap}>
@@ -450,7 +450,7 @@ export const Register = () => {
               </div>
             </div>
 
-            {/* Passwords — two columns */}
+            {}
             <div style={s.twoCol}>
               <div style={{ flex: 1 }}>
                 <label style={s.label}>Password</label>
@@ -493,7 +493,7 @@ export const Register = () => {
                 </div>
               </div>
             </div>
-            {/* Password strength hints — shown only when user starts typing */}
+            {}
             {password.length > 0 && (
               <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
                 {pwRules.map((rule) => (
@@ -521,7 +521,7 @@ export const Register = () => {
               </div>
             )}
 
-            {/* Role Radio Group */}
+            {}
             {!isInviteFlow && (
               <div style={s.fieldGroup}>
                 <label style={s.label}>I am joining as a...</label>
@@ -549,7 +549,7 @@ export const Register = () => {
               </div>
             )}
 
-            {/* Organization ID */}
+            {}
             {!isInviteFlow && (
               <div style={s.fieldGroup}>
                 <label style={s.label}>Organization ID <span style={{ color: '#94A3B8', fontWeight: 400 }}>(Optional)</span></label>
@@ -569,7 +569,7 @@ export const Register = () => {
               </div>
             )}
 
-            {/* Submit button */}
+            {}
             <button
               type="submit"
               id="register-submit"
@@ -583,14 +583,14 @@ export const Register = () => {
               )}
             </button>
 
-            {/* Divider */}
+            {}
             <div style={s.orRow}>
               <div style={s.orLine} />
               <span style={s.orText}>OR</span>
               <div style={s.orLine} />
             </div>
 
-            {/* Google */}
+            {}
             <button type="button" onClick={handleGoogle} style={s.googleBtn}>
               <GoogleIcon />
               <span style={{ marginLeft: 10 }}>Sign up with Google</span>

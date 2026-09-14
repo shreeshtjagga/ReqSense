@@ -108,7 +108,7 @@ export const DevDashboard = () => {
 
   return (
     <Layout>
-      {/* Visual Hero Header */}
+      {}
       <Paper
         elevation={0}
         sx={{
@@ -202,7 +202,7 @@ export const DevDashboard = () => {
         </Box>
       </Paper>
 
-      {/* Control Bar: Search */}
+      {}
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
         <Typography variant="h5" sx={{ fontWeight: 800, color: '#0F172A' }}>
           Your Projects
@@ -229,7 +229,7 @@ export const DevDashboard = () => {
         />
       </Box>
 
-      {/* Projects List Grid */}
+      {}
       <Box sx={{ mb: 4 }}>
         {loading ? (
           <Grid container spacing={3}>
@@ -263,7 +263,7 @@ export const DevDashboard = () => {
         )}
       </Box>
 
-      {/* Create Project Modal */}
+      {}
       <Dialog
         open={createOpen}
         onClose={() => !submitting && setCreateOpen(false)}

@@ -25,7 +25,6 @@ def extract_atoms_rule_based(message_content: str) -> List[Dict[str, Any]]:
     lower = message_content.lower()
     atoms = []
 
-    # 1. Tech stack & Programming Languages
     tech_map = {
         "postgresql": "PostgreSQL",
         "postgres": "PostgreSQL",
@@ -59,7 +58,6 @@ def extract_atoms_rule_based(message_content: str) -> List[Dict[str, Any]]:
                 "raw_text": message_content
             })
 
-    # 2. Manager vs Customer ordering logic
     if "manager" in lower and "customer" in lower and ("order" in lower or "deliver" in lower):
         customer_raw = "Customers place orders."
         if any(neg in lower for neg in ["don't", "do not", "doesn't", "does not", "never", "not"]):
@@ -105,7 +103,6 @@ def detect_contradiction_rule_based(existing_atom: Dict[str, Any], candidate_ato
     existing_constraint = (existing_atom.get("constraint_text") or "").lower().strip()
     candidate_constraint = (candidate_atom.get("constraint_text") or "").lower().strip()
 
-    # 1. Tech stack & Programming language conflict (e.g. Ruby vs Python)
     programming_languages = {
         "ruby": "Ruby", "python": "Python", "javascript": "JavaScript", "typescript": "TypeScript",
         "java": "Java", "golang": "Golang", "go": "Golang", "php": "PHP", "c#": "C#", "rust": "Rust"
@@ -124,7 +121,6 @@ def detect_contradiction_rule_based(existing_atom: Dict[str, Any], candidate_ato
             "aria_message": f"Wait, you previously specified that the programming language should be {exist_lang}, but now you mentioned {cand_lang}. Which programming language should we use for this project?"
         }
 
-    # 2. Database conflicts (e.g. PostgreSQL vs MongoDB)
     dbs = {
         "postgresql": "PostgreSQL", "postgres": "PostgreSQL", "mysql": "MySQL",
         "mongodb": "MongoDB", "sqlite": "SQLite", "oracle": "Oracle"
@@ -143,7 +139,6 @@ def detect_contradiction_rule_based(existing_atom: Dict[str, Any], candidate_ato
             "aria_message": f"Wait, you previously specified {exist_db} as the database, but now you mentioned {cand_db}. Which database should we use?"
         }
 
-    # 3. Manager vs Customer role conflicts
     if ("manager" in existing_text and "customer" in candidate_text) or \
        ("customer" in existing_text and "manager" in candidate_text):
         return {
@@ -152,7 +147,6 @@ def detect_contradiction_rule_based(existing_atom: Dict[str, Any], candidate_ato
             "aria_message": "Wait, you previously mentioned primary users are customers, but now you say they are managers. Can you clarify?"
         }
 
-    # 4. Negation-based contradictions
     negation_words = {"don't", "do not", "doesn't", "does not", "not", "never", "no ", "must not", "cannot", "can't", "won't", "will not", "disable", "disabled"}
     existing_has_neg = any(nw in existing_text for nw in negation_words)
     candidate_has_neg = any(nw in candidate_text for nw in negation_words)
@@ -193,7 +187,7 @@ class RDCDLayer:
 
         try:
             client = get_groq_client()
-            # Use fast model for structured JSON tasks — lower latency, same accuracy
+
             fast_model = getattr(settings, 'GROQ_FAST_MODEL', settings.GROQ_MODEL)
             prompt = ATOM_EXTRACTION_PROMPT.format(message=message_content)
             try:
@@ -228,7 +222,7 @@ class RDCDLayer:
                 ]
                 if valid_atoms:
                     return valid_atoms
-                # LLM returned empty array — message has no requirements
+
                 return []
             return extract_atoms_rule_based(message_content)
         except Exception as e:
@@ -250,7 +244,7 @@ class RDCDLayer:
 
         try:
             client = get_groq_client()
-            # Use fast model for structured JSON contradiction check
+
             fast_model = getattr(settings, 'GROQ_FAST_MODEL', settings.GROQ_MODEL)
             prompt = CONTRADICTION_DETECTION_PROMPT.format(
                 existing_subject=existing_atom.get("subject", ""),

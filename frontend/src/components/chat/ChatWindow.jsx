@@ -22,7 +22,6 @@ export const ChatWindow = ({
     }
   }, [messages, sending]);
 
-  // Safety: normalize messages to always be an array
   const safeMessages = Array.isArray(messages) ? messages : [];
 
   return (
@@ -40,7 +39,7 @@ export const ChatWindow = ({
         bgcolor: 'background.default',
       }}
     >
-      {/* Session Title Header */}
+      {}
       <Box sx={{ px: 3, py: 2, display: 'flex', alignItems: 'center', gap: 1.5, bgcolor: 'background.paper', flexShrink: 0 }}>
         <SmartToyIcon color="secondary" />
         <Box>
@@ -54,10 +53,10 @@ export const ChatWindow = ({
       </Box>
       <Divider sx={{ flexShrink: 0 }} />
 
-      {/* Messages Box */}
+      {}
       <Box sx={{ flexGrow: 1, minHeight: 0, overflowY: 'auto', p: 3, display: 'flex', flexDirection: 'column' }}>
         {loading ? (
-          // Loading skeleton instead of blank screen
+
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <Skeleton variant="rounded" height={60} width="60%" sx={{ borderRadius: 3 }} />
             <Skeleton variant="rounded" height={60} width="75%" sx={{ borderRadius: 3, alignSelf: 'flex-end' }} />
@@ -87,7 +86,7 @@ export const ChatWindow = ({
         <div ref={scrollRef} />
       </Box>
 
-      {/* Input Box */}
+      {}
       <Box sx={{ flexShrink: 0 }}>
         <ChatInput onSendMessage={onSendMessage} disabled={disabled} sending={sending} />
       </Box>

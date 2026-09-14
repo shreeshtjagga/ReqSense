@@ -19,7 +19,6 @@ from app.schemas.auth import TokenResponse
 
 settings = get_settings()
 
-
 def _as_utc(dt: datetime) -> datetime:
     """Ensure datetime is timezone-aware (UTC). Naïve datetimes are assumed UTC."""
     if dt.tzinfo is None:

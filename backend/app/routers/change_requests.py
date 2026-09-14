@@ -165,14 +165,13 @@ async def review_change_request(
     from app.services.rdcd_layer import RDCDLayer
     from app.models.requirement_atom import RequirementAtom
 
-    # Fetch any contradictions specifically linked to this change request
     linked_c_res = await db.execute(
         select(Contradiction).where(Contradiction.change_request_id == cr.id)
     )
     linked_contras = linked_c_res.scalars().all()
 
     if body.status == "approved":
-        # 1. Resolve linked contradictions & supersede older conflicting atoms
+
         for c in linked_contras:
             c.status = "resolved"
             c.resolution = body.developer_note or "Approved by developer via Change Request."
@@ -185,7 +184,6 @@ async def review_change_request(
                     atom_1.status = "superseded"
                     db.add(atom_1)
 
-        # 2. Extract and create new active RequirementAtoms from the approved Change Request
         extracted = RDCDLayer.extract_atoms(f"{cr.title}. {cr.description}")
         for atom_dict in extracted:
             ra = RequirementAtom(
@@ -200,7 +198,7 @@ async def review_change_request(
             db.add(ra)
 
     elif body.status == "rejected":
-        # Dismiss linked contradictions
+
         for c in linked_contras:
             c.status = "ignored"
             c.resolution = body.developer_note or "Rejected by developer."

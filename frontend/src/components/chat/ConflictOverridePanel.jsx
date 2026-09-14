@@ -45,14 +45,14 @@ export const ConflictOverridePanel = ({ open, contradiction, onClose, onResolveS
       
       <DialogContent dividers sx={{ py: 3 }}>
         <Stack spacing={3}>
-          {/* Compare the two atoms */}
+          {}
           <Box>
             <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1, fontWeight: 600 }}>
               Contradicting Requirements
             </Typography>
             
             <Stack spacing={2} direction={{ xs: 'column', md: 'row' }} divider={<Divider orientation="vertical" flexItem />}>
-              {/* Atom 1 */}
+              {}
               <Box sx={{ flex: 1, p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
                 <Typography variant="caption" color="primary" sx={{ fontWeight: 700 }}>
                   Requirement A
@@ -67,7 +67,7 @@ export const ConflictOverridePanel = ({ open, contradiction, onClose, onResolveS
                 )}
               </Box>
 
-              {/* Atom 2 */}
+              {}
               <Box sx={{ flex: 1, p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
                 <Typography variant="caption" color="secondary" sx={{ fontWeight: 700 }}>
                   Requirement B
@@ -86,7 +86,7 @@ export const ConflictOverridePanel = ({ open, contradiction, onClose, onResolveS
 
           <Divider />
 
-          {/* ARIA Message Context */}
+          {}
           <Box>
             <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 0.5, fontWeight: 600 }}>
               ARIA Prompt/Warning
@@ -96,7 +96,7 @@ export const ConflictOverridePanel = ({ open, contradiction, onClose, onResolveS
             </Typography>
           </Box>
 
-          {/* Resolution Options */}
+          {}
           <FormControl component="fieldset">
             <FormLabel component="legend" sx={{ fontWeight: 600, color: 'text.primary', mb: 1 }}>
               Resolution Action
@@ -121,7 +121,7 @@ export const ConflictOverridePanel = ({ open, contradiction, onClose, onResolveS
             </RadioGroup>
           </FormControl>
 
-          {/* False Positive Checkbox */}
+          {}
           <FormControlLabel
             control={
               <Checkbox
@@ -137,7 +137,7 @@ export const ConflictOverridePanel = ({ open, contradiction, onClose, onResolveS
             }
           />
 
-          {/* Resolution Notes */}
+          {}
           <TextField
             label="Resolution Notes / Developer Decision"
             multiline

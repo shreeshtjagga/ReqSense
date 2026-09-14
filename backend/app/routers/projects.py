@@ -254,10 +254,6 @@ async def cancel_close_project(
     await db.refresh(project)
     return project
 
-# ── Project Deletion Request Flow ────────────────────────────────────────────
-# Mirrors the closure flow: either party can request, the other must confirm.
-# On confirm the project is permanently deleted.
-
 @router.post("/{project_id}/request-delete", response_model=ProjectRead)
 async def request_delete_project(
     project: Project = Depends(get_scoped_project),

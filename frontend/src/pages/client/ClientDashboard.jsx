@@ -53,12 +53,12 @@ const DemoMessage = ({ msg }) => {
 
 const LockedChatPreview = () => (
   <Box sx={{ position: 'relative', mt: 4 }}>
-    {/* Section header */}
+    {}
     <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
       Chat Preview
     </Typography>
 
-    {/* Chat window wrapper */}
+    {}
     <Paper
       elevation={0}
       sx={{
@@ -72,7 +72,7 @@ const LockedChatPreview = () => (
         opacity: 0.7,
       }}
     >
-      {/* Chat header */}
+      {}
       <Box sx={{ px: 3, py: 2, display: 'flex', alignItems: 'center', gap: 1.5, bgcolor: 'background.paper' }}>
         <SmartToyIcon color="secondary" />
         <Box>
@@ -86,14 +86,14 @@ const LockedChatPreview = () => (
       </Box>
       <Divider />
 
-      {/* Demo messages */}
+      {}
       <Box sx={{ p: 3, minHeight: 220 }}>
         {DEMO_MESSAGES.map((msg) => (
           <DemoMessage key={msg.id} msg={msg} />
         ))}
       </Box>
 
-      {/* Fake input */}
+      {}
       <Box sx={{ borderTop: '1px solid', borderColor: 'divider', p: 2, bgcolor: 'background.paper', display: 'flex', gap: 1 }}>
         <Box sx={{ flex: 1, height: 40, borderRadius: 2, bgcolor: 'action.hover' }} />
         <Box sx={{ width: 40, height: 40, borderRadius: '50%', bgcolor: 'action.disabledBackground', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -102,7 +102,7 @@ const LockedChatPreview = () => (
       </Box>
     </Paper>
 
-    {/* Overlay lock message */}
+    {}
     <Box
       sx={{
         position: 'absolute',
@@ -175,7 +175,7 @@ export const ClientDashboard = () => {
 
   return (
     <Layout>
-      {/* Page header */}
+      {}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h3" sx={{ fontWeight: 800, mb: 1 }}>
           {user?.name ? `${user.name}'s Projects` : 'Projects'}
@@ -187,9 +187,7 @@ export const ClientDashboard = () => {
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
-
-
-      {/* Projects section */}
+      {}
       {loading ? (
         <Grid container spacing={3}>
           {Array.from(new Array(3)).map((_, idx) => (
@@ -200,7 +198,7 @@ export const ClientDashboard = () => {
         </Grid>
       ) : projects.length === 0 ? (
         <>
-          {/* No project assigned — explain + show preview */}
+          {}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
             <FolderOffIcon sx={{ color: 'text.secondary' }} />
             <Typography variant="h5" sx={{ fontWeight: 700 }}>
@@ -211,7 +209,7 @@ export const ClientDashboard = () => {
             You haven't been invited to any project. Ask your developer to add you, then refresh this page.
           </Alert>
 
-          {/* Locked preview */}
+          {}
           <LockedChatPreview />
         </>
       ) : (

@@ -39,7 +39,6 @@ export const SRSViewer = ({ srsData, onShowHistory, projectName = 'Project' }) =
     }
   };
 
-  // Build display sections from server data, or fall back to atoms if sections are missing
   const displaySections = sections.length > 0 ? sections : (
     atoms.length > 0
       ? [
@@ -69,7 +68,7 @@ export const SRSViewer = ({ srsData, onShowHistory, projectName = 'Project' }) =
 
   return (
     <Paper variant="outlined" sx={{ p: 4, borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
-      {/* Header */}
+      {}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 2, mb: 3 }}>
         <Box>
           <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1 }}>
@@ -119,7 +118,7 @@ export const SRSViewer = ({ srsData, onShowHistory, projectName = 'Project' }) =
 
       <Divider sx={{ mb: 4 }} />
 
-      {/* Sections only — no duplicate atoms cards */}
+      {}
       <Stack spacing={4}>
         {displaySections.map((sec, index) => (
           <SRSSection key={index} title={sec.title} content={sec.content} />

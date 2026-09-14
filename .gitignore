@@ -94,6 +94,23 @@ backend/test_live_flow.py
 *.cmd
 *.ps1
 
+# ── Linter & Test Configs ────────────────────────────────────────────────────
+backend/ruff.toml
+backend/pytest.ini
+frontend/eslint.config.js
+
+# ── Backend: Tests & Local-Only Scripts ──────────────────────────────────────
+backend/tests/
+backend/local_db_init.py
+backend/check_connections.py
+backend/test_live_flow.py
+
+# ── Frontend: Lock File & Env Examples ──────────────────────────────────────
+frontend/package-lock.json
+frontend/.env.production.example
+frontend/dist/
+
+
 # ── Docker, Deployment & Infrastructure YAMLs ───────────────────────────────
 docker-compose*.yml
 docker-compose*.yaml
@@ -103,9 +120,9 @@ render.yaml
 Dockerfile
 backend/Dockerfile
 
-# ── Internal Architecture & Documentation ────────────────────────────────────
+# ── Internal Architecture Docs (not for GitHub) ───────────────────────────────
 ARCHITECTURE.md
-README.md
+
 
 # ── AI Agent Configs ─────────────────────────────────────────────────────────
 .agents/

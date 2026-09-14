@@ -21,7 +21,6 @@ class Settings(BaseSettings):
         description="Async DB URL — sqlite+aiosqlite:// for local, postgresql+asyncpg:// for production",
     )
 
-    # Redis / Celery — optional, defaults to in-memory mode when set to 'memory://'
     REDIS_URL: str = Field(default="memory://", description="Redis URL; 'memory://' disables Redis")
     CELERY_BROKER_URL: str = Field(default="memory://")
     CELERY_RESULT_BACKEND: str = Field(default="memory://")
@@ -89,7 +88,7 @@ class Settings(BaseSettings):
     @property
     def chroma_is_mocked(self) -> bool:
         if self.CHROMA_MODE == "local":
-            return False  # local mode = real local ChromaDB, NOT mocked
+            return False
         return not self.CHROMA_API_KEY or self.CHROMA_API_KEY.startswith(("test", "mock", "dev"))
 
     @property

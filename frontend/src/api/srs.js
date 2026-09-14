@@ -30,7 +30,6 @@ export const downloadSrsDocx = async (urlOrKey, defaultFilename = 'SRS_Document.
 
   const token = useAuthStore.getState().accessToken;
 
-  // Check if it is a truly external S3/R2 presigned URL (not our own local API)
   const isInternalBackend = urlOrKey.includes('/srs/download-file') || urlOrKey.startsWith('/') || urlOrKey.startsWith('projects/');
   
   if (!isInternalBackend && (urlOrKey.startsWith('http://') || urlOrKey.startsWith('https://'))) {
@@ -48,7 +47,6 @@ export const downloadSrsDocx = async (urlOrKey, defaultFilename = 'SRS_Document.
     return;
   }
 
-  // Format the endpoint for API
   let endpoint = urlOrKey;
   if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
     try {

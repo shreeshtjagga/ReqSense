@@ -150,7 +150,6 @@ async def get_session(
 ):
     return await _get_scoped_session(session_id, current_user, db)
 
-
 @router.patch("/{session_id}/end", response_model=SessionRead)
 async def end_session(
     session_id: uuid.UUID,

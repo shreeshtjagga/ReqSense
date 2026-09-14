@@ -22,11 +22,9 @@ export const ClosureBanner = ({ project, onUpdated }) => {
 
   if (!project) return null;
 
-  // ── Closure state ──────────────────────────────────────────────────────────
   const isClosureRequester = project.closure_requested_by === user?.id;
   const hasPendingClosure = Boolean(project.closure_requested_by);
 
-  // ── Deletion state ─────────────────────────────────────────────────────────
   const isDeletionRequester = project.deletion_requested_by === user?.id;
   const hasPendingDeletion = Boolean(project.deletion_requested_by);
 
@@ -67,7 +65,7 @@ export const ClosureBanner = ({ project, onUpdated }) => {
 
   return (
     <Stack spacing={1.5} sx={{ mb: 3 }}>
-      {/* ── Closure Banner ─────────────────────────────────────────────────── */}
+      {}
       {showClosureBanner && (
         <Alert severity="warning">
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }} justifyContent="space-between">
@@ -102,7 +100,7 @@ export const ClosureBanner = ({ project, onUpdated }) => {
         </Alert>
       )}
 
-      {/* ── Deletion Banner ─────────────────────────────────────────────────── */}
+      {}
       {showDeletionBanner && (
         <Alert
           severity="error"

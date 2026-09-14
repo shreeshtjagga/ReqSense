@@ -124,7 +124,7 @@ export const ResetPassword = () => {
         }}
       />
 
-      {/* Top Header */}
+      {}
       <Box
         sx={{
           display: 'flex',
@@ -180,7 +180,7 @@ export const ResetPassword = () => {
         </Stack>
       </Box>
 
-      {/* Main Grid */}
+      {}
       <Grid
         container
         sx={{
@@ -191,7 +191,7 @@ export const ResetPassword = () => {
           py: 2,
         }}
       >
-        {/* Left Hero */}
+        {}
         <Grid
           item
           xs={12}
@@ -225,7 +225,7 @@ export const ResetPassword = () => {
           </Box>
         </Grid>
 
-        {/* Right Form Card */}
+        {}
         <Grid
           item
           xs={12}
@@ -421,7 +421,7 @@ export const ResetPassword = () => {
             )}
           </Paper>
 
-          {/* Bottom Security Banner */}
+          {}
           <Box
             sx={{
               width: '100%',

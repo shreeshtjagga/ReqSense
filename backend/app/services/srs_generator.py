@@ -52,9 +52,6 @@ class SRSGenerator:
         )
         conflicted_count = len(conflicted_count_result.scalars().all())
 
-        # NOTE: We do NOT dump raw client messages — these contain conversational noise.
-        # Instead, requirement origin statements are derived from the validated atoms themselves.
-
         session_ids_q = select(Session.id).where(Session.project_id == session.project_id)
         cr_ids_q = select(ChangeRequest.id).where(ChangeRequest.project_id == session.project_id)
 
@@ -79,7 +76,6 @@ class SRSGenerator:
                 if c.atom_2_id:
                     pending_contradiction_atom_ids.add(c.atom_2_id)
 
-        # Strictly exclude any atoms tied to pending contradictions until resolved by a developer
         verified_atoms = [
             a for a in atoms
             if a.status == "active" and a.id not in pending_contradiction_atom_ids
@@ -87,7 +83,6 @@ class SRSGenerator:
         atoms = verified_atoms
         conflicted_count = max(conflicted_count, len(pending_contradiction_atom_ids))
 
-        # LLM-filter trivial/duplicate atoms before building the document
         if atoms and not settings.groq_is_mocked:
             try:
                 client = get_groq_client()

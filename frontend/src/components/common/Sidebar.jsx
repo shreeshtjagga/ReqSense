@@ -96,7 +96,7 @@ export const Sidebar = ({ mobileOpen, onDrawerToggle }) => {
       sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
       aria-label="mailbox folders"
     >
-      {/* Mobile Drawer */}
+      {}
       <Drawer
         variant="temporary"
         open={mobileOpen}
@@ -112,7 +112,7 @@ export const Sidebar = ({ mobileOpen, onDrawerToggle }) => {
         {drawerContent}
       </Drawer>
 
-      {/* Desktop Drawer */}
+      {}
       <Drawer
         variant="permanent"
         sx={{

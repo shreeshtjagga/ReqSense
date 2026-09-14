@@ -24,11 +24,11 @@ const AnimatedCube = () => {
     const getCubePoints = (W, H) => {
       const cx = W * 0.45;
       const cy = H * 0.48;
-      const s  = Math.min(W, H) * 0.22; // half-width of cube
+      const s  = Math.min(W, H) * 0.22;
 
-      const dx = s;        // horizontal half-width
-      const dy = s * 0.5;  // vertical foreshortening
-      const h  = s * 1.0;  // cube height
+      const dx = s;
+      const dy = s * 0.5;
+      const h  = s * 1.0;
 
       const top    = { x: cx,      y: cy - h       };
       const left   = { x: cx - dx, y: cy - h + dy  };
@@ -296,7 +296,7 @@ export const Login = () => {
   const [rememberMe, setRememberMe] = useState(false);
   const [showPw, setShowPw]       = useState(false);
   const [loading, setLoading]     = useState(false);
-  const [modalType, setModalType] = useState(null); // 'help' | 'contact' | null
+  const [modalType, setModalType] = useState(null);
 
   const navigate   = useNavigate();
   const login      = useAuthStore((s) => s.login);
@@ -336,7 +336,7 @@ export const Login = () => {
 
   return (
     <div style={styles.root}>
-      {/* ── TOP HEADER (Logo on left, Help/Support on right) ─────────────── */}
+      {}
       <div style={styles.topHeader}>
         <div style={styles.logoRow}>
           <ReqSenseLogo size={38} />
@@ -353,18 +353,18 @@ export const Login = () => {
         </div>
       </div>
 
-      {/* ── LEFT PANEL ──────────────────────────────────────────────────── */}
+      {}
       <div style={styles.left}>
-        {/* Animated cube */}
+        {}
         <div style={styles.cubeWrap}>
           <AnimatedCube />
         </div>
       </div>
 
-      {/* ── RIGHT PANEL ─────────────────────────────────────────────────── */}
+      {}
       <div style={styles.right}>
         <div style={styles.card}>
-          {/* Card logo */}
+          {}
           <div style={styles.cardLogoWrap}>
             <ReqSenseLogo size={48} />
           </div>
@@ -373,7 +373,7 @@ export const Login = () => {
           <p style={styles.welcomeSub}>Sign in to continue to ReqSense AI</p>
 
           <form onSubmit={handleSubmit} noValidate style={styles.form}>
-            {/* Email */}
+            {}
             <div style={styles.fieldGroup}>
               <label style={styles.label}>Email Address</label>
               <div style={styles.inputWrap}>
@@ -392,7 +392,7 @@ export const Login = () => {
               </div>
             </div>
 
-            {/* Password */}
+            {}
             <div style={styles.fieldGroup}>
               <label style={styles.label}>Password</label>
               <div style={styles.inputWrap}>
@@ -414,7 +414,7 @@ export const Login = () => {
               </div>
             </div>
 
-            {/* Remember me / Forgot */}
+            {}
             <div style={styles.rememberRow}>
               <label style={styles.checkLabel}>
                 <input
@@ -428,7 +428,7 @@ export const Login = () => {
               <RouterLink to="/forgot-password" style={styles.forgotLink}>Forgot Password?</RouterLink>
             </div>
 
-            {/* Sign In button */}
+            {}
             <button
               type="submit"
               id="login-submit"
@@ -442,21 +442,21 @@ export const Login = () => {
               )}
             </button>
 
-            {/* Divider */}
+            {}
             <div style={styles.orRow}>
               <div style={styles.orLine} />
               <span style={styles.orText}>OR</span>
               <div style={styles.orLine} />
             </div>
 
-            {/* Google */}
+            {}
             <button type="button" onClick={handleGoogle} style={styles.googleBtn}>
               <GoogleIcon />
               <span style={{ marginLeft: 10 }}>Continue with Google</span>
             </button>
           </form>
 
-          {/* Register link */}
+          {}
           <p style={styles.registerRow}>
             Don't have an account?{' '}
             <RouterLink to="/register" style={styles.registerLink}>Register here</RouterLink>
@@ -464,7 +464,7 @@ export const Login = () => {
         </div>
       </div>
 
-      {/* ── SIMPLE HELP & CONTACT MODAL ────────────────────────────────────────── */}
+      {}
       {modalType && (
         <div
           style={styles.modalBackdrop}
@@ -474,7 +474,7 @@ export const Login = () => {
             style={styles.modalCard}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
+            {}
             <div style={styles.modalHeader}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <ReqSenseLogo size={28} />
@@ -491,7 +491,7 @@ export const Login = () => {
               </button>
             </div>
 
-            {/* Modal Content */}
+            {}
             <div style={styles.modalBody}>
               {modalType === 'help' ? (
                 <div style={styles.simpleList}>
@@ -531,7 +531,7 @@ export const Login = () => {
               )}
             </div>
 
-            {/* Modal Footer */}
+            {}
             <div style={styles.modalFooter}>
               <button
                 type="button"

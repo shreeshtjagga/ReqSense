@@ -19,12 +19,7 @@ from app.models.requirement_atom import RequirementAtom
 
 logger = logging.getLogger(__name__)
 
-
 async def _llm_filter_atoms(atoms: list) -> list:
-    """
-    Use Groq to deduplicate and remove trivial requirement atoms.
-    Returns a filtered subset. Falls back to the original list if Groq is mocked or fails.
-    """
     if not atoms:
         return atoms
 
@@ -133,7 +128,6 @@ async def get_latest_srs(
     all_active_atoms = atoms_res.scalars().all()
     atoms = [a for a in all_active_atoms if a.id not in pending_atom_ids]
 
-    # LLM-filter trivial/duplicate atoms (no-op when Groq is mocked)
     atoms = await _llm_filter_atoms(atoms)
 
     sections = [
@@ -199,7 +193,7 @@ async def download_srs_file(
     if s3 is None:
         file_path = _BASE_DIR / "storage_files" / key
         if not file_path.exists():
-            # Auto-recover / rebuild the document on demand if missing
+
             srs_res = await db.execute(select(SRSVersion).where(SRSVersion.file_url == key))
             srs_rec = srs_res.scalar_one_or_none()
             if srs_rec:
@@ -330,7 +324,6 @@ async def get_srs_version_details(
     all_active_atoms = atoms_res.scalars().all()
     atoms = [a for a in all_active_atoms if a.id not in pending_atom_ids]
 
-    # LLM-filter trivial/duplicate atoms (no-op when Groq is mocked)
     atoms = await _llm_filter_atoms(atoms)
 
     sections = [

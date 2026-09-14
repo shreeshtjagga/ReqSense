@@ -121,7 +121,7 @@ export const Analytics = () => {
         </Grid>
       ) : (
         <Grid container spacing={3}>
-          {/* Contradiction Pie Chart */}
+          {}
           <Grid item xs={12}>
             <ResolutionChart
               pending={stats.pending}
@@ -130,7 +130,7 @@ export const Analytics = () => {
             />
           </Grid>
 
-          {/* Drift Line Chart */}
+          {}
           <Grid item xs={12}>
             <DriftChart data={sessionTrend} />
           </Grid>

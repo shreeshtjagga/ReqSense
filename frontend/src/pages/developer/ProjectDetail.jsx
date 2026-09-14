@@ -207,7 +207,7 @@ const ProjectChangeRequestsTab = ({ projectId }) => {
         </TableContainer>
       )}
 
-      {/* Review Dialog */}
+      {}
       <Dialog open={reviewOpen} onClose={() => !submitting && setReviewOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle sx={{ fontWeight: 700 }}>Change Request Evaluation</DialogTitle>
         <Box component="form" onSubmit={handleReviewSubmit}>
@@ -729,7 +729,7 @@ export const ProjectDetail = () => {
     <Layout>
       <ClosureBanner project={project} onUpdated={setProject} />
 
-      {/* Top Header & Project Overview Hero */}
+      {}
       <Paper
         elevation={0}
         sx={{
@@ -806,11 +806,11 @@ export const ProjectDetail = () => {
 
         <Divider sx={{ my: 2 }} />
 
-        {/* Contradiction Detection Sensitivity + Clients Quick Bar */}
+        {}
         <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 3, flexWrap: 'wrap' }}>
 
-            {/* Sensitivity Labeled Card */}
+            {}
             <Paper
               variant="outlined"
               sx={{ p: 2, borderRadius: 2, minWidth: 280, maxWidth: 360, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0' }}
@@ -858,7 +858,7 @@ export const ProjectDetail = () => {
         </Box>
       </Paper>
 
-      {/* Pill Navigation Tabs Bar */}
+      {}
       <Paper
         elevation={0}
         sx={{
@@ -913,7 +913,7 @@ export const ProjectDetail = () => {
         </Stack>
       </Paper>
 
-      {/* Full-width Workspace Content Area */}
+      {}
       <Paper elevation={0} sx={{ p: { xs: 2.5, md: 4 }, borderRadius: 4, background: '#FFFFFF', border: '1px solid #E2E8F0', minHeight: 500 }}>
         {tabValue === 0 && (
           <ProjectDashboardTab

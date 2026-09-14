@@ -87,7 +87,7 @@ export const AdminAuditLogs = () => {
         </Typography>
       </Box>
 
-      {/* Filters */}
+      {}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
         <TextField
           size="small"

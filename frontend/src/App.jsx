@@ -9,7 +9,6 @@ const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/auth/ResetPassword'));
 const AcceptInvite = lazy(() => import('./pages/auth/AcceptInvite'));
 
-
 const ClientDashboard = lazy(() => import('./pages/client/ClientDashboard'));
 const ClientProjectHub = lazy(() => import('./pages/client/ClientProjectHub'));
 const ChatSession = lazy(() => import('./pages/client/ChatSession'));
@@ -63,14 +62,14 @@ export const App = () => {
     <ErrorBoundary>
       <Suspense fallback={<RouteFallback />}>
         <Routes>
-          {/* Public Routes */}
+          {}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/accept-invite" element={<AcceptInvite />} />
 
-          {/* Private Unified Dashboard Root */}
+          {}
           <Route
             path="/"
             element={
@@ -80,7 +79,7 @@ export const App = () => {
             }
           />
 
-          {/* Client Routes */}
+          {}
           <Route
             path="/client/projects/:projectId"
             element={
@@ -98,7 +97,7 @@ export const App = () => {
             }
           />
 
-          {/* Developer Routes */}
+          {}
           <Route
             path="/dev/projects/:projectId"
             element={
@@ -108,7 +107,7 @@ export const App = () => {
             }
           />
 
-          {/* Admin Routes */}
+          {}
           <Route
             path="/admin/users"
             element={
@@ -134,12 +133,12 @@ export const App = () => {
             }
           />
 
-          {/* 404 Fallback */}
+          {}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
       
-      {/* Toast Notification Provider */}
+      {}
       <ToastNotification />
     </ErrorBoundary>
   );

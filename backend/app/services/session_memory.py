@@ -1,13 +1,3 @@
-"""
-Session Memory — local in-process implementation.
-
-Replaces Redis with an asyncio-safe in-memory store. Falls back to DB on
-process restart (the DB-load path was already implemented).
-
-The public API (`get_messages`, `add_message`, `clear_memory`,
-`seed_from_prior_session`) is identical to the Redis version so all callers
-work unchanged.
-"""
 import asyncio
 import json
 import logging
@@ -19,21 +9,13 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# ── In-memory store ──────────────────────────────────────────────────────────
-# { session_id_str: [{"sender": ..., "content": ...}, ...] }
 _store: Dict[str, List[Dict[str, Any]]] = {}
 _store_lock = asyncio.Lock()
 _MAX_MESSAGES = 40
 
 _CONVERSATIONAL_SENDERS = {"client", "user", "aria"}
 
-
-# ── Fake Redis stub (used by messages.py for the distributed lock) ───────────
 class _FakeRedis:
-    """Minimal in-memory stub that satisfies the redis.asyncio API surface
-    used by messages.py (set/delete for the per-session lock) and health.py
-    (ping).  Not thread-safe for multi-process deployments — fine for local.
-    """
 
     def __init__(self):
         self._data: Dict[str, Any] = {}
@@ -77,16 +59,13 @@ class _FakeRedis:
         return True
 
     async def expire(self, key: str, seconds: int) -> bool:
-        # TTL not enforced in-memory for simplicity
+
         return True
 
     def pipeline(self, transaction: bool = True):
         return _FakePipeline(self)
 
-
 class _FakePipeline:
-    """Context-manager pipeline that batches ops and executes them atomically
-    (single-threaded; sufficient for local dev)."""
 
     def __init__(self, redis: _FakeRedis):
         self._redis = redis
@@ -128,16 +107,11 @@ class _FakePipeline:
     async def __aexit__(self, *args):
         pass
 
-
 _fake_redis = _FakeRedis()
-
 
 def get_redis_client():
     """Returns the fake in-memory Redis stub."""
     return _fake_redis
-
-
-# ── SessionMemory ─────────────────────────────────────────────────────────────
 
 class SessionMemory:
     @staticmethod
@@ -163,7 +137,6 @@ class SessionMemory:
             db_msgs = list(reversed(res.scalars().all()))
             messages = [{"sender": m.sender, "content": m.content} for m in db_msgs]
 
-            # Also load seeded context messages persisted when memory was cold
             seed_res = await db.execute(
                 select(Message)
                 .where(

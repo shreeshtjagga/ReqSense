@@ -28,10 +28,9 @@ if settings.SENTRY_DSN:
         environment=settings.ENV,
     )
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Warm DB connection pool (runs the first connection so requests don't wait)
+
     async def _warm_db():
         try:
             from app.database import engine
@@ -42,15 +41,12 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"DB pool warm-up failed (non-fatal): {e}")
 
-    # Preload embedding model in background thread (36s first-time load)
     loop = asyncio.get_event_loop()
     loop.run_in_executor(None, EmbeddingService.preload_model)
 
-    # Warm DB pool (async, non-blocking for startup)
     asyncio.create_task(_warm_db())
 
     yield
-
 
 app = FastAPI(
     title="ReqSense AI",
@@ -65,10 +61,6 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Middleware order matters: in Starlette, add_middleware is applied in reverse —
-# the FIRST added becomes the OUTERMOST layer (first to receive requests).
-# CORSMiddleware must be outermost so it handles OPTIONS preflight before
-# SlowAPIMiddleware or RequestIDMiddleware can intercept them.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,

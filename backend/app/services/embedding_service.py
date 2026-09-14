@@ -9,7 +9,6 @@ settings = get_settings()
 
 _model = None
 
-
 def get_model():
     global _model
     if _model is None:
@@ -17,7 +16,6 @@ def get_model():
         logger.info(f"Loading embedding model: {settings.EMBEDDING_MODEL}")
         _model = SentenceTransformer(settings.EMBEDDING_MODEL)
     return _model
-
 
 @lru_cache(maxsize=1024)
 def _cached_encode(text: str) -> List[float]:
@@ -28,7 +26,6 @@ def _cached_encode(text: str) -> List[float]:
     except Exception as e:
         logger.warning(f"SentenceTransformer encode failed ({e}), using fallback zero-vector.")
         return [0.0] * 384
-
 
 class EmbeddingService:
     @staticmethod

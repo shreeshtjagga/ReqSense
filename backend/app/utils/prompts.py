@@ -1,9 +1,5 @@
-"""
-Prompts repository for ARIA agent, requirement extraction, contradiction detection, and impact analysis.
-"""
 
 PROMPT_VERSION = "v2.0"
-
 
 def build_aria_system_prompt(
     project_name: str = "",
@@ -12,13 +8,6 @@ def build_aria_system_prompt(
     atom_summary: str = "",
     tone: str = "normal",
 ) -> str:
-    """
-    Build a context-aware system prompt for ARIA that includes the specific project's
-    name, description, domain, a rolling summary of already-captured requirements,
-    and tone adaptation rules.
-
-    ARIA must NEVER ask the client what project they are in — it already knows.
-    """
     project_name = project_name or "this project"
     description_line = f"Description: {description}" if description else ""
     domain_line = f"Domain: {domain.replace('_', ' ')}" if domain else ""
@@ -83,7 +72,6 @@ Please follow these instructions:
 
 {tone_rules}
 """
-
 
 ARIA_SYSTEM_PROMPT = build_aria_system_prompt()
 

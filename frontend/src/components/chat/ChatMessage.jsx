@@ -8,7 +8,7 @@ import { formatDateTime } from '../../utils/helpers';
 import ConflictAlert from './ConflictAlert';
 
 export const ChatMessage = ({ message, onResolveConflict }) => {
-  // Safety guard: if message is null/undefined, render nothing
+
   if (!message) return null;
 
   const { sender, content, message_type, created_at } = message;
@@ -42,17 +42,16 @@ export const ChatMessage = ({ message, onResolveConflict }) => {
     );
   }
 
-  // Parse conflict alerts safely — never crash on malformed JSON
   let conflictData = null;
   if (message_type === 'conflict_alert' && content) {
     try {
       const parsed = JSON.parse(content);
-      // Only use parsed data if it looks like a valid conflict object
+
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
         conflictData = parsed;
       }
     } catch (e) {
-      // Not valid JSON — fall through and render as text
+
     }
   }
 

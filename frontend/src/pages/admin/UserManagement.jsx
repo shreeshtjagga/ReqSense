@@ -188,7 +188,7 @@ export const UserManagement = () => {
         </Table>
       </TableContainer>
 
-      {/* Create User Dialog */}
+      {}
       <Dialog open={createOpen} onClose={() => !submitting && setCreateOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontWeight: 700 }}>Add New User Account</DialogTitle>
         <Box component="form" onSubmit={handleCreateUser}>
@@ -225,7 +225,7 @@ export const UserManagement = () => {
         </Box>
       </Dialog>
 
-      {/* Delete User Confirmation Dialog */}
+      {}
       <Dialog open={Boolean(selectedUserForDelete)} onClose={() => !deleting && setSelectedUserForDelete(null)}>
         <DialogTitle sx={{ fontWeight: 700 }}>Delete User Account</DialogTitle>
         <DialogContent>

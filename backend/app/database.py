@@ -7,18 +7,17 @@ from app.config import get_settings
 
 settings = get_settings()
 
-# Build engine kwargs based on DB type
 _engine_kwargs: dict = {
     "echo": settings.ENV == "development",
 }
 
 if settings.is_sqlite:
-    # SQLite: use StaticPool for single-file DB, no pool_size/max_overflow
+
     from sqlalchemy.pool import StaticPool
     _engine_kwargs["connect_args"] = {"check_same_thread": False}
     _engine_kwargs["poolclass"] = StaticPool
 else:
-    # PostgreSQL / other: full connection pool settings
+
     _engine_kwargs["pool_size"] = 10
     _engine_kwargs["max_overflow"] = 20
     _engine_kwargs["pool_pre_ping"] = True

@@ -158,7 +158,6 @@ const ProjectOverviewTab = ({ project, sessions, contradictions, onViewContradic
   );
 };
 
-
 const ChatSessionsTab = ({ projectId, project, sessions, loadingSessions, onRefresh }) => {
   const navigate = useNavigate();
   const showToast = useToastStore((s) => s.showToast);
@@ -485,7 +484,7 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
         </Button>
       </Stack>
 
-      {/* ── Submission Form ────────────────────────────────────────────── */}
+      {}
       {showForm && (
         <Paper
           variant="outlined"
@@ -565,7 +564,7 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
         </Paper>
       )}
 
-      {/* ── List / Cards of Submitted Requests ──────────────────────────── */}
+      {}
       {loading ? (
         <Stack spacing={2}>
           <Skeleton variant="rectangular" height={100} sx={{ borderRadius: 2 }} />
@@ -625,7 +624,7 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
                     {cr.description}
                   </Typography>
 
-                  {/* Affected Features Tags */}
+                  {}
                   {featList.length > 0 && (
                     <Stack direction="row" spacing={0.8} alignItems="center" flexWrap="wrap" sx={{ mb: 2 }}>
                       <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', mr: 0.5 }}>
@@ -637,7 +636,7 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
                     </Stack>
                   )}
 
-                  {/* Developer Note Callout (Approve/Reject Reason) */}
+                  {}
                   {cr.developer_note && (
                     <Paper
                       elevation={0}
@@ -662,7 +661,7 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
                     </Paper>
                   )}
 
-                  {/* AI Impact Report (if available) */}
+                  {}
                   {cr.impact_report && (
                     <Accordion variant="outlined" sx={{ mt: 1.5, borderRadius: '8px !important', '&:before': { display: 'none' } }}>
                       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -962,7 +961,6 @@ export const ClientProjectHub = () => {
     }
   };
 
-
   const loadProject = async () => {
     try {
       setLoadingProject(true);
@@ -997,7 +995,7 @@ export const ClientProjectHub = () => {
       const data = await listContradictionsForProject(projectId);
       setContradictions(data || []);
     } catch (err) {
-      // silently fail — contradictions are supplementary
+
     } finally {
       if (isInitial) setLoadingContradictions(false);
     }
@@ -1047,7 +1045,7 @@ export const ClientProjectHub = () => {
     <Layout>
       <ClosureBanner project={project} onUpdated={setProject} />
       <Grid container spacing={3} sx={{ minHeight: 'calc(100vh - 120px)' }}>
-        {/* Left Side: Internal Navigation Side Panel */}
+        {}
         <Grid item xs={12} md={3} sx={{ display: 'flex', flexDirection: 'column' }}>
           <Stack spacing={2} sx={{ height: '100%' }}>
             <Button
@@ -1125,7 +1123,7 @@ export const ClientProjectHub = () => {
               </List>
             </Paper>
 
-            {/* Danger Zone: Request Deletion */}
+            {}
             <Box sx={{ mt: 'auto', pt: 1 }}>
               <Tooltip
                 title={project?.deletion_requested_by
@@ -1156,7 +1154,7 @@ export const ClientProjectHub = () => {
           </Stack>
         </Grid>
 
-        {/* Right Side: Main Content Area */}
+        {}
         <Grid item xs={12} md={9}>
           <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, minHeight: '100%' }}>
             {tabValue === 0 && (

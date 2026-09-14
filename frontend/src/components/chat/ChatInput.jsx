@@ -11,7 +11,7 @@ export const ChatInput = ({ onSendMessage, disabled, sending }) => {
     const toSend = text;
     onSendMessage(toSend)
       .then(() => setText(''))
-      .catch(() => { /* keep text so the user can retry without retyping */ });
+      .catch(() => {  });
   };
 
   const handleKeyDown = (e) => {

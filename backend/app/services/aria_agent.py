@@ -24,21 +24,20 @@ def get_groq_client():
 def generate_contextual_response(user_message: str, project_name: str, history: List[Dict[str, Any]]) -> str:
     msg = (user_message or "").strip().lower()
     
-    # Collect previous assistant responses to avoid repeating questions
+
     past_assistant_texts = " ".join([
         (m.get("content") or "").lower()
         for m in (history or [])
         if m.get("sender") in ("assistant", "aria", "system") or m.get("role") == "assistant"
     ])
     
-    # Collect all user statements to understand what has been established
+
     all_user_texts = " ".join([
         (m.get("content") or "").lower()
         for m in (history or [])
         if m.get("sender") in ("client", "user") or m.get("role") == "user"
     ]) + " " + msg
 
-    # Helper: Check if a topic was already asked by ARIA
     asked_roles_auth = "distinct user roles" in past_assistant_texts or "oauth" in past_assistant_texts or "authentication" in past_assistant_texts or "user management" in past_assistant_texts
     asked_tech = "programming language" in past_assistant_texts or "architectural patterns" in past_assistant_texts or "frameworks" in past_assistant_texts
     asked_gps = "gps" in past_assistant_texts or "location coordinates" in past_assistant_texts
@@ -48,7 +47,6 @@ def generate_contextual_response(user_message: str, project_name: str, history: 
     asked_apis = "third-party api" in past_assistant_texts or "third party api" in past_assistant_texts or "data retention" in past_assistant_texts or "performance requirements" in past_assistant_texts
     asked_final = "all key functional requirements" in past_assistant_texts or "logged all specifications" in past_assistant_texts or "specifications remain saved" in past_assistant_texts or "srs document whenever" in past_assistant_texts
 
-    # 1. Tech stack & Programming Languages
     tech_keywords = {
         "ruby": "Ruby / Ruby on Rails",
         "python": "Python / FastAPI / Django",
@@ -82,7 +80,6 @@ def generate_contextual_response(user_message: str, project_name: str, history: 
             f"2. What database or external services will the {tech_str} backend connect with?"
         )
 
-    # 2. Greetings
     greetings = ["hi", "hello", "hey", "hl", "greetings", "good morning", "good afternoon", "good evening"]
     if (msg in greetings or any(msg.startswith(g + " ") for g in greetings)) and len(history) <= 1:
         return (
@@ -91,7 +88,6 @@ def generate_contextual_response(user_message: str, project_name: str, history: 
             f"To get started, what core features or workflows would you like to build first?"
         )
 
-    # 3. If user is answering roles & auth after ARIA previously asked about them
     extracted_roles = []
     for r in ["admin", "customer", "user", "client", "manager", "driver", "vendor", "guest", "moderator"]:
         if r in msg:
@@ -115,7 +111,6 @@ def generate_contextual_response(user_message: str, project_name: str, history: 
             f"2. What specific permissions and actions can Admin users perform that Customers cannot?"
         )
 
-    # 4. GPS / Location specifics
     if any(w in msg for w in ["gps", "location", "geo", "coordinate", "tracking", "map", "geofence"]):
         if not asked_gps:
             return (
@@ -130,7 +125,6 @@ def generate_contextual_response(user_message: str, project_name: str, history: 
                 f"Will this location data be shared with other users in real-time (e.g. live maps), or stored for historical logging and analytics?"
             )
 
-    # 5. Authentication, Security & Users (if not asked yet)
     if any(w in msg for w in ["login", "signup", "sign up", "auth", "user", "role", "admin", "password", "2fa", "mfa", "permission", "account"]):
         if not asked_roles_auth:
             return (
@@ -145,7 +139,6 @@ def generate_contextual_response(user_message: str, project_name: str, history: 
                 f"What are the main daily workflows or operations users perform in the interface once authenticated?"
             )
 
-    # 6. E-commerce / Billing / Orders / Payments
     if any(w in msg for w in ["order", "cart", "pay", "payment", "checkout", "stripe", "price", "billing", "invoice", "product", "shop", "item", "purchase"]):
         if not asked_payments:
             return (
@@ -160,7 +153,6 @@ def generate_contextual_response(user_message: str, project_name: str, history: 
                 f"Will there be automated email receipts, order tracking status changes, or refund processing rules?"
             )
 
-    # 7. Reports / Dashboard / Analytics
     if any(w in msg for w in ["dashboard", "report", "analytics", "chart", "metrics", "export", "csv", "pdf", "graph"]):
         if not asked_workflows:
             return (
@@ -169,7 +161,6 @@ def generate_contextual_response(user_message: str, project_name: str, history: 
                 f"2. What export formats (e.g. PDF summaries, raw CSV data) should be supported?"
             )
 
-    # 8. Notifications / Communication
     if any(w in msg for w in ["notification", "notify", "email", "sms", "alert", "message", "push"]):
         if not asked_notifications:
             return (
@@ -183,7 +174,6 @@ def generate_contextual_response(user_message: str, project_name: str, history: 
                 f"Are there any third-party APIs or external integrations needed for these operations?"
             )
 
-    # 9. Dynamic progression for short confirmations, negative answers, or non-technical replies
     short_affirmations = ["yes", "yeah", "ok", "okay", "sure", "fine", "done", "correct", "yep", "agreed"]
     short_negations = ["no", "nope", "dont know", "don't know", "not sure", "none", "nothing", "all good", "na", "n/a", "that's all", "thats all", "that is all", "that's it", "thats it"]
     
@@ -226,7 +216,6 @@ def generate_contextual_response(user_message: str, project_name: str, history: 
                 f"If you think of any additional features, business rules, or scope changes later, feel free to mention them here or submit a Change Request!"
             )
 
-    # 10. Default intelligent requirements gathering response
     clean_snippet = user_message.strip()
     if len(clean_snippet) > 80:
         clean_snippet = clean_snippet[:80] + "..."
@@ -263,24 +252,19 @@ def _detect_client_tone(history: List[Dict[str, Any]], current_msg: str = "") ->
 
     combined = " ".join(recent_client_msgs[-3:])
 
-    # Frustrated signals
     if any(p in combined for p in ["already told", "already said", "i said", "you keep", "again", "stop asking", "why are you", "i mentioned", "told you"]):
         return "frustrated"
 
-    # Confused signals
     if any(p in combined for p in ["don't understand", "dont understand", "what do you mean", "confused", "not sure what", "can you explain"]):
         return "confused"
 
-    # Technical signals
     if any(p in combined for p in ["api", "endpoint", "schema", "database", "microservice", "architecture", "docker", "kubernetes", "sql", "nosql", "jwt", "oauth"]):
         return "technical"
 
-    # Terse signals (short answers)
     if recent_client_msgs and all(len(m.split()) <= 3 for m in recent_client_msgs[-2:] if m):
         return "terse"
 
     return "normal"
-
 
 class AriaAgent:
     @staticmethod

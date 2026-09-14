@@ -37,7 +37,6 @@ _STOPWORDS = {
     "should", "must", "can", "are", "was", "were", "been", "being", "into",
 }
 
-# ── Quality gate: skip trivial/conversational messages ─────────────────────
 _TRIVIAL_PATTERN = re.compile(
     r"^\s*(yes|yeah|yep|yup|no|nope|ok|okay|sure|fine|done|correct|"
     r"got\s+it|i\s+see|noted|understood|alright|agreed|great|perfect|"
@@ -57,7 +56,7 @@ def _is_requirement_worthy(text: str) -> bool:
         return False
     if _TRIVIAL_PATTERN.match(text):
         return False
-    # Short questions are not requirements
+
     if text.strip().endswith("?") and len(text.split()) < 8:
         return False
     return True
@@ -95,11 +94,11 @@ def _find_keyword_match(
         
         score = _keyword_overlap_score(raw, prior_raw)
         
-        # Match if same subject (e.g. Technology Stack, User, Manager)
+
         if subj and prior_subj and (subj == prior_subj or "tech" in subj or "stack" in subj or "language" in subj):
             score = max(score, 0.8)
         
-        # Match if programming language or database keywords exist in both
+
         prior_tech = set(re.findall(r"[a-z0-9]+", prior_raw.lower())) & tech_words
         if curr_tech and prior_tech:
             score = max(score, 0.9)
@@ -165,7 +164,7 @@ async def create_message(
         acquired = await r.set(lock_key, "1", nx=True, ex=30)
     except Exception as exc:
         logger.warning("Redis lock unavailable, proceeding without double-submit guard: %s", exc)
-        acquired = True  # fail open — don't block messaging if Redis is down
+        acquired = True
 
     if not acquired:
         raise HTTPException(
@@ -332,8 +331,6 @@ async def create_message(
                 if fb:
                     matches.append(fb)
 
-            # Check against sibling atoms: compare all pairs for intra-message contradictions
-            # (different subjects can still contradict if they share domain keywords like order/deliver)
             for sibling in sibling_atoms:
                 if sibling is atom_dict:
                     continue
@@ -342,7 +339,7 @@ async def create_message(
                 act_a = (atom_dict.get("action") or "").lower().strip()
                 act_b = (sibling.get("action") or "").lower().strip()
                 
-                # Compare if same subject OR if actions share domain keywords (order, deliver, place, etc.)
+
                 shared_action_keywords = set(act_a.split()) & set(act_b.split())
                 if (subj_a and subj_b and subj_a == subj_b) or shared_action_keywords:
                     fake_match = {
@@ -358,7 +355,6 @@ async def create_message(
                     matches.append(fake_match)
                     break
 
-            # Limit evaluation tasks to at most top 2 candidates to maintain sub-second response times
             eval_tasks = [_evaluate_candidate_match(atom_dict, match) for match in matches[:2]]
             eval_results = await asyncio.gather(*eval_tasks) if eval_tasks else []
             evaluations = [r for r in eval_results if r is not None]
@@ -414,8 +410,6 @@ async def create_message(
                 await db.flush()
                 ra.embedding_id = str(ra.id)
                 persisted_atoms.append((atom_dict, ra))
-
-
 
                 for chroma_match, contradiction_result in evaluations:
                     conf = contradiction_result.get("confidence") or 0.0

@@ -21,15 +21,15 @@ export const Layout = ({ children }) => {
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
       <CssBaseline />
       
-      {/* Navbar */}
+      {}
       <Navbar onSidebarToggle={hasSidebar ? handleDrawerToggle : null} />
       
-      {/* Sidebar navigation (rendered for admin role only) */}
+      {}
       {hasSidebar && (
         <Sidebar mobileOpen={mobileOpen} onDrawerToggle={handleDrawerToggle} />
       )}
       
-      {/* Page Content area */}
+      {}
       <Box
         component="main"
         sx={{
@@ -42,7 +42,7 @@ export const Layout = ({ children }) => {
           boxSizing: 'border-box',
         }}
       >
-        <Toolbar /> {/* Spacer matching Navbar height */}
+        <Toolbar /> {}
         <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>{children}</Box>
       </Box>
     </Box>

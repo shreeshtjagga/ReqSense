@@ -83,7 +83,7 @@ export const AdminDashboard = () => {
         <Skeleton variant="rectangular" height={200} sx={{ borderRadius: 3 }} />
       ) : (
         <Grid container spacing={3}>
-          {/* Stats Cards */}
+          {}
           <Grid item xs={12} sm={4}>
             <StatsCard title="Total Projects" value={stats.total_projects} icon={FolderIcon} color="primary.main" />
           </Grid>
@@ -94,7 +94,7 @@ export const AdminDashboard = () => {
             <StatsCard title="Pending Contradictions" value={stats.total_contradictions} icon={WarningIcon} color="warning.main" />
           </Grid>
 
-          {/* Managed Projects Section */}
+          {}
           <Grid item xs={12}>
             <Typography variant="h5" sx={{ fontWeight: 700, mt: 2, mb: 2 }}>
               Organization Projects
@@ -116,7 +116,7 @@ export const AdminDashboard = () => {
             )}
           </Grid>
 
-          {/* Activity Logs & Quick Actions */}
+          {}
           <Grid item xs={12} md={8}>
             <RecentActivity activities={recentActivities} />
           </Grid>

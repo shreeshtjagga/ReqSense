@@ -5,7 +5,6 @@ export const getOverviewAnalytics = async () => {
   return response.data;
 };
 
-
 export const getProjectSummary = async (projectId) => {
   const response = await api.get(`/analytics/projects/${projectId}/summary`);
   return response.data;
