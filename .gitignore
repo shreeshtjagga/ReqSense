@@ -1,4 +1,3 @@
-# ── Python & Virtual Envs ────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
@@ -18,14 +17,12 @@ env/
 ENV/
 .env.bak
 
-# ── Secrets / Environment Files ───────────────────────────────────────────────
 .env
 .env.local
 .env.*.local
 *.pem
 *.key
 
-# ── Node / Frontend ───────────────────────────────────────────────────────────
 node_modules/
 frontend/node_modules/
 frontend/dist/
@@ -35,7 +32,6 @@ frontend/.vite/
 .pnp
 .pnp.js
 
-# ── Testing & Coverage ────────────────────────────────────────────────────────
 .pytest_cache/
 .coverage
 htmlcov/
@@ -48,7 +44,6 @@ nosetests.xml
 test-results/
 tests/artifacts/
 
-# ── Alembic & Storage ─────────────────────────────────────────────────────────
 backend/alembic/__pycache__/
 backend/data/chroma_db/
 backend/chroma_data/
@@ -61,7 +56,6 @@ backend/storage_files/
 *.db-journal
 backend/*.db
 
-# ── Logs & Debug ──────────────────────────────────────────────────────────────
 *.log
 logs/
 npm-debug.log*
@@ -69,7 +63,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# ── IDEs & System Files ───────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
@@ -78,40 +71,29 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
-# ── Celery & Sentry ───────────────────────────────────────────────────────────
 celerybeat-schedule
 celerybeat.pid
 .sentryclirc
 
-# ── Dev/QA Artifacts & Local Scripts ─────────────────────────────────────────
 REVIEW.md
 TEST_STATE.json
 backend/check_connections.py
 backend/test_live_flow.py
 
-# ── Batch & Local Executables ───────────────────────────────────────────────
 *.bat
 *.cmd
 *.ps1
 
-# ── Linter & Test Configs ────────────────────────────────────────────────────
 backend/ruff.toml
 backend/pytest.ini
 frontend/eslint.config.js
 
-# ── Backend: Tests & Local-Only Scripts ──────────────────────────────────────
 backend/tests/
 backend/local_db_init.py
-backend/check_connections.py
-backend/test_live_flow.py
 
-# ── Frontend: Lock File & Env Examples ──────────────────────────────────────
 frontend/package-lock.json
 frontend/.env.production.example
-frontend/dist/
 
-
-# ── Docker, Deployment & Infrastructure YAMLs ───────────────────────────────
 docker-compose*.yml
 docker-compose*.yaml
 render.yaml
@@ -120,11 +102,6 @@ render.yaml
 Dockerfile
 backend/Dockerfile
 
-# ── Internal Architecture Docs (not for GitHub) ───────────────────────────────
 ARCHITECTURE.md
 
-
-# ── AI Agent Configs ─────────────────────────────────────────────────────────
 .agents/
-
-

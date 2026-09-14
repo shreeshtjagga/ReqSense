@@ -1,7 +1,5 @@
-# Auto detect text files and perform LF normalization on checkin
 * text=auto eol=lf
 
-# Explicit text files
 *.py text eol=lf
 *.js text eol=lf
 *.jsx text eol=lf
@@ -17,6 +15,5 @@
 .gitignore text eol=lf
 .gitattributes text eol=lf
 
-# Batch scripts (Windows requires CRLF)
 *.bat text eol=crlf
 *.cmd text eol=crlf
