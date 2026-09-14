@@ -52,17 +52,8 @@ class SRSGenerator:
         )
         conflicted_count = len(conflicted_count_result.scalars().all())
 
-        client_msgs_result = await db.execute(
-            select(Message)
-            .join(Session, Session.id == Message.session_id)
-            .where(
-                Session.project_id == session.project_id,
-                Message.sender.in_(["client", "user"]),
-                Message.message_type == "normal",
-            )
-            .order_by(Message.created_at)
-        )
-        client_messages = client_msgs_result.scalars().all()
+        # NOTE: We do NOT dump raw client messages — these contain conversational noise.
+        # Instead, requirement origin statements are derived from the validated atoms themselves.
 
         session_ids_q = select(Session.id).where(Session.project_id == session.project_id)
         cr_ids_q = select(ChangeRequest.id).where(ChangeRequest.project_id == session.project_id)
@@ -95,6 +86,42 @@ class SRSGenerator:
         ]
         atoms = verified_atoms
         conflicted_count = max(conflicted_count, len(pending_contradiction_atom_ids))
+
+        # LLM-filter trivial/duplicate atoms before building the document
+        if atoms and not settings.groq_is_mocked:
+            try:
+                client = get_groq_client()
+                numbered = "\n".join(f"[{i+1}] {a.raw_text}" for i, a in enumerate(atoms))
+                filter_resp = client.chat.completions.create(
+                    model=settings.GROQ_MODEL,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a requirements analyst. Given a list of requirement statements, "
+                                "return ONLY the numbers (comma-separated) of the ones that are unique, "
+                                "meaningful, and should be kept in a formal SRS document. "
+                                "Exclude: duplicates, near-duplicates, trivial conversational filler, "
+                                "greetings, vague non-requirements, single-word answers. "
+                                "Reply with ONLY numbers, e.g.: 1,3,5,7"
+                            ),
+                        },
+                        {"role": "user", "content": f"Filter these requirements:\n{numbered}"},
+                    ],
+                    timeout=settings.GROQ_TIMEOUT_SECONDS,
+                )
+                raw_indices = filter_resp.choices[0].message.content.strip()
+                keep = set()
+                for part in raw_indices.split(","):
+                    part = part.strip()
+                    if part.isdigit():
+                        idx = int(part) - 1
+                        if 0 <= idx < len(atoms):
+                            keep.add(idx)
+                if keep:
+                    atoms = [atoms[i] for i in sorted(keep)]
+            except Exception as e:
+                logger.warning(f"[SRS] LLM atom pre-filter failed, using all atoms: {e}")
 
         summary_text = "No summary generated."
         llm_model = settings.GROQ_MODEL
@@ -228,21 +255,21 @@ class SRSGenerator:
 
                 doc.add_paragraph()
 
-        h3 = doc.add_heading("3. Verbatim Client Statements", level=1)
+        h3 = doc.add_heading("3. Requirement Origin Statements", level=1)
         h3.runs[0].font.color.rgb = RGBColor(30, 58, 138)
         note_p = doc.add_paragraph(
-            "The following are the client's exact statements during requirements gathering sessions, "
-            "in chronological order."
+            "The following are the original verbatim requirement statements as captured and validated "
+            "by the ARIA AI during requirement gathering sessions. Only substantive, non-trivial statements are included."
         )
         note_p.paragraph_format.space_after = Pt(6)
-        if not client_messages:
-            doc.add_paragraph("No client statements recorded.")
+        if not atoms:
+            doc.add_paragraph("No requirement origin statements available.")
         else:
-            for idx, msg in enumerate(client_messages, start=1):
+            for idx, atom in enumerate(atoms, start=1):
                 p_raw = doc.add_paragraph(style='List Bullet')
-                r_num = p_raw.add_run(f"S{idx:03d}: ")
+                r_num = p_raw.add_run(f"ORS-{idx:03d}: ")
                 r_num.bold = True
-                r_stmt = p_raw.add_run(f'"{msg.content or "N/A"}"')
+                r_stmt = p_raw.add_run(f'"{atom.raw_text or "N/A"}"')
                 r_stmt.italic = True
 
         doc.add_paragraph()
@@ -307,8 +334,8 @@ class SRSGenerator:
             file_url=file_url,
             generated_by="ARIA",
             change_summary=(
-                f"Generated after ending session {session_id}. "
-                f"{len(atoms)} active requirements, {len(client_messages)} client statements"
+                f"Generated from session {session_id}. "
+                f"{len(atoms)} verified requirements captured"
                 + (f", {conflicted_count} excluded (pending contradiction resolution)." if conflicted_count else ".")
             ),
             llm_model=llm_model,
@@ -319,24 +346,5 @@ class SRSGenerator:
         await db.commit()
         await db.refresh(srs_version)
 
-        if session.client_id:
-            try:
-                from app.models.user import User
-                client_user_res = await db.execute(select(User).where(User.id == session.client_id))
-                client_user = client_user_res.scalar_one_or_none()
-                if client_user and client_user.email:
-                    from app.services.notification_service import send_session_summary_email
-                    download_url = StorageService.get_download_url(file_url)
-                    send_session_summary_email(
-                        to_email=client_user.email,
-                        context={
-                            "session_id": str(session_id),
-                            "version": version_str,
-                            "download_url": download_url,
-                        },
-                    )
-            except Exception as e:
-                logger.error(f"Failed to queue session summary email for session {session_id}: {e}")
-
-        logger.info(f"SRS {version_str} generated for project {session.project_id} ({len(atoms)} atoms, {len(client_messages)} client statements, {generation_latency_ms}ms)")
+        logger.info(f"SRS {version_str} generated for project {session.project_id} ({len(atoms)} atoms, {generation_latency_ms}ms)")
         return srs_version

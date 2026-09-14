@@ -83,7 +83,27 @@ celerybeat-schedule
 celerybeat.pid
 .sentryclirc
 
-# ── Dev/QA Artifacts (not for production) ────────────────────────────────────
+# ── Dev/QA Artifacts & Local Scripts ─────────────────────────────────────────
 REVIEW.md
 TEST_STATE.json
 backend/check_connections.py
+backend/test_live_flow.py
+
+# ── Batch & Local Executables ───────────────────────────────────────────────
+*.bat
+*.cmd
+*.ps1
+
+# ── Docker, Deployment & Infrastructure YAMLs ───────────────────────────────
+docker-compose*.yml
+docker-compose*.yaml
+render.yaml
+*.yaml
+*.yml
+Dockerfile
+backend/Dockerfile
+
+# ── Internal Architecture & Documentation ────────────────────────────────────
+ARCHITECTURE.md
+README.md
+

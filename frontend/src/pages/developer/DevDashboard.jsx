@@ -22,7 +22,6 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
 import ProjectCard from '../../components/dashboard/ProjectCard';
 import EmptyState from '../../components/common/EmptyState';
-import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { listProjects, createProject } from '../../api/projects';
 import { useProjectStore } from '../../store/projectStore';
@@ -278,7 +277,8 @@ export const DevDashboard = () => {
         <Box component="form" onSubmit={handleCreateProject}>
           <DialogContent dividers sx={{ borderColor: '#E2E8F0' }}>
             <Stack spacing={3}>
-              <Input
+              <TextField
+                fullWidth
                 label="Project Name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -286,7 +286,8 @@ export const DevDashboard = () => {
                 autoFocus
                 placeholder="e.g. E-Commerce Order Portal"
               />
-              <Input
+              <TextField
+                fullWidth
                 label="Description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}

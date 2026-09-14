@@ -32,12 +32,14 @@ import {
   Alert,
   AlertTitle,
   Badge,
+  Button as MuiButton,
+  Tooltip,
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
 import Button from '../../components/common/Button';
 import EmptyState from '../../components/common/EmptyState';
-import { getProject } from '../../api/projects';
+import { getProject, requestDeleteProject } from '../../api/projects';
 import { listSessionsForProject, createSession } from '../../api/sessions';
 import { createChangeRequest, listChangeRequests } from '../../api/changeRequests';
 import { listContradictionsForProject } from '../../api/contradictions';
@@ -60,6 +62,10 @@ import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import CommentIcon from '@mui/icons-material/Comment';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+import DescriptionIcon from '@mui/icons-material/Description';
+import { SRSViewer } from '../../components/srs/SRSViewer';
+import { getLatestSrs } from '../../api/srs';
 
 const ProjectOverviewTab = ({ project, sessions, contradictions, onViewContradictions }) => {
   const pendingCount = contradictions.filter((c) => c.status === 'pending').length;
@@ -860,6 +866,53 @@ const ContradictionsTab = ({ contradictions, loading }) => {
   );
 };
 
+const ClientSRSTab = ({ projectId, project }) => {
+  const [srsData, setSrsData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const fetchSrs = async () => {
+      try {
+        setLoading(true);
+        const data = await getLatestSrs(projectId);
+        if (active) setSrsData(data);
+      } catch (err) {
+        if (active) setSrsData(null);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    if (projectId) fetchSrs();
+    return () => {
+      active = false;
+    };
+  }, [projectId]);
+
+  if (loading) {
+    return <Skeleton variant="rectangular" height={360} sx={{ borderRadius: 3 }} />;
+  }
+
+  if (!srsData) {
+    return (
+      <Box sx={{ py: 6, textAlign: 'center' }}>
+        <EmptyState
+          icon={<DescriptionIcon sx={{ fontSize: 52, color: 'text.secondary' }} />}
+          title="SRS Document Not Generated Yet"
+          description="Your official Software Requirements Specification will appear here as soon as the developer generates it from gathering sessions."
+        />
+      </Box>
+    );
+  }
+
+  return (
+    <SRSViewer
+      srsData={srsData}
+      projectName={project?.name || 'Project'}
+    />
+  );
+};
+
 export const ClientProjectHub = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -893,6 +946,22 @@ export const ClientProjectHub = () => {
       setStarting(false);
     }
   };
+
+  const [requestingDeletion, setRequestingDeletion] = useState(false);
+
+  const handleRequestDeletion = async () => {
+    setRequestingDeletion(true);
+    try {
+      const updated = await requestDeleteProject(projectId);
+      setProject(updated);
+      showToast('Deletion request submitted. The developer must confirm to proceed.', 'info');
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Failed to submit deletion request.', 'error');
+    } finally {
+      setRequestingDeletion(false);
+    }
+  };
+
 
   const loadProject = async () => {
     try {
@@ -935,9 +1004,15 @@ export const ClientProjectHub = () => {
   }, [projectId]);
 
   useEffect(() => {
-    loadProject();
-    loadSessions();
-    loadContradictions(true);
+    if (projectId) {
+      loadProject();
+      loadSessions();
+      loadContradictions(true);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId) return;
     const interval = setInterval(() => loadContradictions(false), 15000);
     return () => clearInterval(interval);
   }, [projectId, loadContradictions]);
@@ -958,6 +1033,7 @@ export const ClientProjectHub = () => {
   const menuItems = [
     { text: 'Project Overview', icon: <DashboardIcon /> },
     { text: 'Chat with ARIA', icon: <ChatIcon />, badge: sessions.some((s) => s.status === 'active') ? '●' : sessions.length },
+    { text: 'SRS Document', icon: <DescriptionIcon /> },
     {
       text: 'Contradictions',
       icon: <WarningAmberIcon sx={{ color: pendingContradictions > 0 ? '#D97706' : undefined }} />,
@@ -1048,6 +1124,35 @@ export const ClientProjectHub = () => {
                 })}
               </List>
             </Paper>
+
+            {/* Danger Zone: Request Deletion */}
+            <Box sx={{ mt: 'auto', pt: 1 }}>
+              <Tooltip
+                title={project?.deletion_requested_by
+                  ? 'A deletion request is already pending'
+                  : 'Request that this project be permanently deleted. The developer must also confirm.'}
+                arrow
+              >
+                <span style={{ display: 'block' }}>
+                  <MuiButton
+                    fullWidth
+                    variant="outlined"
+                    color="error"
+                    size="small"
+                    startIcon={<DeleteForeverIcon fontSize="small" />}
+                    disabled={requestingDeletion || Boolean(project?.deletion_requested_by)}
+                    onClick={handleRequestDeletion}
+                    sx={{
+                      borderColor: 'error.light',
+                      color: 'error.main',
+                      '&:hover': { bgcolor: '#FEF2F2', borderColor: 'error.main' },
+                    }}
+                  >
+                    {project?.deletion_requested_by ? 'Deletion Pending…' : 'Request Project Deletion'}
+                  </MuiButton>
+                </span>
+              </Tooltip>
+            </Box>
           </Stack>
         </Grid>
 
@@ -1059,7 +1164,7 @@ export const ClientProjectHub = () => {
                 project={project}
                 sessions={sessions}
                 contradictions={contradictions}
-                onViewContradictions={() => setTabValue(2)}
+                onViewContradictions={() => setTabValue(3)}
               />
             )}
             {tabValue === 1 && (
@@ -1072,13 +1177,19 @@ export const ClientProjectHub = () => {
               />
             )}
             {tabValue === 2 && (
+              <ClientSRSTab
+                projectId={projectId}
+                project={project}
+              />
+            )}
+            {tabValue === 3 && (
               <ContradictionsTab
                 contradictions={contradictions}
                 loading={loadingContradictions}
                 onRefresh={loadContradictions}
               />
             )}
-            {tabValue === 3 && <ChangeRequestTab projectId={projectId} project={project} onCancel={() => setTabValue(0)} />}
+            {tabValue === 4 && <ChangeRequestTab projectId={projectId} project={project} onCancel={() => setTabValue(0)} />}
           </Paper>
         </Grid>
       </Grid>

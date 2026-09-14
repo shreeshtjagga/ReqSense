@@ -27,6 +27,12 @@ def extract_atoms_rule_based(message_content: str) -> List[Dict[str, Any]]:
 
     # 1. Tech stack & Programming Languages
     tech_map = {
+        "postgresql": "PostgreSQL",
+        "postgres": "PostgreSQL",
+        "mongodb": "MongoDB",
+        "mysql": "MySQL",
+        "sqlite": "SQLite",
+        "oracle": "Oracle",
         "ruby": "Ruby",
         "python": "Python",
         "javascript": "JavaScript",
@@ -41,21 +47,17 @@ def extract_atoms_rule_based(message_content: str) -> List[Dict[str, Any]]:
         "c#": "C#",
         ".net": ".NET",
         "rust": "Rust",
-        "postgres": "PostgreSQL",
-        "postgresql": "PostgreSQL",
-        "mysql": "MySQL",
-        "mongodb": "MongoDB",
-        "sqlite": "SQLite",
     }
+    seen_techs = set()
     for tech_key, tech_name in tech_map.items():
-        if tech_key in lower:
+        if tech_key in lower and tech_name not in seen_techs:
+            seen_techs.add(tech_name)
             atoms.append({
                 "subject": "Technology Stack",
                 "action": f"use {tech_name}",
                 "constraint_text": tech_name,
                 "raw_text": message_content
             })
-            break
 
     # 2. Manager vs Customer ordering logic
     if "manager" in lower and "customer" in lower and ("order" in lower or "deliver" in lower):
@@ -91,18 +93,6 @@ def extract_atoms_rule_based(message_content: str) -> List[Dict[str, Any]]:
             "raw_text": message_content
         })
 
-    # Default general atom if message has content
-    if not atoms and len(message_content.strip()) > 3:
-        words = message_content.strip().split()
-        subj = words[0].capitalize() if len(words) > 0 else "System"
-        act = " ".join(words[1:6]) if len(words) > 1 else "specify requirement"
-        atoms.append({
-            "subject": subj,
-            "action": act,
-            "constraint_text": "",
-            "raw_text": message_content
-        })
-
     return atoms
 
 def detect_contradiction_rule_based(existing_atom: Dict[str, Any], candidate_atom: Dict[str, Any]) -> Dict[str, Any]:
@@ -116,32 +106,42 @@ def detect_contradiction_rule_based(existing_atom: Dict[str, Any], candidate_ato
     candidate_constraint = (candidate_atom.get("constraint_text") or "").lower().strip()
 
     # 1. Tech stack & Programming language conflict (e.g. Ruby vs Python)
-    programming_languages = ["ruby", "python", "javascript", "typescript", "java", "golang", "go", "php", "c#", "rust"]
-    existing_langs = [l for l in programming_languages if l in existing_text or l == existing_constraint or l in existing_action]
-    candidate_langs = [l for l in programming_languages if l in candidate_text or l == candidate_constraint or l in candidate_action]
-    if existing_langs and candidate_langs:
-        lang1 = existing_langs[0]
-        lang2 = candidate_langs[0]
-        if lang1 != lang2:
-            return {
-                "conflict_type": "direct_contradiction",
-                "confidence": 0.95,
-                "aria_message": f"Wait, you previously specified that the programming language should be {lang1.capitalize()}, but now you mentioned {lang2.capitalize()}. Which programming language should we use for this project?"
-            }
+    programming_languages = {
+        "ruby": "Ruby", "python": "Python", "javascript": "JavaScript", "typescript": "TypeScript",
+        "java": "Java", "golang": "Golang", "go": "Golang", "php": "PHP", "c#": "C#", "rust": "Rust"
+    }
+    exist_lang = programming_languages.get(existing_constraint) or next((v for k, v in programming_languages.items() if k in existing_action), None)
+    cand_lang = programming_languages.get(candidate_constraint) or next((v for k, v in programming_languages.items() if k in candidate_action), None)
+    if not exist_lang and not existing_constraint:
+        exist_lang = next((v for k, v in programming_languages.items() if k in existing_text), None)
+    if not cand_lang and not candidate_constraint:
+        cand_lang = next((v for k, v in programming_languages.items() if k in candidate_text), None)
+    
+    if exist_lang and cand_lang and exist_lang != cand_lang:
+        return {
+            "conflict_type": "direct_contradiction",
+            "confidence": 0.95,
+            "aria_message": f"Wait, you previously specified that the programming language should be {exist_lang}, but now you mentioned {cand_lang}. Which programming language should we use for this project?"
+        }
 
     # 2. Database conflicts (e.g. PostgreSQL vs MongoDB)
-    dbs = ["postgres", "postgresql", "mysql", "mongodb", "sqlite", "oracle"]
-    existing_dbs = [d for d in dbs if d in existing_text or d == existing_constraint or d in existing_action]
-    candidate_dbs = [d for d in dbs if d in candidate_text or d == candidate_constraint or d in candidate_action]
-    if existing_dbs and candidate_dbs:
-        db1 = existing_dbs[0]
-        db2 = candidate_dbs[0]
-        if db1 != db2:
-            return {
-                "conflict_type": "direct_contradiction",
-                "confidence": 0.90,
-                "aria_message": f"Wait, you previously specified {db1.capitalize()} as the database, but now you mentioned {db2.capitalize()}. Which database should we use?"
-            }
+    dbs = {
+        "postgresql": "PostgreSQL", "postgres": "PostgreSQL", "mysql": "MySQL",
+        "mongodb": "MongoDB", "sqlite": "SQLite", "oracle": "Oracle"
+    }
+    exist_db = dbs.get(existing_constraint) or next((v for k, v in dbs.items() if k in existing_action), None)
+    cand_db = dbs.get(candidate_constraint) or next((v for k, v in dbs.items() if k in candidate_action), None)
+    if not exist_db and not existing_constraint:
+        exist_db = next((v for k, v in dbs.items() if k in existing_text), None)
+    if not cand_db and not candidate_constraint:
+        cand_db = next((v for k, v in dbs.items() if k in candidate_text), None)
+
+    if exist_db and cand_db and exist_db != cand_db:
+        return {
+            "conflict_type": "direct_contradiction",
+            "confidence": 0.90,
+            "aria_message": f"Wait, you previously specified {exist_db} as the database, but now you mentioned {cand_db}. Which database should we use?"
+        }
 
     # 3. Manager vs Customer role conflicts
     if ("manager" in existing_text and "customer" in candidate_text) or \
@@ -193,42 +193,43 @@ class RDCDLayer:
 
         try:
             client = get_groq_client()
+            # Use fast model for structured JSON tasks — lower latency, same accuracy
+            fast_model = getattr(settings, 'GROQ_FAST_MODEL', settings.GROQ_MODEL)
             prompt = ATOM_EXTRACTION_PROMPT.format(message=message_content)
             try:
                 response = client.chat.completions.create(
-                    model=settings.GROQ_MODEL,
+                    model=fast_model,
                     messages=[
-                        {"role": "system", "content": "You are a JSON requirements extraction engine. Respond ONLY with a valid raw JSON array. Do not include markdown code fences, introductory text, explanations, or code tutorials."},
+                        {"role": "system", "content": "You are a JSON requirements extraction engine. Respond ONLY with a valid raw JSON array. No markdown, no explanation."},
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.0,
-                    max_tokens=600,
-                    timeout=settings.GROQ_TIMEOUT_SECONDS,
-                    extra_body={"reasoning_format": "hidden"},
+                    max_tokens=400,
+                    timeout=min(settings.GROQ_TIMEOUT_SECONDS, 8),
                 )
             except Exception:
                 response = client.chat.completions.create(
                     model=settings.GROQ_MODEL,
                     messages=[
-                        {"role": "system", "content": "You are a JSON requirements extraction engine. Respond ONLY with a valid raw JSON array. Do not include markdown code fences, introductory text, explanations, or code tutorials."},
+                        {"role": "system", "content": "You are a JSON requirements extraction engine. Respond ONLY with a valid raw JSON array. No markdown, no explanation."},
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.0,
-                    max_tokens=600,
-                    timeout=settings.GROQ_TIMEOUT_SECONDS,
+                    max_tokens=400,
+                    timeout=min(settings.GROQ_TIMEOUT_SECONDS, 8),
                 )
             raw_response = (response.choices[0].message.content or "").strip()
-            if not raw_response and getattr(response.choices[0].message, "reasoning", None):
-                raw_response = response.choices[0].message.reasoning.strip()
             clean_json = strip_json_fences(raw_response)
             extracted = json.loads(clean_json, strict=False)
-            if isinstance(extracted, list) and len(extracted) > 0:
-                valid_atoms = []
-                for item in extracted:
-                    if isinstance(item, dict) and item.get("raw_text"):
-                        valid_atoms.append(item)
+            if isinstance(extracted, list):
+                valid_atoms = [
+                    item for item in extracted
+                    if isinstance(item, dict) and item.get("raw_text")
+                ]
                 if valid_atoms:
                     return valid_atoms
+                # LLM returned empty array — message has no requirements
+                return []
             return extract_atoms_rule_based(message_content)
         except Exception as e:
             logger.warning(f"Groq atom extraction failed ({e}). Using rule-based atom extractor.")
@@ -249,6 +250,8 @@ class RDCDLayer:
 
         try:
             client = get_groq_client()
+            # Use fast model for structured JSON contradiction check
+            fast_model = getattr(settings, 'GROQ_FAST_MODEL', settings.GROQ_MODEL)
             prompt = CONTRADICTION_DETECTION_PROMPT.format(
                 existing_subject=existing_atom.get("subject", ""),
                 existing_action=existing_atom.get("action", ""),
@@ -262,26 +265,25 @@ class RDCDLayer:
 
             try:
                 response = client.chat.completions.create(
-                    model=settings.GROQ_MODEL,
+                    model=fast_model,
                     messages=[
-                        {"role": "system", "content": "You are an AI requirements conflict validator. Respond ONLY with a valid raw JSON object. Do not include markdown code fences, introductory text, explanations, or code tutorials."},
+                        {"role": "system", "content": "You are an AI requirements conflict validator. Respond ONLY with a valid raw JSON object. No markdown, no explanation."},
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.0,
-                    max_tokens=400,
-                    timeout=settings.GROQ_TIMEOUT_SECONDS,
-                    extra_body={"reasoning_format": "hidden"},
+                    max_tokens=200,
+                    timeout=min(settings.GROQ_TIMEOUT_SECONDS, 8),
                 )
             except Exception:
                 response = client.chat.completions.create(
                     model=settings.GROQ_MODEL,
                     messages=[
-                        {"role": "system", "content": "You are an AI requirements conflict validator. Respond ONLY with a valid raw JSON object. Do not include markdown code fences, introductory text, explanations, or code tutorials."},
+                        {"role": "system", "content": "You are an AI requirements conflict validator. Respond ONLY with a valid raw JSON object. No markdown, no explanation."},
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.0,
-                    max_tokens=400,
-                    timeout=settings.GROQ_TIMEOUT_SECONDS,
+                    max_tokens=200,
+                    timeout=min(settings.GROQ_TIMEOUT_SECONDS, 8),
                 )
             raw_response = (response.choices[0].message.content or "").strip()
             if not raw_response and getattr(response.choices[0].message, "reasoning", None):

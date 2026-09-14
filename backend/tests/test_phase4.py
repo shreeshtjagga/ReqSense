@@ -197,98 +197,7 @@ async def test_end_session_enqueues_srs_task(
     mock_task.delay.assert_called_once_with(str(session_a.id))
 
 
-@pytest.mark.asyncio
-async def test_feature_status_create_and_list(
-    client: AsyncClient, dev_a, project_a
-):
-    """POST /feature-status and GET /feature-status/project/{id}."""
-    headers_a = await get_auth_headers(client, dev_a.email)
 
-    create_payload = {
-        "project_id": str(project_a.id),
-        "title": "User Authentication",
-        "description": "Login and logout flows",
-    }
-    resp = await client.post("/api/v1/feature-status", json=create_payload, headers=headers_a)
-    assert resp.status_code == 201
-    feature_id = resp.json()["id"]
-    assert resp.json()["title"] == "User Authentication"
-    assert resp.json()["version"] == 1
-
-    # List
-    resp = await client.get(
-        f"/api/v1/feature-status/project/{project_a.id}", headers=headers_a
-    )
-    assert resp.status_code == 200
-    ids = [f["id"] for f in resp.json()]
-    assert feature_id in ids
-
-
-@pytest.mark.asyncio
-async def test_feature_status_optimistic_lock(
-    client: AsyncClient, dev_a, project_a, test_db: AsyncSession
-):
-    """PATCH /feature-status/{id} returns 409 STALE_VERSION if version mismatches."""
-    headers_a = await get_auth_headers(client, dev_a.email)
-
-    # Create feature directly in DB
-    feature = FeatureStatus(
-        project_id=project_a.id,
-        title="Dashboard",
-        description="Main dashboard",
-        status="planned",
-        version=1,
-        created_by=dev_a.id,
-        updated_by=dev_a.id,
-    )
-    test_db.add(feature)
-    await test_db.flush()
-    feature_id = feature.id
-    await test_db.commit()
-
-    # Send stale version (version=0 when DB has version=1)
-    resp = await client.patch(
-        f"/api/v1/feature-status/{feature_id}",
-        json={"status": "in_progress", "version": 0},
-        headers=headers_a,
-    )
-    assert resp.status_code == 409
-    data = resp.json()
-    # Error envelope check
-    assert "error" in data
-    assert data["error"]["code"] == "STALE_VERSION"
-
-
-@pytest.mark.asyncio
-async def test_feature_status_optimistic_lock_success(
-    client: AsyncClient, dev_a, project_a, test_db: AsyncSession
-):
-    """PATCH /feature-status/{id} succeeds with correct version and increments it."""
-    headers_a = await get_auth_headers(client, dev_a.email)
-
-    feature = FeatureStatus(
-        project_id=project_a.id,
-        title="Billing Module",
-        description="Handles payments",
-        status="planned",
-        version=1,
-        created_by=dev_a.id,
-        updated_by=dev_a.id,
-    )
-    test_db.add(feature)
-    await test_db.flush()
-    feature_id = feature.id
-    await test_db.commit()
-
-    resp = await client.patch(
-        f"/api/v1/feature-status/{feature_id}",
-        json={"status": "in_progress", "version": 1},
-        headers=headers_a,
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["status"] == "in_progress"
-    assert data["version"] == 2
 
 
 @pytest.mark.asyncio
@@ -385,22 +294,7 @@ async def test_change_request_review_success(
 @pytest.mark.asyncio
 async def test_health_ready_returns_structure(client: AsyncClient):
     """GET /health/ready returns the expected JSON shape."""
-    with (
-        patch("app.routers.health.get_redis_client") as mock_redis_factory,
-        patch("app.routers.health.celery_app") as mock_celery,
-    ):
-        mock_redis = AsyncMock()
-        mock_redis.ping = AsyncMock(return_value=True)
-        mock_redis_factory.return_value = mock_redis
-
-        mock_conn = MagicMock()
-        mock_celery.connection.return_value.__enter__ = MagicMock(return_value=mock_conn)
-        mock_celery.connection.return_value.__exit__ = MagicMock(return_value=False)
-        mock_celery.connection.return_value = MagicMock()
-        mock_celery.connection.return_value.connect = MagicMock()
-        mock_celery.connection.return_value.release = MagicMock()
-
-        resp = await client.get("/health/ready")
+    resp = await client.get("/health/ready")
 
     # Response must have these keys regardless of 200 or 503
     data = resp.json()

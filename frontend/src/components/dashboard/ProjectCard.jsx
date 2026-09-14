@@ -7,7 +7,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { PROJECT_DOMAIN_LABELS } from '../../utils/constants';
 import { formatDate } from '../../utils/helpers';
-import { deleteProject } from '../../api/projects';
+import { requestDeleteProject } from '../../api/projects';
 import { useToastStore } from '../../store/toastStore';
 
 export const ProjectCard = ({ project, onClick, onDeleteSuccess }) => {
@@ -22,12 +22,13 @@ export const ProjectCard = ({ project, onClick, onDeleteSuccess }) => {
     e.stopPropagation();
     try {
       setDeleting(true);
-      await deleteProject(id);
-      showToast(`Project "${name}" deleted successfully.`, 'success');
+      await requestDeleteProject(id);
+      showToast(`Deletion request submitted for "${name}". The other party must confirm.`, 'info');
       setDeleteOpen(false);
+      // Refresh parent — the project still exists until the other party confirms
       if (onDeleteSuccess) onDeleteSuccess(id);
     } catch (err) {
-      showToast(err.response?.data?.detail || 'Failed to delete project.', 'error');
+      showToast(err.response?.data?.detail || 'Failed to submit deletion request.', 'error');
     } finally {
       setDeleting(false);
     }
@@ -168,10 +169,10 @@ export const ProjectCard = ({ project, onClick, onDeleteSuccess }) => {
           sx: { borderRadius: 4, p: 1 },
         }}
       >
-        <DialogTitle sx={{ fontWeight: 800 }}>Delete Project</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 800 }}>Request Project Deletion</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to permanently delete project <strong>"{name}"</strong>? This action cannot be undone.
+            This will send a <strong>deletion request</strong> for <strong>"{name}"</strong> to the other party. The project will only be permanently deleted once they confirm. You can cancel the request at any time from the project page.
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
@@ -179,7 +180,7 @@ export const ProjectCard = ({ project, onClick, onDeleteSuccess }) => {
             Cancel
           </Button>
           <Button onClick={handleDeleteConfirm} color="error" variant="contained" disabled={deleting}>
-            {deleting ? 'Deleting...' : 'Delete'}
+            {deleting ? 'Requesting...' : 'Request Deletion'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -29,6 +29,8 @@ class ProjectRead(BaseModel):
     status: str
     closure_requested_by: Optional[uuid.UUID] = None
     closure_requested_at: Optional[datetime] = None
+    deletion_requested_by: Optional[uuid.UUID] = None
+    deletion_requested_at: Optional[datetime] = None
     chroma_similarity_threshold: float = 0.3
     created_at: datetime
     updated_at: datetime

@@ -64,3 +64,17 @@ export const listProjectClients = async (projectId) => {
   const response = await api.get(`/projects/${projectId}/clients`);
   return response.data;
 };
+
+export const requestDeleteProject = async (projectId) => {
+  const response = await api.post(`/projects/${projectId}/request-delete`);
+  return response.data;
+};
+
+export const approveDeleteProject = async (projectId) => {
+  await api.post(`/projects/${projectId}/approve-delete`);
+};
+
+export const cancelDeleteProject = async (projectId) => {
+  const response = await api.post(`/projects/${projectId}/cancel-delete`);
+  return response.data;
+};

@@ -14,7 +14,7 @@ const STATUS_META = {
 
 export const ConflictAlert = ({ contradiction, onResolve }) => {
   const { user } = useAuthStore();
-  const canResolve = Boolean(user);
+  const canResolve = Boolean(user && (user.role === ROLES.DEVELOPER || user.role === ROLES.ADMIN));
 
   // Safety: handle null/undefined contradiction gracefully
   if (!contradiction) return null;

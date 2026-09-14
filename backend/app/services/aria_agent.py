@@ -252,6 +252,36 @@ def generate_contextual_response(user_message: str, project_name: str, history: 
             f"Are there any additional constraints, error conditions, or security considerations for this feature?"
         )
 
+def _detect_client_tone(history: List[Dict[str, Any]], current_msg: str = "") -> str:
+    recent_client_msgs = [
+        (m.get("content") or "").strip().lower()
+        for m in (history or [])[-6:]
+        if m.get("sender") in ("client", "user") or m.get("role") == "user"
+    ]
+    if current_msg:
+        recent_client_msgs.append(current_msg.strip().lower())
+
+    combined = " ".join(recent_client_msgs[-3:])
+
+    # Frustrated signals
+    if any(p in combined for p in ["already told", "already said", "i said", "you keep", "again", "stop asking", "why are you", "i mentioned", "told you"]):
+        return "frustrated"
+
+    # Confused signals
+    if any(p in combined for p in ["don't understand", "dont understand", "what do you mean", "confused", "not sure what", "can you explain"]):
+        return "confused"
+
+    # Technical signals
+    if any(p in combined for p in ["api", "endpoint", "schema", "database", "microservice", "architecture", "docker", "kubernetes", "sql", "nosql", "jwt", "oauth"]):
+        return "technical"
+
+    # Terse signals (short answers)
+    if recent_client_msgs and all(len(m.split()) <= 3 for m in recent_client_msgs[-2:] if m):
+        return "terse"
+
+    return "normal"
+
+
 class AriaAgent:
     @staticmethod
     def _build_messages(
@@ -260,13 +290,15 @@ class AriaAgent:
         project_context: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         ctx = project_context or {}
+        tone = _detect_client_tone(history, user_message)
         system_prompt = build_aria_system_prompt(
             project_name=ctx.get("name", ""),
             description=ctx.get("description", ""),
             domain=ctx.get("domain", ""),
             atom_summary=ctx.get("atom_summary", ""),
-            feature_summary=ctx.get("feature_summary", ""),
         )
+        if tone != "normal":
+            system_prompt += f"\n\nCURRENT CLIENT TONE: {tone.upper()}. Adjust your response according to the tone rules above."
 
         messages = [{"role": "system", "content": system_prompt}]
         recent_history = history[-16:] if len(history) > 16 else history

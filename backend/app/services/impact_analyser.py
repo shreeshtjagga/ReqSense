@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.models.feature_status import FeatureStatus
+from app.models.requirement_atom import RequirementAtom
 from app.services.aria_agent import get_groq_client
 from app.utils.helpers import strip_json_fences
 from app.utils.prompts import IMPACT_ANALYSIS_PROMPT
@@ -26,21 +26,29 @@ class ImpactAnalyser:
         project_id: uuid.UUID,
         db: AsyncSession,
     ) -> Dict[str, Any]:
-        q = select(FeatureStatus).where(FeatureStatus.project_id == project_id)
+        q = (
+            select(RequirementAtom)
+            .where(
+                RequirementAtom.project_id == project_id,
+                RequirementAtom.status.in_(["active", "conflicted"]),
+            )
+            .order_by(RequirementAtom.created_at.desc())
+            .limit(100)
+        )
         result = await db.execute(q)
-        features = result.scalars().all()
+        atoms = result.scalars().all()
 
-        if not features:
-            logger.info(f"No features found for project {project_id} — skipping feature impact.")
+        if not atoms:
+            logger.info(f"No active requirements found for project {project_id} — skipping atom impact.")
             llm_result: Dict[str, Any] = {
                 "affected_features": [],
                 "severity": "low",
-                "impact_report": "No features are currently tracked for this project. Impact is minimal.",
+                "impact_report": "No requirements are currently tracked for this project. Impact is minimal.",
             }
         elif settings.groq_is_mocked:
             logger.info("[MOCK IMPACT] Generating mock impact report")
-            affected = [features[0].title] if features else []
-            severity = "high" if any(kw in description.lower() for kw in ("remove", "critical")) else "low"
+            affected = [f"{atoms[0].subject}: {atoms[0].action}"] if atoms else []
+            severity = "high" if any(kw in description.lower() for kw in ("remove", "critical", "database", "auth")) else "low"
             llm_result = {
                 "affected_features": affected,
                 "severity": severity,
@@ -48,8 +56,8 @@ class ImpactAnalyser:
             }
         else:
             features_list = "\n".join(
-                f"- Title: {f.title}\n  Description: {f.description or 'No description'}"
-                for f in features
+                f"- [{a.subject or 'Requirement'}] {a.action or a.raw_text}" + (f" (Constraint: {a.constraint_text})" if a.constraint_text else "")
+                for a in atoms
             )
             prompt = IMPACT_ANALYSIS_PROMPT.format(
                 title=title, description=description, features_list=features_list
@@ -75,9 +83,9 @@ class ImpactAnalyser:
             except Exception as e:
                 logger.error(f"LLM impact analysis failed: {e}")
                 llm_result = {
-                    "affected_features": [f.title for f in features[:2]],
+                    "affected_features": [f"{a.subject}: {a.action}" for a in atoms[:2]],
                     "severity": "medium",
-                    "impact_report": "Architectural Impact Assessment: Reviewing feature dependencies and requirement consistency.",
+                    "impact_report": "Architectural Impact Assessment: Reviewing requirement dependencies and consistency.",
                 }
 
         conflict_hits: List[Dict[str, Any]] = []
@@ -152,7 +160,7 @@ class ImpactAnalyser:
             _select(RequirementAtom)
             .where(
                 RequirementAtom.project_id == project_id,
-                RequirementAtom.status == "active",
+                RequirementAtom.status.in_(["active", "conflicted"]),
             )
             .order_by(RequirementAtom.created_at.desc())
             .limit(200)
@@ -187,9 +195,21 @@ class ImpactAnalyser:
                     )
 
             if not matches and prior_atoms:
+                subj_cand = (atom_dict.get("subject") or "").lower().strip()
+                action_cand = (atom_dict.get("action") or "").lower().strip()
                 for pa in prior_atoms:
+                    pa_subj = (pa.subject or "").lower().strip()
+                    pa_act = (pa.action or "").lower().strip()
+                    pa_raw = (pa.raw_text or "").lower()
+
+                    # Match if: same subject domain OR shared tech/domain keywords OR word overlap
+                    same_subject = bool(subj_cand and pa_subj and subj_cand == pa_subj)
                     score = _kw_overlap(raw_text, pa.raw_text or "")
-                    if score >= 0.35:
+                    
+                    tech_keywords = ["database", "db", "postgres", "mysql", "mongodb", "python", "ruby", "javascript", "golang", "auth", "login", "payment"]
+                    shared_tech = any(k in raw_text.lower() and k in pa_raw for k in tech_keywords)
+
+                    if same_subject or shared_tech or score >= 0.15:
                         matches.append({
                             "id": pa.id,
                             "document": pa.raw_text,
@@ -200,7 +220,7 @@ class ImpactAnalyser:
                                 "action": pa.action or "",
                                 "constraint_text": pa.constraint_text or "",
                             },
-                            "source": "keyword_fallback",
+                            "source": "domain_fallback",
                         })
                 if matches:
                     logger.debug(

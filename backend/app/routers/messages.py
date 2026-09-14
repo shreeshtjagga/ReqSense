@@ -19,13 +19,12 @@ from app.models.requirement_atom import RequirementAtom
 from app.models.session import Session
 from app.models.user import User
 from app.schemas.message import MessageCreate, MessageRead
-from app.services.aria_agent import AriaAgent
+from app.services.aria_agent import AriaAgent, _detect_client_tone
 from app.services.embedding_service import EmbeddingService
 from app.services.rdcd_layer import RDCDLayer
 from app.services.session_memory import SessionMemory, get_redis_client
 from app.services.vector_store import VectorStore
 from app.config import get_settings
-from app.models.feature_status import FeatureStatus
 from app.services.rate_limit_service import limiter
 
 logger = logging.getLogger(__name__)
@@ -37,6 +36,31 @@ _STOPWORDS = {
     "the", "and", "for", "with", "that", "this", "from", "have", "will",
     "should", "must", "can", "are", "was", "were", "been", "being", "into",
 }
+
+# ── Quality gate: skip trivial/conversational messages ─────────────────────
+_TRIVIAL_PATTERN = re.compile(
+    r"^\s*(yes|yeah|yep|yup|no|nope|ok|okay|sure|fine|done|correct|"
+    r"got\s+it|i\s+see|noted|understood|alright|agreed|great|perfect|"
+    r"sounds?\s+good|makes?\s+sense|nice|cool|wow|awesome|thanks?|"
+    r"thank\s+you|go\s+on|i\s+understand|i\s+get\s+it|good|right|"
+    r"exactly|absolutely|certainly|of\s+course|no\s+problem|"
+    r"that'?s?\s+(it|all|right|correct)|all\s+good)\W*$",
+    re.IGNORECASE,
+)
+
+def _is_requirement_worthy(text: str) -> bool:
+    """Returns True only if message likely contains a real requirement worth storing."""
+    text = text.strip()
+    if not text or len(text) < 8:
+        return False
+    if len(text.split()) < 3:
+        return False
+    if _TRIVIAL_PATTERN.match(text):
+        return False
+    # Short questions are not requirements
+    if text.strip().endswith("?") and len(text.split()) < 8:
+        return False
+    return True
 
 def _tokenize(text: str) -> set[str]:
     return {
@@ -190,18 +214,6 @@ async def create_message(
         if len(atom_summary) > 3000:
             atom_summary = atom_summary[:3000] + "..."
 
-        feature_rows = (
-            await db.execute(
-                select(FeatureStatus.title, FeatureStatus.status)
-                .where(FeatureStatus.project_id == session.project_id)
-                .order_by(FeatureStatus.updated_at.desc())
-                .limit(30)
-            )
-        ).all()
-        feature_summary = "; ".join(
-            f"{row.title} ({row.status})" for row in feature_rows
-        ) if feature_rows else ""
-
         sanitized_content, is_flagged = RDCDLayer.sanitize_input(body.content)
 
         history = await SessionMemory.get_messages(session_id, db=db)
@@ -219,7 +231,6 @@ async def create_message(
             "description": project.description if project else "",
             "domain": project.domain if project else "",
             "atom_summary": atom_summary[:3000] if atom_summary else "",
-            "feature_summary": feature_summary[:1500] if feature_summary else "",
         }
 
         loop = asyncio.get_event_loop()
@@ -240,7 +251,7 @@ async def create_message(
 
         atoms_task = (
             loop.run_in_executor(None, RDCDLayer.extract_atoms, sanitized_content)
-            if body.sender in ("client", "user") and not is_flagged
+            if body.sender in ("client", "user") and not is_flagged and _is_requirement_worthy(sanitized_content)
             else _empty_list()
         )
 
@@ -404,18 +415,7 @@ async def create_message(
                 ra.embedding_id = str(ra.id)
                 persisted_atoms.append((atom_dict, ra))
 
-                if ra.subject and ra.action:
-                    feature_title = f"{ra.subject}: {ra.action}"[:255]
-                    db.add(FeatureStatus(
-                        project_id=session.project_id,
-                        atom_id=ra.id,
-                        title=feature_title,
-                        description=ra.raw_text,
-                        status="planned",
-                        version=1,
-                        created_by=current_user.id,
-                        updated_by=current_user.id,
-                    ))
+
 
                 for chroma_match, contradiction_result in evaluations:
                     conf = contradiction_result.get("confidence") or 0.0

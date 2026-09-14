@@ -160,8 +160,54 @@ async def review_change_request(
     cr.developer_note = body.developer_note
     cr.reviewed_at = datetime.now(timezone.utc)
     cr.version += 1
-
     db.add(cr)
+
+    from app.services.rdcd_layer import RDCDLayer
+    from app.models.requirement_atom import RequirementAtom
+
+    # Fetch any contradictions specifically linked to this change request
+    linked_c_res = await db.execute(
+        select(Contradiction).where(Contradiction.change_request_id == cr.id)
+    )
+    linked_contras = linked_c_res.scalars().all()
+
+    if body.status == "approved":
+        # 1. Resolve linked contradictions & supersede older conflicting atoms
+        for c in linked_contras:
+            c.status = "resolved"
+            c.resolution = body.developer_note or "Approved by developer via Change Request."
+            c.resolved_by = current_user.id
+            c.resolved_at = datetime.now(timezone.utc)
+            db.add(c)
+            if c.atom_1_id:
+                atom_1 = await db.get(RequirementAtom, c.atom_1_id)
+                if atom_1:
+                    atom_1.status = "superseded"
+                    db.add(atom_1)
+
+        # 2. Extract and create new active RequirementAtoms from the approved Change Request
+        extracted = RDCDLayer.extract_atoms(f"{cr.title}. {cr.description}")
+        for atom_dict in extracted:
+            ra = RequirementAtom(
+                project_id=cr.project_id,
+                session_id=None,
+                subject=atom_dict.get("subject") or "Change Request",
+                action=atom_dict.get("action") or cr.title,
+                constraint_text=atom_dict.get("constraint_text") or "",
+                raw_text=atom_dict.get("raw_text") or f"{cr.title}: {cr.description}",
+                status="active",
+            )
+            db.add(ra)
+
+    elif body.status == "rejected":
+        # Dismiss linked contradictions
+        for c in linked_contras:
+            c.status = "ignored"
+            c.resolution = body.developer_note or "Rejected by developer."
+            c.resolved_by = current_user.id
+            c.resolved_at = datetime.now(timezone.utc)
+            db.add(c)
+
     await db.commit()
     await db.refresh(cr)
     return cr

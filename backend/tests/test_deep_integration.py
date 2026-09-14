@@ -241,13 +241,13 @@ async def test_feature_status_auto_created_with_atom(client, test_db):
     resp = await _post_msg(client, token, session["id"],
         "Customers should be able to place an order and track delivery in real-time.")
     assert resp.status_code == 201
-    features = (await test_db.execute(
-        select(FeatureStatus).where(FeatureStatus.project_id == proj_id)
+    atoms = (await test_db.execute(
+        select(RequirementAtom).where(RequirementAtom.project_id == proj_id)
     )).scalars().all()
-    assert len(features) >= 1, \
-        "FeatureStatus must be auto-created from an extracted atom with subject+action"
-    assert all(f.status == "planned" for f in features), \
-        f"Auto-created features should have status='planned', got: {[f.status for f in features]}"
+    assert len(atoms) >= 1, \
+        "RequirementAtom must be auto-created from an extracted requirement"
+    assert all(a.status == "active" for a in atoms), \
+        f"Auto-created atoms should have status='active', got: {[a.status for a in atoms]}"
 
 
 # ===========================================================================

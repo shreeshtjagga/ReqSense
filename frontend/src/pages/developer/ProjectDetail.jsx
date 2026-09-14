@@ -53,19 +53,18 @@ import {
   createProjectInvite,
   lookupUserByEmail,
   updateProject,
+  requestDeleteProject,
 } from '../../api/projects';
 import { listSessionsForProject } from '../../api/sessions';
 import { resolveContradiction } from '../../api/contradictions';
 import { getProjectSummary } from '../../api/analytics';
-import { listFeaturesForProject, updateFeatureStatus, createFeatureStatus } from '../../api/featureStatus';
 import { listChangeRequests, reviewChangeRequest } from '../../api/changeRequests';
 import { getLatestSrs, listSrsVersions, generateProjectSrs, getSrsVersionDetails } from '../../api/srs';
-import { listAtomsForProject } from '../../api/requirementAtoms';
 
 import { useToastStore } from '../../store/toastStore';
 import { useProjectStore } from '../../store/projectStore';
 import { formatDateTime } from '../../utils/helpers';
-import { FEATURE_STATUS, CHANGE_REQUEST_STATUS, PROJECT_DOMAIN_LABELS } from '../../utils/constants';
+import { CHANGE_REQUEST_STATUS, PROJECT_DOMAIN_LABELS } from '../../utils/constants';
 
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ListAltIcon from '@mui/icons-material/ListAlt';
@@ -78,245 +77,9 @@ import RateReviewIcon from '@mui/icons-material/RateReview';
 import DescriptionIcon from '@mui/icons-material/Description';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import DashboardIcon from '@mui/icons-material/Dashboard';
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import axios from '../../api/axios';
-
-const ProjectFeatureTrackerTab = ({ projectId }) => {
-  const showToast = useToastStore((s) => s.showToast);
-  const [features, setFeatures] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const [createOpen, setCreateOpen] = useState(false);
-  const [createTitle, setCreateTitle] = useState('');
-  const [createDescription, setCreateDescription] = useState('');
-  const [creating, setCreating] = useState(false);
-
-  const [editOpen, setEditOpen] = useState(false);
-  const [selectedFeature, setSelectedFeature] = useState(null);
-  const [newStatus, setNewStatus] = useState('');
-  const [newDescription, setNewDescription] = useState('');
-  const [updating, setUpdating] = useState(false);
-
-  const fetchFeatures = async () => {
-    setLoading(true);
-    try {
-      const data = await listFeaturesForProject(projectId);
-      setFeatures(data);
-    } catch (err) {
-      showToast('Failed to load project features.', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (projectId) fetchFeatures();
-  }, [projectId]);
-
-  const handleEditClick = (feat) => {
-    setSelectedFeature(feat);
-    setNewStatus(feat.status);
-    setNewDescription(feat.description || '');
-    setEditOpen(true);
-  };
-
-  const handleUpdateFeature = async (e) => {
-    e.preventDefault();
-    if (!selectedFeature) return;
-    setUpdating(true);
-    try {
-      await updateFeatureStatus(selectedFeature.id, {
-        status: newStatus,
-        description: newDescription,
-        version: selectedFeature.version,
-      });
-      showToast('Feature updated successfully!', 'success');
-      setEditOpen(false);
-      fetchFeatures();
-    } catch (err) {
-      const isConflict = err.response?.status === 409 || err.response?.data?.code === 'STALE_VERSION';
-      if (isConflict) {
-        showToast('Someone else updated this feature. Refreshing data...', 'error');
-        setEditOpen(false);
-        fetchFeatures();
-      } else {
-        showToast(err.response?.data?.detail || 'Failed to update feature.', 'error');
-      }
-    } finally {
-      setUpdating(false);
-    }
-  };
-
-  const handleCreateFeature = async (e) => {
-    e.preventDefault();
-    if (!createTitle.trim()) return;
-    setCreating(true);
-    try {
-      await createFeatureStatus({
-        project_id: projectId,
-        title: createTitle.trim(),
-        description: createDescription.trim(),
-      });
-      showToast('New feature added successfully!', 'success');
-      setCreateOpen(false);
-      setCreateTitle('');
-      setCreateDescription('');
-      fetchFeatures();
-    } catch (err) {
-      showToast(err.response?.data?.detail || 'Failed to create feature.', 'error');
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const planned = features.filter((f) => f.status === FEATURE_STATUS.PLANNED);
-  const inProgress = features.filter((f) => f.status === FEATURE_STATUS.IN_PROGRESS);
-  const completed = features.filter((f) => f.status === FEATURE_STATUS.COMPLETED);
-
-  const renderColumn = (title, colFeatures) => (
-    <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, height: '100%', bgcolor: 'background.paper', minHeight: 360 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>
-          {title}
-        </Typography>
-        <Badge label={colFeatures.length} type="info" />
-      </Box>
-      <Divider sx={{ mb: 2 }} />
-      <Stack spacing={2}>
-        {colFeatures.map((feat) => (
-          <Card key={feat.id} variant="outlined" sx={{ borderRadius: 2, position: 'relative' }}>
-            <CardContent sx={{ pr: 6, pb: 1.5 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
-                {feat.title}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {feat.description || 'No description provided.'}
-              </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
-                Version: v{feat.version}
-              </Typography>
-            </CardContent>
-            <CardActions sx={{ position: 'absolute', right: 8, top: 8 }}>
-              <IconButton onClick={() => handleEditClick(feat)} size="small" color="primary">
-                <EditIcon fontSize="small" />
-              </IconButton>
-            </CardActions>
-          </Card>
-        ))}
-        {colFeatures.length === 0 && (
-          <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 4, fontStyle: 'italic' }}>
-            Empty column
-          </Typography>
-        )}
-      </Stack>
-    </Paper>
-  );
-
-  if (loading) return <Skeleton variant="rectangular" height={280} sx={{ borderRadius: 3 }} />;
-
-  return (
-    <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>
-          Functional Features Kanban
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
-          Add Feature
-        </Button>
-      </Stack>
-
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={4}>
-          {renderColumn('Planned', planned)}
-        </Grid>
-        <Grid item xs={12} md={4}>
-          {renderColumn('In Progress', inProgress)}
-        </Grid>
-        <Grid item xs={12} md={4}>
-          {renderColumn('Completed', completed)}
-        </Grid>
-      </Grid>
-
-      {/* Create Dialog */}
-      <Dialog open={createOpen} onClose={() => !creating && setCreateOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700 }}>Add New Feature</DialogTitle>
-        <Box component="form" onSubmit={handleCreateFeature}>
-          <DialogContent dividers>
-            <Stack spacing={3}>
-              <TextField
-                label="Feature Title"
-                value={createTitle}
-                onChange={(e) => setCreateTitle(e.target.value)}
-                required
-                fullWidth
-                placeholder="e.g. User Authentication & SSO"
-              />
-              <TextField
-                label="Description"
-                value={createDescription}
-                onChange={(e) => setCreateDescription(e.target.value)}
-                multiline
-                rows={3}
-                fullWidth
-                placeholder="Detailed description of functional requirements..."
-              />
-            </Stack>
-          </DialogContent>
-          <DialogActions sx={{ p: 2 }}>
-            <Button disabled={creating} onClick={() => setCreateOpen(false)} color="inherit">
-              Cancel
-            </Button>
-            <Button type="submit" variant="contained" color="primary" loading={creating}>
-              Create Feature
-            </Button>
-          </DialogActions>
-        </Box>
-      </Dialog>
-
-      {/* Edit Dialog */}
-      <Dialog open={editOpen} onClose={() => !updating && setEditOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700 }}>Edit Feature Status</DialogTitle>
-        <Box component="form" onSubmit={handleUpdateFeature}>
-          <DialogContent dividers>
-            <Stack spacing={3}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                {selectedFeature?.title}
-              </Typography>
-              <FormControl fullWidth>
-                <InputLabel id="status-label">Status</InputLabel>
-                <Select
-                  labelId="status-label"
-                  value={newStatus}
-                  label="Status"
-                  onChange={(e) => setNewStatus(e.target.value)}
-                >
-                  <MenuItem value={FEATURE_STATUS.PLANNED}>Planned</MenuItem>
-                  <MenuItem value={FEATURE_STATUS.IN_PROGRESS}>In Progress</MenuItem>
-                  <MenuItem value={FEATURE_STATUS.COMPLETED}>Completed</MenuItem>
-                </Select>
-              </FormControl>
-              <TextField
-                label="Description"
-                value={newDescription}
-                onChange={(e) => setNewDescription(e.target.value)}
-                multiline
-                rows={3}
-                fullWidth
-              />
-            </Stack>
-          </DialogContent>
-          <DialogActions sx={{ p: 2 }}>
-            <Button disabled={updating} onClick={() => setEditOpen(false)} color="inherit">
-              Cancel
-            </Button>
-            <Button type="submit" variant="contained" color="primary" loading={updating}>
-              Save Changes
-            </Button>
-          </DialogActions>
-        </Box>
-      </Dialog>
-    </Box>
-  );
-};
 
 const ProjectChangeRequestsTab = ({ projectId }) => {
   const showToast = useToastStore((s) => s.showToast);
@@ -689,7 +452,8 @@ const ProjectSRSTab = ({ projectId, project }) => {
   );
 };
 
-const ProjectDashboardTab = ({ project, sessions, contradictions, atoms, engagement }) => {
+const ProjectDashboardTab = ({ project, sessions, contradictions, engagement }) => {
+  const pendingContradictions = (contradictions || []).filter((c) => c.status === 'pending');
   return (
     <Box>
       <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
@@ -715,9 +479,9 @@ const ProjectDashboardTab = ({ project, sessions, contradictions, atoms, engagem
         </Grid>
         <Grid item xs={12} sm={4}>
           <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
-            <Typography variant="caption" color="text.secondary">Extracted Requirements</Typography>
-            <Typography variant="h6" sx={{ fontWeight: 700, mt: 0.5 }}>
-              {atoms.length} Atoms
+            <Typography variant="caption" color="text.secondary">Active Conflicts / Contradictions</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700, mt: 0.5, color: pendingContradictions.length > 0 ? 'warning.main' : 'success.main' }}>
+              {pendingContradictions.length} Pending {pendingContradictions.length > 0 ? '⚠' : '✓'}
             </Typography>
           </Paper>
         </Grid>
@@ -767,7 +531,6 @@ export const ProjectDetail = () => {
   const [project, setProject] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [contradictions, setContradictions] = useState([]);
-  const [atoms, setAtoms] = useState([]);
   const [engagement, setEngagement] = useState(null);
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -796,6 +559,21 @@ export const ProjectDetail = () => {
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteStep, setInviteStep] = useState('lookup');
 
+  const [requestingDeletion, setRequestingDeletion] = useState(false);
+
+  const handleRequestDeletion = async () => {
+    setRequestingDeletion(true);
+    try {
+      const updated = await requestDeleteProject(projectId);
+      setProject(updated);
+      showToast('Deletion request submitted. The client must confirm to proceed.', 'info');
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Failed to submit deletion request.', 'error');
+    } finally {
+      setRequestingDeletion(false);
+    }
+  };
+
   const fetchProjectDetails = async () => {
     try {
       setLoading(true);
@@ -818,9 +596,6 @@ export const ProjectDetail = () => {
 
       const contradictionsRes = await axios.get(`/contradictions/project/${projectId}`).catch(() => ({ data: [] }));
       setContradictions(contradictionsRes.data || []);
-
-      const atomsList = await listAtomsForProject(projectId).catch(() => []);
-      setAtoms(atomsList || []);
     } catch (err) {
       showToast('Error loading project details.', 'error');
     } finally {
@@ -941,11 +716,11 @@ export const ProjectDetail = () => {
     );
   }
 
+  const pendingContradictionsCount = contradictions.filter((c) => c.status === 'pending').length;
   const menuItems = [
     { text: 'Dashboard', icon: <DashboardIcon /> },
     { text: 'Chat Sessions', icon: <ChatIcon />, badge: sessions.length },
-    { text: 'Contradictions', icon: <WarningIcon />, badge: contradictions.length },
-    { text: 'Feature Board', icon: <CheckCircleOutlineIcon /> },
+    { text: 'Contradictions', icon: <WarningIcon />, badge: pendingContradictionsCount },
     { text: 'Change Requests', icon: <RateReviewIcon /> },
     { text: 'SRS Document', icon: <DescriptionIcon /> },
   ];
@@ -1005,24 +780,54 @@ export const ProjectDetail = () => {
             >
               Invite Client
             </Button>
+            <Tooltip
+              title={project?.deletion_requested_by
+                ? 'A deletion request is already pending'
+                : 'Request that this project be permanently deleted (both parties must confirm)'}
+              arrow
+            >
+              <span>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  startIcon={requestingDeletion ? null : <DeleteForeverIcon />}
+                  size="medium"
+                  loading={requestingDeletion}
+                  disabled={requestingDeletion || Boolean(project?.deletion_requested_by)}
+                  onClick={handleRequestDeletion}
+                  sx={{ borderColor: 'error.light', '&:hover': { bgcolor: '#FEF2F2' } }}
+                >
+                  {project?.deletion_requested_by ? 'Deletion Pending…' : 'Request Deletion'}
+                </Button>
+              </span>
+            </Tooltip>
           </Stack>
         </Box>
 
         <Divider sx={{ my: 2 }} />
 
-        {/* Sensitivity & Clients Quick Bar */}
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
-            <Box sx={{ minWidth: 240 }}>
-              <Tooltip
-                title="Controls how similar two requirements must be before ARIA checks for contradiction."
-                placement="top"
-                arrow
-              >
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.5, cursor: 'help' }}>
-                  Contradiction Sensitivity: <strong>{(chromaThreshold * 100).toFixed(0)}%</strong>
+        {/* Contradiction Detection Sensitivity + Clients Quick Bar */}
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 3, flexWrap: 'wrap' }}>
+
+            {/* Sensitivity Labeled Card */}
+            <Paper
+              variant="outlined"
+              sx={{ p: 2, borderRadius: 2, minWidth: 280, maxWidth: 360, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0' }}
+            >
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                <InfoOutlinedIcon sx={{ fontSize: 16, color: 'primary.main' }} />
+                <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.primary' }}>
+                  Contradiction Detection Sensitivity
                 </Typography>
-              </Tooltip>
+                <Typography variant="caption" sx={{ ml: 'auto', fontWeight: 700, color: 'primary.main' }}>
+                  {(chromaThreshold * 100).toFixed(0)}%
+                </Typography>
+              </Stack>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5, lineHeight: 1.5 }}>
+                Controls how similar two requirements must be before ARIA flags them as contradictions.
+                Lower % = more sensitive (more flags). Higher % = only very close conflicts flagged.
+              </Typography>
               <Slider
                 value={chromaThreshold}
                 onChange={(_, val) => setChromaThreshold(val)}
@@ -1035,8 +840,13 @@ export const ProjectDetail = () => {
                 disabled={savingThreshold}
                 color="primary"
                 size="small"
+                marks={[
+                  { value: 0.1, label: 'High' },
+                  { value: 0.5, label: 'Medium' },
+                  { value: 0.9, label: 'Low' },
+                ]}
               />
-            </Box>
+            </Paper>
 
             <Box sx={{ borderLeft: '1px solid #E2E8F0', pl: 3, display: { xs: 'none', sm: 'block' } }}>
               <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
@@ -1110,7 +920,6 @@ export const ProjectDetail = () => {
             project={project}
             sessions={sessions}
             contradictions={contradictions}
-            atoms={atoms}
             engagement={engagement}
           />
         )}
@@ -1242,9 +1051,8 @@ export const ProjectDetail = () => {
           </Box>
         )}
 
-        {tabValue === 3 && <ProjectFeatureTrackerTab projectId={projectId} />}
-        {tabValue === 4 && <ProjectChangeRequestsTab projectId={projectId} />}
-        {tabValue === 5 && <ProjectSRSTab projectId={projectId} project={project} />}
+        {tabValue === 3 && <ProjectChangeRequestsTab projectId={projectId} />}
+        {tabValue === 4 && <ProjectSRSTab projectId={projectId} project={project} />}
 
       </Paper>
 

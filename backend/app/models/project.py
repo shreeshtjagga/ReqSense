@@ -60,6 +60,12 @@ class Project(Base):
     closure_requested_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    deletion_requested_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    deletion_requested_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     chroma_similarity_threshold: Mapped[float] = mapped_column(
         Float, default=0.55, nullable=False
     )
@@ -76,6 +82,9 @@ class Project(Base):
     )
     closure_requested_user: Mapped[Optional["User"]] = relationship(
         foreign_keys=[closure_requested_by]
+    )
+    deletion_requested_user: Mapped[Optional["User"]] = relationship(
+        foreign_keys=[deletion_requested_by]
     )
     sessions: Mapped[List["Session"]] = relationship(
         back_populates="project", cascade="all, delete-orphan"

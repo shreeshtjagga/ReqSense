@@ -21,9 +21,13 @@ def get_model():
 
 @lru_cache(maxsize=1024)
 def _cached_encode(text: str) -> List[float]:
-    model = get_model()
-    embedding = model.encode(text)
-    return embedding.tolist()
+    try:
+        model = get_model()
+        embedding = model.encode(text)
+        return embedding.tolist()
+    except Exception as e:
+        logger.warning(f"SentenceTransformer encode failed ({e}), using fallback zero-vector.")
+        return [0.0] * 384
 
 
 class EmbeddingService:

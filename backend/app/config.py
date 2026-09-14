@@ -33,7 +33,8 @@ class Settings(BaseSettings):
     STREAM_TOKEN_EXPIRE_SECONDS: int = Field(default=60)
 
     GROQ_API_KEY: str = Field(default="", description="Groq API key")
-    GROQ_MODEL: str = Field(default="llama-3.3-70b-versatile")
+    GROQ_MODEL: str = Field(default="groq/compound")
+    GROQ_FAST_MODEL: str = Field(default="groq/compound-mini", description="Fast model for structured JSON extraction & contradiction detection")
     GROQ_TIMEOUT_SECONDS: int = Field(default=30)
 
     SENDGRID_API_KEY: str = Field(default="mock-sendgrid-key", description="SendGrid API key; mock-* disables sending")

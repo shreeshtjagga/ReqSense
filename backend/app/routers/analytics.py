@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -66,7 +67,7 @@ async def analytics_overview(
     summary="Aggregated engagement + health summary for a project",
 )
 async def project_summary(
-    project_id: str,
+    project_id: uuid.UUID,
     current_user: User = Depends(require_roles("admin", "developer")),
     db: AsyncSession = Depends(get_db),
 ):

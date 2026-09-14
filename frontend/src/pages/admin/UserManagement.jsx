@@ -22,12 +22,12 @@ import {
   Stack,
   IconButton,
   Tooltip,
+  TextField,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import Layout from '../../components/layout/Layout';
 import Button from '../../components/common/Button';
-import Input from '../../components/common/Input';
 import EmptyState from '../../components/common/EmptyState';
 import Badge from '../../components/common/Badge';
 import { getCurrentUser } from '../../api/auth';
@@ -58,11 +58,10 @@ export const UserManagement = () => {
       setLoading(true);
       const adminProfile = await getCurrentUser();
       setCurrentAdmin(adminProfile);
-
-      const response = await axios.get('/users');
-      setUsers(response.data || []);
+      const res = await axios.get('/admin/users');
+      setUsers(res.data?.data || []);
     } catch (err) {
-      showToast('Error loading user accounts.', 'error');
+      showToast('Error loading user list.', 'error');
     } finally {
       setLoading(false);
     }
@@ -70,26 +69,19 @@ export const UserManagement = () => {
 
   useEffect(() => {
     fetchUsers();
-  }, [showToast]);
+  }, []);
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
-    if (!name.trim() || !email.trim() || !password.trim()) {
-      showToast('All fields are required.', 'error');
-      return;
-    }
-
-    setSubmitting(true);
     try {
-      await axios.post('/users', {
+      setSubmitting(true);
+      await axios.post('/admin/users', {
         name,
         email,
         password,
         role,
-        organization_id: currentAdmin?.organization_id,
       });
-
-      showToast('User created successfully!', 'success');
+      showToast('User created successfully.', 'success');
       setCreateOpen(false);
       setName('');
       setEmail('');
@@ -97,7 +89,7 @@ export const UserManagement = () => {
       setRole('client');
       fetchUsers();
     } catch (err) {
-      showToast(err.response?.data?.detail || 'Failed to create user account.', 'error');
+      showToast(err.response?.data?.message || 'Failed to create user.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -105,14 +97,14 @@ export const UserManagement = () => {
 
   const handleDeleteUser = async () => {
     if (!selectedUserForDelete) return;
-    setDeleting(true);
     try {
+      setDeleting(true);
       await deleteUser(selectedUserForDelete.id);
-      showToast(`User "${selectedUserForDelete.name}" deleted successfully.`, 'success');
+      showToast('User removed successfully.', 'success');
       setSelectedUserForDelete(null);
       fetchUsers();
     } catch (err) {
-      showToast(err.response?.data?.detail || 'Failed to delete user account.', 'error');
+      showToast(err.response?.data?.message || 'Failed to delete user.', 'error');
     } finally {
       setDeleting(false);
     }
@@ -120,75 +112,81 @@ export const UserManagement = () => {
 
   return (
     <Layout>
-      <Box sx={{ mb: 4, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
         <Box>
-          <Typography variant="h3" sx={{ fontWeight: 800, mb: 1 }}>
+          <Typography variant="h4" sx={{ fontWeight: 800, color: 'text.primary', mb: 0.5 }}>
             User Management
           </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Provision and manage user accounts for developers and clients inside your organization.
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            Provision and manage client and developer credentials.
           </Typography>
         </Box>
-        <Button variant="contained" color="secondary" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
+        <Button variant="primary" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
           Add User
         </Button>
-      </Box>
+      </Stack>
 
-      {loading ? (
-        <Skeleton variant="rectangular" height={300} sx={{ borderRadius: 3 }} />
-      ) : users.length === 0 ? (
-        <EmptyState
-          title="No Users Added"
-          description="There are no other user accounts in your organization. Click the 'Add User' button to create one."
-          actionLabel="Add User"
-          onAction={() => setCreateOpen(true)}
-        />
-      ) : (
-        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
-          <Table aria-label="users-table">
-            <TableHead sx={{ bgcolor: 'action.hover' }}>
+      <TableContainer component={Paper} sx={{ borderRadius: 3, border: '1px solid #E2E8F0', boxShadow: 'none' }}>
+        <Table>
+          <TableHead sx={{ bgcolor: '#F8FAFC' }}>
+            <TableRow>
+              <TableCell sx={{ fontWeight: 700, color: '#475569' }}>Name</TableCell>
+              <TableCell sx={{ fontWeight: 700, color: '#475569' }}>Email</TableCell>
+              <TableCell sx={{ fontWeight: 700, color: '#475569' }}>Role</TableCell>
+              <TableCell sx={{ fontWeight: 700, color: '#475569' }}>Created At</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700, color: '#475569' }}>Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loading ? (
+              Array.from({ length: 4 }).map((_, idx) => (
+                <TableRow key={idx}>
+                  <TableCell><Skeleton variant="text" /></TableCell>
+                  <TableCell><Skeleton variant="text" /></TableCell>
+                  <TableCell><Skeleton variant="rectangular" width={60} height={24} sx={{ borderRadius: 2 }} /></TableCell>
+                  <TableCell><Skeleton variant="text" /></TableCell>
+                  <TableCell align="right"><Skeleton variant="circular" width={32} height={32} sx={{ ml: 'auto' }} /></TableCell>
+                </TableRow>
+              ))
+            ) : users.length === 0 ? (
               <TableRow>
-                <TableCell><strong>Name</strong></TableCell>
-                <TableCell><strong>Email</strong></TableCell>
-                <TableCell><strong>Role</strong></TableCell>
-                <TableCell><strong>Status</strong></TableCell>
-                <TableCell align="right"><strong>User ID</strong></TableCell>
-                <TableCell align="center"><strong>Actions</strong></TableCell>
+                <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+                  <EmptyState title="No users found" description="Create a new user account to get started." />
+                </TableCell>
               </TableRow>
-            </TableHead>
-            <TableBody>
-              {users.map((u) => {
-                const isSelf = u.id === currentAdmin?.id;
-                return (
-                  <TableRow key={u.id}>
-                    <TableCell sx={{ fontWeight: 600 }}>{u.name}</TableCell>
-                    <TableCell>{u.email}</TableCell>
-                    <TableCell>{getRoleLabel(u.role)}</TableCell>
-                    <TableCell>
-                      <Badge label={u.is_active ? 'Active' : 'Suspended'} type={u.is_active ? 'feature' : 'change-request'} />
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{u.id}</TableCell>
-                    <TableCell align="center">
-                      <Tooltip title={isSelf ? 'Cannot delete your own account' : 'Delete user account'}>
-                        <span>
-                          <IconButton
-                            size="small"
-                            color="error"
-                            disabled={isSelf}
-                            onClick={() => setSelectedUserForDelete(u)}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </span>
+            ) : (
+              users.map((u) => (
+                <TableRow key={u.id} hover>
+                  <TableCell sx={{ fontWeight: 600 }}>{u.name}</TableCell>
+                  <TableCell sx={{ color: 'text.secondary' }}>{u.email}</TableCell>
+                  <TableCell>
+                    <Badge
+                      label={getRoleLabel(u.role)}
+                      variant={u.role === 'admin' ? 'purple' : u.role === 'developer' ? 'blue' : 'gray'}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>
+                    {new Date(u.created_at).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell align="right">
+                    {currentAdmin?.id !== u.id && (
+                      <Tooltip title="Delete User">
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => setSelectedUserForDelete(u)}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
                       </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
 
       {/* Create User Dialog */}
       <Dialog open={createOpen} onClose={() => !submitting && setCreateOpen(false)} maxWidth="sm" fullWidth>
@@ -196,9 +194,10 @@ export const UserManagement = () => {
         <Box component="form" onSubmit={handleCreateUser}>
           <DialogContent dividers>
             <Stack spacing={3}>
-              <Input label="Full Name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
-              <Input label="Email Address" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-              <Input
+              <TextField fullWidth label="Full Name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
+              <TextField fullWidth label="Email Address" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <TextField
+                fullWidth
                 label="Temporary Password"
                 type="password"
                 value={password}

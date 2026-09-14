@@ -254,6 +254,72 @@ async def cancel_close_project(
     await db.refresh(project)
     return project
 
+# ── Project Deletion Request Flow ────────────────────────────────────────────
+# Mirrors the closure flow: either party can request, the other must confirm.
+# On confirm the project is permanently deleted.
+
+@router.post("/{project_id}/request-delete", response_model=ProjectRead)
+async def request_delete_project(
+    project: Project = Depends(get_scoped_project),
+    current_user: User = Depends(require_roles("admin", "developer", "client")),
+    db: AsyncSession = Depends(get_db),
+):
+    if project.deletion_requested_by:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A deletion request is already pending for this project.",
+        )
+    project.deletion_requested_by = current_user.id
+    project.deletion_requested_at = datetime.now(timezone.utc)
+    db.add(AuditLog(
+        user_id=current_user.id,
+        action="request_delete_project",
+        entity_type="project",
+        entity_id=project.id,
+        metadata_={"name": project.name},
+    ))
+    await db.commit()
+    await db.refresh(project)
+    return project
+
+@router.post("/{project_id}/approve-delete", status_code=status.HTTP_204_NO_CONTENT)
+async def approve_delete_project(
+    project: Project = Depends(get_scoped_project),
+    current_user: User = Depends(require_roles("admin", "developer", "client")),
+    db: AsyncSession = Depends(get_db),
+):
+    if not project.deletion_requested_by:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No pending deletion request for this project.",
+        )
+    if project.deletion_requested_by == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The other party must confirm deletion — you already requested it.",
+        )
+    db.add(AuditLog(
+        user_id=current_user.id,
+        action="approve_delete_project",
+        entity_type="project",
+        entity_id=project.id,
+        metadata_={"name": project.name},
+    ))
+    await db.delete(project)
+    await db.commit()
+
+@router.post("/{project_id}/cancel-delete", response_model=ProjectRead)
+async def cancel_delete_project(
+    project: Project = Depends(get_scoped_project),
+    current_user: User = Depends(require_roles("admin", "developer", "client")),
+    db: AsyncSession = Depends(get_db),
+):
+    project.deletion_requested_by = None
+    project.deletion_requested_at = None
+    await db.commit()
+    await db.refresh(project)
+    return project
+
 @router.get("/{project_id}/clients", response_model=List[UserResponse])
 async def list_project_clients(
     project: Project = Depends(get_scoped_project),

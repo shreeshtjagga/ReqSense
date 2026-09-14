@@ -1,70 +1,49 @@
 import React from 'react';
-import {
-  Typography,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  Paper,
-  Box,
-  Divider,
-} from '@mui/material';
-import ChatIcon from '@mui/icons-material/Chat';
-import WarningIcon from '@mui/icons-material/Warning';
-import AssignmentIcon from '@mui/icons-material/Assignment';
-import TaskAltIcon from '@mui/icons-material/TaskAlt';
+import { Paper, Typography, Box, List, ListItem, ListItemText, ListItemIcon, Divider } from '@mui/material';
+import HistoryIcon from '@mui/icons-material/History';
 import { formatDateTime } from '../../utils/helpers';
 
 export const RecentActivity = ({ activities = [] }) => {
-  const getActivityIcon = (type) => {
-    switch (type?.toLowerCase()) {
-      case 'session_start':
-      case 'session_end':
-        return <ChatIcon color="info" />;
-      case 'contradiction_detected':
-        return <WarningIcon color="warning" />;
-      case 'srs_generated':
-        return <AssignmentIcon color="success" />;
-      case 'contradiction_resolved':
-        return <TaskAltIcon color="success" />;
-      default:
-        return <AssignmentIcon color="action" />;
-    }
-  };
-
   return (
-    <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
+    <Paper
+      elevation={0}
+      sx={{
+        p: 3,
+        borderRadius: 3,
+        border: '1px solid #E2E8F0',
+        background: '#FFFFFF',
+        height: '100%',
+      }}
+    >
       <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-        Recent Activity Log
+        Recent Audit Activity
       </Typography>
-      
       {activities.length === 0 ? (
-        <Box sx={{ py: 4, textAlign: 'center' }}>
-          <Typography variant="body2" color="text.secondary">
-            No recent activity recorded.
-          </Typography>
-        </Box>
+        <Typography variant="body2" color="text.secondary" sx={{ py: 3, textAlign: 'center', fontStyle: 'italic' }}>
+          No recent activity logs found.
+        </Typography>
       ) : (
         <List disablePadding>
-          {activities.map((act, index) => (
+          {activities.slice(0, 6).map((act, index) => (
             <React.Fragment key={act.id || index}>
-              <ListItem sx={{ py: 1.5, px: 0 }}>
-                <ListItemIcon sx={{ minWidth: 40 }}>
-                  {getActivityIcon(act.type)}
+              <ListItem disableGutters sx={{ py: 1.5 }}>
+                <ListItemIcon sx={{ minWidth: 36, color: 'primary.main' }}>
+                  <HistoryIcon fontSize="small" />
                 </ListItemIcon>
                 <ListItemText
-                  primary={act.description}
-                  secondary={formatDateTime(act.timestamp)}
-                  primaryTypographyProps={{
-                    fontSize: '0.9rem',
-                    fontWeight: 500,
-                  }}
-                  secondaryTypographyProps={{
-                    fontSize: '0.75rem',
-                  }}
+                  primary={
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {act.description || act.type}
+                    </Typography>
+                  }
+                  secondary={
+                    <Typography variant="caption" color="text.secondary">
+                      {act.timestamp ? formatDateTime(act.timestamp) : 'Recent'}
+                    </Typography>
+                  }
                 />
               </ListItem>
-              {index < activities.length - 1 && <Divider />}
+              {index < Math.min(activities.length, 6) - 1 && <Divider />}
             </React.Fragment>
           ))}
         </List>
