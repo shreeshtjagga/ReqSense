@@ -107,3 +107,7 @@ backend/Dockerfile
 ARCHITECTURE.md
 README.md
 
+# ── AI Agent Configs ─────────────────────────────────────────────────────────
+.agents/
+
+
