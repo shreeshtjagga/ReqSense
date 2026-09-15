@@ -21,3 +21,8 @@ export const reviewChangeRequest = async (id, reviewData) => {
   const response = await api.patch(`/change-requests/${id}`, reviewData);
   return response.data;
 };
+
+export const deleteChangeRequest = async (id) => {
+  const response = await api.delete(`/change-requests/${id}`);
+  return response.data;
+};
