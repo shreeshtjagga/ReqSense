@@ -34,6 +34,13 @@ import {
   Badge,
   Button as MuiButton,
   Tooltip,
+  Backdrop,
+  CircularProgress,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
@@ -41,11 +48,11 @@ import Button from '../../components/common/Button';
 import EmptyState from '../../components/common/EmptyState';
 import { getProject, requestDeleteProject } from '../../api/projects';
 import { listSessionsForProject, createSession } from '../../api/sessions';
-import { createChangeRequest, listChangeRequests } from '../../api/changeRequests';
+import { createChangeRequest, listChangeRequests, deleteChangeRequest } from '../../api/changeRequests';
 import { listContradictionsForProject } from '../../api/contradictions';
 import { useToastStore } from '../../store/toastStore';
 import { useProjectStore } from '../../store/projectStore';
-import { formatDateTime } from '../../utils/helpers';
+import { formatDateTime, formatChatTime } from '../../utils/helpers';
 import { SEVERITIES, PROJECT_DOMAIN_LABELS } from '../../utils/constants';
 import ClosureBanner from '../../components/common/ClosureBanner';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -54,7 +61,7 @@ import AddIcon from '@mui/icons-material/Add';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import RateReviewIcon from '@mui/icons-material/RateReview';
-import SmartToyIcon from '@mui/icons-material/SmartToy';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
@@ -63,9 +70,7 @@ import CommentIcon from '@mui/icons-material/Comment';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
-import DescriptionIcon from '@mui/icons-material/Description';
-import { SRSViewer } from '../../components/srs/SRSViewer';
-import { getLatestSrs } from '../../api/srs';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 
 const ProjectOverviewTab = ({ project, sessions, contradictions, onViewContradictions }) => {
   const pendingCount = contradictions.filter((c) => c.status === 'pending').length;
@@ -190,6 +195,19 @@ const ChatSessionsTab = ({ projectId, project, sessions, loadingSessions, onRefr
 
   const activeSession = sessions.find((s) => s.status === 'active');
 
+  const sessionOrderMap = React.useMemo(() => {
+    const sorted = [...sessions].sort((a, b) => {
+      const timeA = new Date(a.started_at || a.created_at || 0).getTime();
+      const timeB = new Date(b.started_at || b.created_at || 0).getTime();
+      return timeA - timeB;
+    });
+    const map = {};
+    sorted.forEach((sess, i) => {
+      map[sess.id] = i + 1;
+    });
+    return map;
+  }, [sessions]);
+
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
@@ -204,7 +222,7 @@ const ChatSessionsTab = ({ projectId, project, sessions, loadingSessions, onRefr
         <Button
           variant="contained"
           color="primary"
-          startIcon={<SmartToyIcon />}
+          startIcon={<AutoAwesomeIcon />}
           onClick={handleStartSession}
           loading={starting}
         >
@@ -226,7 +244,7 @@ const ChatSessionsTab = ({ projectId, project, sessions, loadingSessions, onRefr
         >
           <Stack direction="row" justifyContent="space-between" alignItems="center">
             <Stack direction="row" spacing={2} alignItems="center">
-              <SmartToyIcon color="primary" sx={{ fontSize: 36 }} />
+              <AutoAwesomeIcon color="primary" sx={{ fontSize: 32 }} />
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#0369A1' }}>
                   Active Gathering Session in Progress
@@ -252,7 +270,7 @@ const ChatSessionsTab = ({ projectId, project, sessions, loadingSessions, onRefr
 
       {sessions.length === 0 ? (
         <EmptyState
-          icon={<SmartToyIcon sx={{ fontSize: 48 }} />}
+          icon={<AutoAwesomeIcon sx={{ fontSize: 48, color: 'primary.main' }} />}
           title="No Sessions Yet"
           description={`You haven't started any requirement gathering sessions for ${project?.name || 'this project'} yet.`}
           actionLabel="Start First Session"
@@ -278,10 +296,11 @@ const ChatSessionsTab = ({ projectId, project, sessions, loadingSessions, onRefr
             <TableBody>
               {sessions.map((sess, idx) => {
                 const isActive = sess.status === 'active';
+                const sessionNum = sessionOrderMap[sess.id] || (sessions.length - idx);
                 return (
                   <TableRow key={sess.id} hover>
                     <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }}>
-                      #{idx + 1}
+                      #{sessionNum}
                     </TableCell>
                     <TableCell>
                       <Chip
@@ -328,7 +347,88 @@ const ChatSessionsTab = ({ projectId, project, sessions, loadingSessions, onRefr
   );
 };
 
-const ChangeRequestTab = ({ projectId, project, onCancel }) => {
+
+const ImpactReportDisplay = ({ report }) => {
+  if (!report) return null;
+
+  const CONFLICT_MARKER = '⚠ Detected Requirement Conflicts:';
+  const hasConflicts = report.includes(CONFLICT_MARKER);
+
+  const summaryRaw = hasConflicts
+    ? report.split(CONFLICT_MARKER)[0].replace('Architectural Impact Assessment:', '').replace('Reviewing requirement dependencies and consistency.', '').trim()
+    : report.replace('Architectural Impact Assessment:', '').replace('Reviewing requirement dependencies and consistency.', '').trim();
+
+  const conflictsRaw = hasConflicts
+    ? report.split(CONFLICT_MARKER)[1]?.trim() || ''
+    : '';
+
+  const conflictItems = [];
+  if (conflictsRaw) {
+    const bullets = conflictsRaw.split(/\n\s*•\s+/).filter(Boolean);
+    for (const bullet of bullets) {
+      const withMatch = bullet.match(/Conflicts with:\s*"([^"]+)"/);
+      const typeMatch = bullet.match(/\[([^\-]+)\s*-\s*(\d+)%\s*Confidence\]/);
+      const noteMatch = bullet.match(/ARIA Note:\s*(.+)/s);
+      conflictItems.push({
+        existingReq: withMatch?.[1]?.trim() || bullet.substring(0, 80),
+        conflictType: typeMatch?.[1]?.trim() || 'Conflict',
+        confidence: typeMatch?.[2] ? parseInt(typeMatch[2]) : null,
+        ariaNote: noteMatch?.[1]?.trim() || '',
+      });
+    }
+  }
+
+  const noConflictMsg = !hasConflicts && report.includes('None detected');
+
+  return (
+    <Box>
+      {summaryRaw && !noConflictMsg && (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: conflictItems.length > 0 ? 1.5 : 0, lineHeight: 1.7, fontSize: '0.85rem' }}>
+          {summaryRaw}
+        </Typography>
+      )}
+
+      {noConflictMsg && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'success.main' }}>
+          <CheckCircleIcon fontSize="small" />
+          <Typography variant="body2" sx={{ fontWeight: 600, color: 'success.dark', fontSize: '0.85rem' }}>
+            No conflicts with existing requirements detected.
+          </Typography>
+        </Box>
+      )}
+
+      {conflictItems.length > 0 && (
+        <Stack spacing={1.5}>
+          {conflictItems.map((item, i) => (
+            <Paper key={i} elevation={0} sx={{ p: 1.5, bgcolor: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 2 }}>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.75 }}>
+                <Chip label={item.conflictType} size="small" sx={{ bgcolor: '#FDE68A', color: '#92400E', fontWeight: 700, fontSize: '0.72rem' }} />
+                {item.confidence !== null && (
+                  <Typography variant="caption" sx={{ color: '#92400E', fontWeight: 600 }}>
+                    {item.confidence}% confidence
+                  </Typography>
+                )}
+              </Stack>
+              <Typography variant="caption" sx={{ display: 'block', color: '#78350F', fontWeight: 600, mb: 0.5 }}>
+                Conflicts with existing requirement:
+              </Typography>
+              <Typography variant="caption" sx={{ display: 'block', color: '#92400E', mb: 0.75, fontStyle: 'italic' }}>
+                "{item.existingReq}"
+              </Typography>
+              {item.ariaNote && (
+                <Typography variant="caption" sx={{ display: 'block', color: '#78350F', lineHeight: 1.5 }}>
+                  {item.ariaNote}
+                </Typography>
+              )}
+            </Paper>
+          ))}
+        </Stack>
+      )}
+    </Box>
+  );
+};
+
+const ChangeRequestTab = ({ projectId, project, onCancel, onContradictionsChanged }) => {
   const showToast = useToastStore((s) => s.showToast);
 
   const [requests, setRequests] = useState([]);
@@ -337,9 +437,11 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [severity, setSeverity] = useState('medium');
-  const [features, setFeatures] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedCrToDelete, setSelectedCrToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchRequests = async (isInitial = false) => {
     if (isInitial) setLoading(true);
@@ -369,32 +471,27 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!title || !description) {
-      showToast('Please fill in the title and description.', 'error');
+    if (!title.trim() || !description.trim()) {
+      showToast('Please fill in both the request title and description.', 'error');
       return;
     }
     setSubmitting(true);
     try {
-      const affectedFeatures = features
-        .split(',')
-        .map((f) => f.trim())
-        .filter((f) => f.length > 0);
-
       await createChangeRequest({
         project_id: projectId,
-        title,
-        description,
-        severity,
-        affected_features: affectedFeatures,
+        title: title.trim(),
+        description: description.trim(),
+        affected_features: [],
       });
 
-      showToast('Change request submitted successfully!', 'success');
+      showToast('Change request submitted! ARIA is analyzing impact & dependencies…', 'success');
       setTitle('');
       setDescription('');
-      setSeverity('medium');
-      setFeatures('');
       setShowForm(false);
       fetchRequests();
+      if (onContradictionsChanged) {
+        onContradictionsChanged();
+      }
     } catch (err) {
       console.error('[ChangeRequest] Submit error:', err);
       const detail = err.response?.data?.detail || 'Failed to submit change request. Please try again.';
@@ -402,6 +499,31 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
       showToast(reqId ? `${detail} (ref: ${reqId.slice(0, 8)})` : detail, 'error');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDeleteClick = (cr) => {
+    setSelectedCrToDelete(cr);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedCrToDelete) return;
+    setDeleting(true);
+    try {
+      await deleteChangeRequest(selectedCrToDelete.id);
+      showToast('Change request and associated conflicts removed successfully.', 'success');
+      setDeleteDialogOpen(false);
+      setSelectedCrToDelete(null);
+      fetchRequests();
+      if (onContradictionsChanged) {
+        onContradictionsChanged();
+      }
+    } catch (err) {
+      console.error('[ChangeRequest] Delete error:', err);
+      showToast(err.response?.data?.detail || 'Failed to delete change request.', 'error');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -444,12 +566,12 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
   const getSeverityChip = (sev) => {
     switch (sev?.toLowerCase()) {
       case 'high':
-        return <Chip label="High Severity" color="error" variant="outlined" size="small" sx={{ fontWeight: 600 }} />;
+        return <Chip label="AI Severity: High" color="error" variant="outlined" size="small" sx={{ fontWeight: 700 }} />;
       case 'medium':
-        return <Chip label="Medium Severity" color="warning" variant="outlined" size="small" sx={{ fontWeight: 600 }} />;
+        return <Chip label="AI Severity: Medium" color="warning" variant="outlined" size="small" sx={{ fontWeight: 700 }} />;
       case 'low':
       default:
-        return <Chip label="Low Severity" color="info" variant="outlined" size="small" sx={{ fontWeight: 600 }} />;
+        return <Chip label="AI Severity: Low" color="info" variant="outlined" size="small" sx={{ fontWeight: 700 }} />;
     }
   };
 
@@ -464,14 +586,40 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
   };
 
   return (
-    <Box>
+    <Box sx={{ position: 'relative' }}>
+      {/* Full screen backdrop lock during change request submission */}
+      <Backdrop
+        sx={{
+          color: '#fff',
+          zIndex: (theme) => theme.zIndex.drawer + 9999,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2.5,
+          bgcolor: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(4px)',
+          textAlign: 'center',
+          p: 3,
+        }}
+        open={submitting}
+      >
+        <CircularProgress color="primary" size={56} thickness={4} />
+        <Box>
+          <Typography variant="h6" sx={{ color: '#fff', fontWeight: 700, mb: 0.5 }}>
+            Submitting & Analyzing Change Request…
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)', maxWidth: 460 }}>
+            ARIA is processing your request, analyzing project dependencies, and checking for requirement conflicts. Please wait.
+          </Typography>
+        </Box>
+      </Backdrop>
+
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
         <Box>
           <Typography variant="h6" sx={{ fontWeight: 800 }}>
             Change Requests ({requests.length})
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Track status, developer reviews, and submit new modification requests for <strong>{project?.name || 'this project'}</strong>.
+            Submit modification requests and track developer reviews for <strong>{project?.name || 'this project'}</strong>.
           </Typography>
         </Box>
         <Button
@@ -480,11 +628,11 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
           startIcon={showForm ? undefined : <AddIcon />}
           onClick={() => setShowForm(!showForm)}
         >
-          {showForm ? 'Close Form' : '+ Raise Change Request'}
+          {showForm ? 'Close Form' : 'Raise Change Request'}
         </Button>
       </Stack>
 
-      {}
+      {/* Submission Form */}
       {showForm && (
         <Paper
           variant="outlined"
@@ -497,57 +645,38 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
             boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
           }}
         >
-          <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2 }}>
-            Submit a New Change Request
+          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1 }}>
+            <AutoAwesomeIcon color="primary" />
+            <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+              Submit a New Change Request
+            </Typography>
+          </Stack>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
+            Describe what requirements should be added, changed, or removed. ARIA will automatically analyze your project, detect affected features, assess technical severity, and check for conflicts.
           </Typography>
           <Box component="form" onSubmit={handleSubmit}>
             <Stack spacing={2.5}>
               <TextField
-                label="Request Title"
+                label="Request Title *"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required
                 fullWidth
-                placeholder="e.g. Add multi-factor authentication or support non-financial data"
+                placeholder="e.g. Add SMS reminders for patient appointment cancellations"
+                helperText="A clear, short title summarizing the business requirement"
               />
 
               <TextField
-                label="Description of Change"
+                label="Description of Change / Business Reason *"
                 multiline
-                rows={3}
+                rows={4}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 required
                 fullWidth
-                placeholder="Describe what requirements should be updated and why…"
+                placeholder="Explain what needs to change, the user scenario, or why this modification is required…"
+                helperText="Provide business details — ARIA's AI Impact Engine will automatically identify affected modules, severity, and dependencies"
               />
-
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth>
-                    <InputLabel id="severity-label">Estimated Severity</InputLabel>
-                    <Select
-                      labelId="severity-label"
-                      value={severity}
-                      label="Estimated Severity"
-                      onChange={(e) => setSeverity(e.target.value)}
-                    >
-                      <MenuItem value={SEVERITIES.LOW}>Low — Minor wording or UI tweak</MenuItem>
-                      <MenuItem value={SEVERITIES.MEDIUM}>Medium — New rule or condition</MenuItem>
-                      <MenuItem value={SEVERITIES.HIGH}>High — Core architectural change</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    label="Affected Features (comma-separated)"
-                    value={features}
-                    onChange={(e) => setFeatures(e.target.value)}
-                    fullWidth
-                    placeholder="e.g. Authentication, Billing, Dashboard"
-                  />
-                </Grid>
-              </Grid>
 
               <Divider />
 
@@ -564,7 +693,7 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
         </Paper>
       )}
 
-      {}
+      {/* Change Requests List */}
       {loading ? (
         <Stack spacing={2}>
           <Skeleton variant="rectangular" height={100} sx={{ borderRadius: 2 }} />
@@ -615,8 +744,23 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
                       </Typography>
                     </Box>
                     <Stack direction="row" spacing={1} alignItems="center">
-                      {getSeverityChip(cr.severity)}
+                      {cr.severity && getSeverityChip(cr.severity)}
                       {getStatusChip(cr.status)}
+                      <Tooltip title="Delete Change Request">
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => handleDeleteClick(cr)}
+                          sx={{
+                            bgcolor: '#FEF2F2',
+                            border: '1px solid #FECACA',
+                            '&:hover': { bgcolor: '#FEE2E2', borderColor: '#F87171' },
+                            p: 0.5,
+                          }}
+                        >
+                          <DeleteOutlineIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                     </Stack>
                   </Stack>
 
@@ -624,16 +768,18 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
                     {cr.description}
                   </Typography>
 
-                  {}
+                  {/* Affected Requirements */}
                   {featList.length > 0 && (
-                    <Stack direction="row" spacing={0.8} alignItems="center" flexWrap="wrap" sx={{ mb: 2 }}>
-                      <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', mr: 0.5 }}>
-                        Affected Features:
-                      </Typography>
-                      {featList.map((f, i) => (
-                        <Chip key={i} label={f} size="small" variant="outlined" sx={{ fontSize: '0.75rem' }} />
-                      ))}
-                    </Stack>
+                    <Box sx={{ mb: 2, p: 1.5, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 2 }}>
+                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                        <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', mr: 0.5 }}>
+                          Affected Requirements:
+                        </Typography>
+                        {featList.map((f, i) => (
+                          <Chip key={i} label={f} size="small" color="primary" variant="outlined" sx={{ fontSize: '0.75rem', fontWeight: 600, bgcolor: '#EFF6FF' }} />
+                        ))}
+                      </Stack>
+                    </Box>
                   )}
 
                   {}
@@ -661,45 +807,19 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
                     </Paper>
                   )}
 
-                  {}
+                  {/* Impact Analysis */}
                   {cr.impact_report && (
                     <Accordion variant="outlined" sx={{ mt: 1.5, borderRadius: '8px !important', '&:before': { display: 'none' } }}>
                       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          <SmartToyIcon sx={{ fontSize: 18, color: cr.impact_report.includes('Requirement Conflicts Detected') ? 'warning.main' : 'primary.main' }} />
-                          <Typography variant="caption" sx={{ fontWeight: 700, color: cr.impact_report.includes('Requirement Conflicts Detected') ? 'warning.dark' : 'primary.main' }}>
-                            {cr.impact_report.includes('Requirement Conflicts Detected') ? 'AI Impact & Requirement Conflict Analysis' : 'AI Impact Analysis'}
-                          </Typography>
-                        </Stack>
+                        <Typography variant="caption" sx={{
+                          fontWeight: 700,
+                          color: cr.impact_report.includes('Detected Requirement Conflicts') ? 'warning.dark' : 'text.secondary',
+                        }}>
+                          {cr.impact_report.includes('Detected Requirement Conflicts') ? '⚠ Impact Analysis — Conflicts Found' : 'Impact Analysis'}
+                        </Typography>
                       </AccordionSummary>
                       <AccordionDetails sx={{ pt: 0 }}>
-                        {cr.impact_report.includes('Requirement Conflicts Detected') ? (
-                          <Box>
-                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem', mb: 1.5 }}>
-                              {cr.impact_report.split('⚠ Requirement Conflicts Detected')[0].trim()}
-                            </Typography>
-                            <Paper
-                              elevation={0}
-                              sx={{
-                                p: 1.5,
-                                bgcolor: '#FFFBEB',
-                                border: '1px solid #FCD34D',
-                                borderRadius: 2,
-                              }}
-                            >
-                              <Typography variant="caption" sx={{ fontWeight: 700, color: '#92400E', display: 'block', mb: 0.5 }}>
-                                ⚠ Requirement Conflicts Detected:
-                              </Typography>
-                              <Typography variant="body2" sx={{ fontSize: '0.82rem', color: '#78350F', whiteSpace: 'pre-line' }}>
-                                {cr.impact_report.split('⚠ Requirement Conflicts Detected')[1]?.replace(/^ by RDCD:\n?|^:\n?/, '').trim()}
-                              </Typography>
-                            </Paper>
-                          </Box>
-                        ) : (
-                          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
-                            {cr.impact_report}
-                          </Typography>
-                        )}
+                        <ImpactReportDisplay report={cr.impact_report} />
                       </AccordionDetails>
                     </Accordion>
                   )}
@@ -709,6 +829,44 @@ const ChangeRequestTab = ({ projectId, project, onCancel }) => {
           })}
         </Stack>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => !deleting && setDeleteDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 700, color: 'error.main', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <DeleteForeverIcon color="error" /> Delete Change Request
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 1.5 }}>
+            Are you sure you want to delete this change request?
+          </Typography>
+          <Paper variant="outlined" sx={{ p: 1.5, bgcolor: '#F8FAFC', mb: 1.5 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+              {selectedCrToDelete?.title}
+            </Typography>
+          </Paper>
+          <Typography variant="caption" color="text.secondary">
+            Deleting this change request will permanently remove it and any requirement conflict alerts associated with it.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <MuiButton color="inherit" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>
+            Cancel
+          </MuiButton>
+          <MuiButton
+            variant="contained"
+            color="error"
+            onClick={handleDeleteConfirm}
+            disabled={deleting}
+          >
+            {deleting ? 'Deleting…' : 'Delete'}
+          </MuiButton>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
@@ -772,11 +930,20 @@ const ContradictionsTab = ({ contradictions, loading }) => {
                 }}
               >
                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1.5 }}>
-                  <Chip
-                    label={CONFLICT_TYPE_LABELS[c.conflict_type] || c.conflict_type || 'Direct Contradiction'}
-                    size="small"
-                    sx={{ bgcolor: '#FDE68A', color: '#92400E', fontWeight: 700, fontSize: '0.75rem' }}
-                  />
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Chip
+                      label={CONFLICT_TYPE_LABELS[c.conflict_type] || c.conflict_type || 'Direct Contradiction'}
+                      size="small"
+                      sx={{ bgcolor: '#FDE68A', color: '#92400E', fontWeight: 700, fontSize: '0.75rem' }}
+                    />
+                    <Chip
+                      icon={c.source === 'change_request' ? <RateReviewIcon fontSize="small" /> : <ChatIcon fontSize="small" />}
+                      label={c.source === 'change_request' ? 'From Change Request' : 'From ARIA Chat'}
+                      size="small"
+                      variant="outlined"
+                      sx={{ fontWeight: 600, fontSize: '0.72rem', borderColor: '#D97706', color: '#92400E' }}
+                    />
+                  </Stack>
                   <Chip
                     icon={<HourglassEmptyIcon fontSize="small" />}
                     label="Awaiting Developer Review"
@@ -807,7 +974,7 @@ const ContradictionsTab = ({ contradictions, loading }) => {
                 </Stack>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1, pt: 1, borderTop: '1px dashed #FDE68A' }}>
                   <Typography variant="caption" color="text.secondary">
-                    Detected {formatDateTime(c.detected_at)}
+                    Detected {formatChatTime(c.detected_at)}
                   </Typography>
                   <Typography variant="caption" sx={{ color: '#92400E', fontWeight: 600, fontStyle: 'italic' }}>
                     🔒 Excluded from SRS document pending developer resolution
@@ -833,9 +1000,18 @@ const ContradictionsTab = ({ contradictions, loading }) => {
                 sx={{ p: 2, borderRadius: 3, borderColor: '#BBF7D0', bgcolor: '#F0FDF4', opacity: 0.9 }}
               >
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Typography variant="body2" sx={{ color: '#166534', fontWeight: 600 }}>
-                    {CONFLICT_TYPE_LABELS[c.conflict_type] || 'Direct Contradiction'}
-                  </Typography>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Typography variant="body2" sx={{ color: '#166534', fontWeight: 600 }}>
+                      {CONFLICT_TYPE_LABELS[c.conflict_type] || 'Direct Contradiction'}
+                    </Typography>
+                    <Chip
+                      icon={c.source === 'change_request' ? <RateReviewIcon fontSize="small" /> : <ChatIcon fontSize="small" />}
+                      label={c.source === 'change_request' ? 'From Change Request' : 'From ARIA Chat'}
+                      size="small"
+                      variant="outlined"
+                      sx={{ fontWeight: 600, fontSize: '0.72rem' }}
+                    />
+                  </Stack>
                   <Chip
                     label={c.status === 'resolved' ? '✓ Resolved by Developer' : 'Marked False Positive'}
                     size="small"
@@ -854,7 +1030,7 @@ const ContradictionsTab = ({ contradictions, loading }) => {
                   </Typography>
                 )}
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                  {formatDateTime(c.resolved_at || c.detected_at)}
+                  {formatChatTime(c.resolved_at || c.detected_at)}
                 </Typography>
               </Paper>
             ))}
@@ -862,53 +1038,6 @@ const ContradictionsTab = ({ contradictions, loading }) => {
         </Box>
       )}
     </Box>
-  );
-};
-
-const ClientSRSTab = ({ projectId, project }) => {
-  const [srsData, setSrsData] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    const fetchSrs = async () => {
-      try {
-        setLoading(true);
-        const data = await getLatestSrs(projectId);
-        if (active) setSrsData(data);
-      } catch (err) {
-        if (active) setSrsData(null);
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-    if (projectId) fetchSrs();
-    return () => {
-      active = false;
-    };
-  }, [projectId]);
-
-  if (loading) {
-    return <Skeleton variant="rectangular" height={360} sx={{ borderRadius: 3 }} />;
-  }
-
-  if (!srsData) {
-    return (
-      <Box sx={{ py: 6, textAlign: 'center' }}>
-        <EmptyState
-          icon={<DescriptionIcon sx={{ fontSize: 52, color: 'text.secondary' }} />}
-          title="SRS Document Not Generated Yet"
-          description="Your official Software Requirements Specification will appear here as soon as the developer generates it from gathering sessions."
-        />
-      </Box>
-    );
-  }
-
-  return (
-    <SRSViewer
-      srsData={srsData}
-      projectName={project?.name || 'Project'}
-    />
   );
 };
 
@@ -1031,14 +1160,13 @@ export const ClientProjectHub = () => {
   const menuItems = [
     { text: 'Project Overview', icon: <DashboardIcon /> },
     { text: 'Chat with ARIA', icon: <ChatIcon />, badge: sessions.some((s) => s.status === 'active') ? '●' : sessions.length },
-    { text: 'SRS Document', icon: <DescriptionIcon /> },
+    { text: 'Change Requests', icon: <RateReviewIcon /> },
     {
-      text: 'Contradictions',
+      text: 'Clarifications & Questions',
       icon: <WarningAmberIcon sx={{ color: pendingContradictions > 0 ? '#D97706' : undefined }} />,
       badge: pendingContradictions > 0 ? pendingContradictions : (contradictions.length > 0 ? contradictions.length : undefined),
       badgeColor: pendingContradictions > 0 ? '#D97706' : undefined,
     },
-    { text: 'Submit Change Request', icon: <RateReviewIcon /> },
   ];
 
   return (
@@ -1175,9 +1303,11 @@ export const ClientProjectHub = () => {
               />
             )}
             {tabValue === 2 && (
-              <ClientSRSTab
+              <ChangeRequestTab
                 projectId={projectId}
                 project={project}
+                onCancel={() => setTabValue(0)}
+                onContradictionsChanged={loadContradictions}
               />
             )}
             {tabValue === 3 && (
@@ -1187,7 +1317,6 @@ export const ClientProjectHub = () => {
                 onRefresh={loadContradictions}
               />
             )}
-            {tabValue === 4 && <ChangeRequestTab projectId={projectId} project={project} onCancel={() => setTabValue(0)} />}
           </Paper>
         </Grid>
       </Grid>

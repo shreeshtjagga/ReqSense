@@ -11,7 +11,7 @@ import { useToastStore } from '../../store/toastStore';
 import { useAuthStore } from '../../store/authStore';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import StopIcon from '@mui/icons-material/Stop';
-import SmartToyIcon from '@mui/icons-material/SmartToy';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 
 export const ChatSession = () => {
   const { sessionId } = useParams();
@@ -148,11 +148,7 @@ export const ChatSession = () => {
     setEnding(true);
     try {
       const res = await endSession(sessionId, 'completed');
-      if (res?.srs_status === 'failed' || res?.srs_status === 'queued') {
-        showToast('Session ended. SRS generation queued — generate manually from Project SRS tab.', 'warning');
-      } else {
-        showToast('Session ended. SRS document generated successfully!', 'success');
-      }
+      showToast('Gathering session ended successfully! Requirements saved for engineering review.', 'success');
       const projectId = session?.project_id;
       if (projectId) {
         navigate(`/client/projects/${projectId}`);
@@ -255,33 +251,36 @@ export const ChatSession = () => {
                 </Box>
 
                 <Box>
-                  <Typography variant="caption" color="text.secondary">Messages</Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {messages.length} in session
+                  <Typography variant="caption" color="text.secondary">Total Requirements Exchanged</Typography>
+                  <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, color: 'primary.main' }}>
+                    {session?.total_messages || messages.length || 0}
                   </Typography>
                 </Box>
 
                 <Box>
-                  <Typography variant="caption" color="text.secondary">Contradictions</Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {session?.contradiction_events ?? 0} detected
+                  <Typography variant="caption" color="text.secondary">ARIA Assistant</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+                    <AutoAwesomeIcon color={isActive ? 'primary' : 'disabled'} fontSize="small" />
+                    {isActive ? 'Active & Listening' : 'Session Completed'}
                   </Typography>
                 </Box>
               </Stack>
             </Paper>
 
             {isActive && (
-              <Button
-                variant="contained"
-                color="error"
-                startIcon={<StopIcon />}
-                onClick={handleEndSession}
-                loading={ending}
-                fullWidth
-                size="large"
-              >
-                End Chat & Generate SRS
-              </Button>
+              <Box sx={{ mt: 4 }}>
+                <Button
+                  fullWidth
+                  variant="contained"
+                  color="secondary"
+                  startIcon={<StopIcon />}
+                  onClick={handleEndSession}
+                  disabled={ending}
+                  sx={{ py: 1.2, fontWeight: 700 }}
+                >
+                  {ending ? 'Finishing Session…' : 'End Gathering Session'}
+                </Button>
+              </Box>
             )}
           </Stack>
         </Grid>

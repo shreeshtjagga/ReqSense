@@ -9,7 +9,7 @@ import { listProjects } from '../../api/projects';
 import { useProjectStore } from '../../store/projectStore';
 import { useToastStore } from '../../store/toastStore';
 import { useAuthStore } from '../../store/authStore';
-import SmartToyIcon from '@mui/icons-material/SmartToy';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import LockIcon from '@mui/icons-material/Lock';
 import FolderOffIcon from '@mui/icons-material/FolderOff';
 import SendIcon from '@mui/icons-material/Send';
@@ -74,7 +74,7 @@ const LockedChatPreview = () => (
     >
       {}
       <Box sx={{ px: 3, py: 2, display: 'flex', alignItems: 'center', gap: 1.5, bgcolor: 'background.paper' }}>
-        <SmartToyIcon color="secondary" />
+        <AutoAwesomeIcon color="secondary" />
         <Box>
           <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
             ARIA Requirement Gathering Session
