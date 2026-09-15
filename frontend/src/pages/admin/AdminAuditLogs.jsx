@@ -11,30 +11,18 @@ import {
   TableHead,
   TableRow,
   Stack,
-  Chip,
   TextField,
   InputAdornment,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
+  Tooltip,
+  IconButton,
 } from '@mui/material';
 import Layout from '../../components/layout/Layout';
 import EmptyState from '../../components/common/EmptyState';
 import { useToastStore } from '../../store/toastStore';
 import { formatDateTime } from '../../utils/helpers';
 import SearchIcon from '@mui/icons-material/Search';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import api from '../../api/axios';
-
-const ACTION_COLORS = {
-  login: 'info',
-  logout: 'default',
-  register: 'success',
-  admin_create_user: 'warning',
-  admin_update_user: 'warning',
-  admin_delete_user: 'error',
-  suspicious_input_flagged: 'error',
-};
 
 export const AdminAuditLogs = () => {
   const showToast = useToastStore((s) => s.showToast);
@@ -42,21 +30,18 @@ export const AdminAuditLogs = () => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [entityTypeFilter, setEntityTypeFilter] = useState('');
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { limit: 100, offset: 0 };
-      if (entityTypeFilter) params.entity_type = entityTypeFilter;
-      const res = await api.get('/audit-logs', { params });
-      setLogs(res.data);
+      const res = await api.get('/audit-logs', { params: { limit: 100 } });
+      setLogs(res.data || []);
     } catch (err) {
       showToast('Failed to load audit logs.', 'error');
     } finally {
       setLoading(false);
     }
-  }, [entityTypeFilter, showToast]);
+  }, [showToast]);
 
   useEffect(() => {
     fetchLogs();
@@ -66,127 +51,99 @@ export const AdminAuditLogs = () => {
     const q = search.toLowerCase();
     return (
       !q ||
+      log.event_summary?.toLowerCase().includes(q) ||
       log.action?.toLowerCase().includes(q) ||
-      log.entity_type?.toLowerCase().includes(q) ||
-      log.user_id?.toLowerCase().includes(q) ||
-      log.entity_id?.toLowerCase().includes(q)
+      log.actor_name?.toLowerCase().includes(q) ||
+      log.actor_email?.toLowerCase().includes(q) ||
+      log.entity_label?.toLowerCase().includes(q)
     );
   });
 
-  const entityTypes = [...new Set(logs.map((l) => l.entity_type).filter(Boolean))];
-
   return (
     <Layout>
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h3" sx={{ fontWeight: 800, mb: 1 }}>
-          Audit Logs
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Immutable, append-only record of all privileged actions taken across
-          the platform.
-        </Typography>
+      {/* Header */}
+      <Box sx={{ mb: 3.5, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 800, color: '#0F172A', mb: 0.5 }}>
+            Audit Logs
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            System activity and user access history.
+          </Typography>
+        </Box>
+        <Tooltip title="Refresh Logs">
+          <IconButton onClick={fetchLogs} disabled={loading} size="small" sx={{ bgcolor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+            <RefreshIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
       </Box>
 
-      {}
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
+      {/* Simple Search Bar */}
+      <Box sx={{ mb: 2.5 }}>
         <TextField
           size="small"
-          placeholder="Search by action, entity type, user ID…"
+          placeholder="Search activity by user or event…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          fullWidth
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
-                <SearchIcon fontSize="small" />
+                <SearchIcon fontSize="small" sx={{ color: '#64748B' }} />
               </InputAdornment>
             ),
           }}
-          sx={{ flexGrow: 1, maxWidth: 480 }}
+          sx={{ maxWidth: 420, bgcolor: '#FFFFFF' }}
         />
-        <FormControl size="small" sx={{ minWidth: 180 }}>
-          <InputLabel id="entity-type-label">Entity Type</InputLabel>
-          <Select
-            labelId="entity-type-label"
-            value={entityTypeFilter}
-            label="Entity Type"
-            onChange={(e) => setEntityTypeFilter(e.target.value)}
-          >
-            <MenuItem value="">All</MenuItem>
-            {entityTypes.map((t) => (
-              <MenuItem key={t} value={t}>
-                {t}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </Stack>
+      </Box>
 
+      {/* Clean Table */}
       {loading ? (
         <Stack spacing={1.5}>
           {[1, 2, 3, 4, 5].map((i) => (
-            <Skeleton key={i} variant="rectangular" height={52} sx={{ borderRadius: 1.5 }} />
+            <Skeleton key={i} variant="rectangular" height={48} sx={{ borderRadius: 2 }} />
           ))}
         </Stack>
       ) : filtered.length === 0 ? (
         <EmptyState
-          title="No Audit Log Entries"
-          description="No audit events have been recorded yet, or your search/filter returned no results."
+          title="No Logs Found"
+          description="No activity logs matched your search."
         />
       ) : (
-        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
           <Table size="small" aria-label="audit-logs-table">
-            <TableHead sx={{ bgcolor: 'action.hover' }}>
+            <TableHead sx={{ bgcolor: '#F8FAFC' }}>
               <TableRow>
-                <TableCell><strong>Action</strong></TableCell>
-                <TableCell><strong>Entity Type</strong></TableCell>
-                <TableCell><strong>Entity ID</strong></TableCell>
-                <TableCell><strong>Actor User ID</strong></TableCell>
-                <TableCell><strong>IP Address</strong></TableCell>
-                <TableCell><strong>Timestamp</strong></TableCell>
+                <TableCell sx={{ py: 1.5 }}><strong>Activity</strong></TableCell>
+                <TableCell sx={{ py: 1.5 }}><strong>Actor</strong></TableCell>
+                <TableCell sx={{ py: 1.5 }} align="right"><strong>Date &amp; Time</strong></TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {filtered.map((log) => (
-                <TableRow key={log.id} hover>
-                  <TableCell>
-                    <Chip
-                      label={log.action}
-                      size="small"
-                      color={ACTION_COLORS[log.action] || 'default'}
-                      variant="outlined"
-                      sx={{ fontWeight: 600, fontSize: '0.75rem' }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="caption" color="text.secondary">
-                      {log.entity_type || '—'}
+                <TableRow key={log.id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
+                  {/* Activity Summary */}
+                  <TableCell sx={{ py: 1.5 }}>
+                    <Typography variant="body2" sx={{ color: '#1E293B', fontWeight: 500, fontSize: '0.85rem' }}>
+                      {log.event_summary || (log.action ? log.action.replace(/_/g, ' ') : 'System Event')}
                     </Typography>
                   </TableCell>
-                  <TableCell>
-                    <Typography
-                      variant="caption"
-                      sx={{ fontFamily: 'monospace', fontSize: '0.72rem' }}
-                    >
-                      {log.entity_id
-                        ? `${log.entity_id.slice(0, 8)}…`
-                        : '—'}
+
+                  {/* Actor */}
+                  <TableCell sx={{ py: 1.5 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#0F172A', fontSize: '0.85rem' }}>
+                      {log.actor_name || 'System'}
                     </Typography>
+                    {log.actor_email && (
+                      <Typography variant="caption" sx={{ color: '#64748B', display: 'block', fontSize: '0.72rem' }}>
+                        {log.actor_email}
+                      </Typography>
+                    )}
                   </TableCell>
-                  <TableCell>
-                    <Typography
-                      variant="caption"
-                      sx={{ fontFamily: 'monospace', fontSize: '0.72rem' }}
-                    >
-                      {log.user_id ? `${log.user_id.slice(0, 8)}…` : '—'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="caption" color="text.secondary">
-                      {log.ip_address || '—'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="caption">
+
+                  {/* Date & Time */}
+                  <TableCell sx={{ py: 1.5 }} align="right">
+                    <Typography variant="caption" sx={{ color: '#475569', fontWeight: 500, whiteSpace: 'nowrap' }}>
                       {formatDateTime(log.created_at)}
                     </Typography>
                   </TableCell>
@@ -197,8 +154,8 @@ export const AdminAuditLogs = () => {
         </TableContainer>
       )}
 
-      <Typography variant="caption" color="text.disabled" sx={{ mt: 2, display: 'block' }}>
-        Showing {filtered.length} of {logs.length} entries (max 100 per page)
+      <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
+        Showing {filtered.length} of {logs.length} events
       </Typography>
     </Layout>
   );

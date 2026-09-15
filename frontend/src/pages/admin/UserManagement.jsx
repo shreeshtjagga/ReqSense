@@ -58,9 +58,11 @@ export const UserManagement = () => {
       setLoading(true);
       const adminProfile = await getCurrentUser();
       setCurrentAdmin(adminProfile);
-      const res = await axios.get('/admin/users');
-      setUsers(res.data?.data || []);
+      const res = await axios.get('/users');
+      const userList = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      setUsers(userList);
     } catch (err) {
+      console.error('[UserManagement] Failed to load users:', err);
       showToast('Error loading user list.', 'error');
     } finally {
       setLoading(false);
@@ -75,9 +77,9 @@ export const UserManagement = () => {
     e.preventDefault();
     try {
       setSubmitting(true);
-      await axios.post('/admin/users', {
-        name,
-        email,
+      await axios.post('/users', {
+        name: name.trim(),
+        email: email.trim(),
         password,
         role,
       });
@@ -89,7 +91,8 @@ export const UserManagement = () => {
       setRole('client');
       fetchUsers();
     } catch (err) {
-      showToast(err.response?.data?.message || 'Failed to create user.', 'error');
+      const msg = err.response?.data?.detail || err.response?.data?.message || 'Failed to create user.';
+      showToast(msg, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -104,7 +107,8 @@ export const UserManagement = () => {
       setSelectedUserForDelete(null);
       fetchUsers();
     } catch (err) {
-      showToast(err.response?.data?.message || 'Failed to delete user.', 'error');
+      const msg = err.response?.data?.detail || err.response?.data?.message || 'Failed to delete user.';
+      showToast(msg, 'error');
     } finally {
       setDeleting(false);
     }

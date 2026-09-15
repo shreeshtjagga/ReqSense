@@ -41,7 +41,7 @@ export const AdminDashboard = () => {
         const formattedLogs = logs.map((log) => ({
           id: String(log.id),
           type: log.action || 'system_event',
-          description: `${(log.action || 'Action').replace(/_/g, ' ')} (${log.entity_type || 'system'})`,
+          description: log.event_summary || (log.action ? log.action.replace(/_/g, ' ') : 'System Event'),
           timestamp: log.created_at,
         }));
         setRecentActivities(formattedLogs);

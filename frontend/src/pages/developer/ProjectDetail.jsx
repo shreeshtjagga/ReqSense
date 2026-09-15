@@ -1,10 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   Typography,
-  Grid,
   Box,
   Alert,
-  Slider,
   Tooltip,
   Skeleton,
   List,
@@ -35,6 +33,8 @@ import {
   IconButton,
   Divider,
   Chip,
+  Slider,
+  Grid,
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
@@ -58,7 +58,7 @@ import {
 import { listSessionsForProject } from '../../api/sessions';
 import { resolveContradiction } from '../../api/contradictions';
 import { getProjectSummary } from '../../api/analytics';
-import { listChangeRequests, reviewChangeRequest } from '../../api/changeRequests';
+import { listChangeRequests, reviewChangeRequest, deleteChangeRequest } from '../../api/changeRequests';
 import { getLatestSrs, listSrsVersions, generateProjectSrs, getSrsVersionDetails } from '../../api/srs';
 
 import { useToastStore } from '../../store/toastStore';
@@ -67,21 +67,18 @@ import { formatDateTime } from '../../utils/helpers';
 import { CHANGE_REQUEST_STATUS, PROJECT_DOMAIN_LABELS } from '../../utils/constants';
 
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import ListAltIcon from '@mui/icons-material/ListAlt';
 import WarningIcon from '@mui/icons-material/Warning';
 import ChatIcon from '@mui/icons-material/Chat';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
-import EditIcon from '@mui/icons-material/Edit';
-import AddIcon from '@mui/icons-material/Add';
 import RateReviewIcon from '@mui/icons-material/RateReview';
 import DescriptionIcon from '@mui/icons-material/Description';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import axios from '../../api/axios';
 
-const ProjectChangeRequestsTab = ({ projectId }) => {
+const ProjectChangeRequestsTab = ({ projectId, onContradictionsChanged }) => {
   const showToast = useToastStore((s) => s.showToast);
   const [changeRequests, setChangeRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -91,6 +88,10 @@ const ProjectChangeRequestsTab = ({ projectId }) => {
   const [note, setNote] = useState('');
   const [action, setAction] = useState('approved');
   const [submitting, setSubmitting] = useState(false);
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedCrToDelete, setSelectedCrToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchChangeRequests = async (isInitial = false) => {
     if (isInitial) setLoading(true);
@@ -139,6 +140,9 @@ const ProjectChangeRequestsTab = ({ projectId }) => {
       showToast(`Change request ${action} successfully!`, 'success');
       setReviewOpen(false);
       fetchChangeRequests();
+      if (onContradictionsChanged) {
+        onContradictionsChanged();
+      }
     } catch (err) {
       const isConflict = err.response?.status === 409 || err.response?.data?.code === 'STALE_VERSION';
       if (isConflict) {
@@ -150,6 +154,34 @@ const ProjectChangeRequestsTab = ({ projectId }) => {
       }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDeleteClick = (cr) => {
+    setSelectedCrToDelete(cr);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedCrToDelete) return;
+    setDeleting(true);
+    try {
+      await deleteChangeRequest(selectedCrToDelete.id);
+      showToast('Change request and associated conflicts removed successfully.', 'success');
+      setDeleteDialogOpen(false);
+      setSelectedCrToDelete(null);
+      if (reviewOpen && selectedCr?.id === selectedCrToDelete.id) {
+        setReviewOpen(false);
+      }
+      fetchChangeRequests();
+      if (onContradictionsChanged) {
+        onContradictionsChanged();
+      }
+    } catch (err) {
+      console.error('[ProjectDetail] Delete CR failed:', err);
+      showToast(err.response?.data?.detail || 'Failed to delete change request.', 'error');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -190,15 +222,32 @@ const ProjectChangeRequestsTab = ({ projectId }) => {
                   </TableCell>
                   <TableCell>{formatDateTime(cr.created_at)}</TableCell>
                   <TableCell align="right">
-                    {cr.status === 'pending' ? (
-                      <Button size="small" variant="contained" onClick={() => handleReviewClick(cr)}>
-                        Review & Impact
-                      </Button>
-                    ) : (
-                      <Button size="small" variant="outlined" color="inherit" onClick={() => handleReviewClick(cr)}>
-                        Details
-                      </Button>
-                    )}
+                    <Stack direction="row" spacing={1} justifyContent="flex-end" alignItems="center">
+                      {cr.status === 'pending' ? (
+                        <Button size="small" variant="contained" onClick={() => handleReviewClick(cr)}>
+                          Review & Impact
+                        </Button>
+                      ) : (
+                        <Button size="small" variant="outlined" color="inherit" onClick={() => handleReviewClick(cr)}>
+                          Details
+                        </Button>
+                      )}
+                      <Tooltip title="Delete Change Request">
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => handleDeleteClick(cr)}
+                          sx={{
+                            bgcolor: '#FEF2F2',
+                            border: '1px solid #FECACA',
+                            '&:hover': { bgcolor: '#FEE2E2', borderColor: '#F87171' },
+                            p: 0.5,
+                          }}
+                        >
+                          <DeleteOutlineIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
                   </TableCell>
                 </TableRow>
               ))}
@@ -295,6 +344,44 @@ const ProjectChangeRequestsTab = ({ projectId }) => {
           </DialogActions>
         </Box>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => !deleting && setDeleteDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 700, color: 'error.main', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <DeleteForeverIcon color="error" /> Delete Change Request
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 1.5 }}>
+            Are you sure you want to delete this change request?
+          </Typography>
+          <Paper variant="outlined" sx={{ p: 1.5, bgcolor: '#F8FAFC', mb: 1.5 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+              {selectedCrToDelete?.title}
+            </Typography>
+          </Paper>
+          <Typography variant="caption" color="text.secondary">
+            Deleting this change request will permanently remove it and any requirement conflict alerts associated with it.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button color="inherit" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDeleteConfirm}
+            loading={deleting}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
@@ -309,22 +396,18 @@ const ProjectSRSTab = ({ projectId, project }) => {
   const fetchSrsData = async () => {
     setLoading(true);
     try {
-      let latestDoc = null;
-      try {
-        latestDoc = await getLatestSrs(projectId);
-        setActiveSrs(latestDoc);
-      } catch (err) {
-        setActiveSrs(null);
-      }
+      const [latestRes, versionsRes] = await Promise.allSettled([
+        getLatestSrs(projectId),
+        listSrsVersions(projectId),
+      ]);
 
-      let versionList = [];
-      try {
-        const list = await listSrsVersions(projectId);
-        versionList = Array.isArray(list) ? list : [];
-        setVersions(versionList);
-      } catch (err) {
-        setVersions([]);
-      }
+      const latestDoc = latestRes.status === 'fulfilled' ? latestRes.value : null;
+      const versionList = (versionsRes.status === 'fulfilled' && Array.isArray(versionsRes.value))
+        ? versionsRes.value
+        : [];
+
+      setActiveSrs(latestDoc);
+      setVersions(versionList);
 
       if (!latestDoc && versionList.length > 0) {
         try {
@@ -558,6 +641,7 @@ export const ProjectDetail = () => {
   const [inviteLookup, setInviteLookup] = useState(null);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteStep, setInviteStep] = useState('lookup');
+  const [clientsRefreshKey, setClientsRefreshKey] = useState(0);
 
   const [requestingDeletion, setRequestingDeletion] = useState(false);
 
@@ -616,6 +700,15 @@ export const ProjectDetail = () => {
 
     return () => clearInterval(interval);
   }, [projectId]);
+
+  const refreshContradictions = async () => {
+    if (projectId) {
+      try {
+        const res = await axios.get(`/contradictions/project/${projectId}`);
+        setContradictions(res.data || []);
+      } catch (e) { }
+    }
+  };
 
   const handleResolveContradiction = (contradiction) => {
     setSelectedContradiction(contradiction);
@@ -682,7 +775,7 @@ export const ProjectDetail = () => {
       showToast(`${inviteLookup.name} was added to the project.`, 'success');
       setInviteOpen(false);
       resetInviteDialog();
-      fetchProjectDetails();
+      setClientsRefreshKey((k) => k + 1);
     } catch (err) {
       showToast(err.response?.data?.detail || 'Failed to add client.', 'error');
     } finally {
@@ -852,7 +945,7 @@ export const ProjectDetail = () => {
               <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
                 Invited Clients:
               </Typography>
-              <ProjectClientsList projectId={projectId} refreshKey={sessions.length} />
+              <ProjectClientsList projectId={projectId} refreshKey={clientsRefreshKey} />
             </Box>
           </Box>
         </Box>
@@ -948,24 +1041,29 @@ export const ProjectDetail = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {sessions.map((sess, idx) => (
-                      <TableRow key={sess.id}>
-                        <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }}>#{idx + 1}</TableCell>
-                        <TableCell sx={{ textTransform: 'capitalize' }}>{sess.status}</TableCell>
-                        <TableCell>{sess.stability_score ? `${Math.round(sess.stability_score)}%` : '100%'}</TableCell>
-                        <TableCell>{sess.total_messages ?? 0}</TableCell>
-                        <TableCell>{formatDateTime(sess.started_at)}</TableCell>
-                        <TableCell align="right">
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={() => navigate(`/client/sessions/${sess.id}`)}
-                          >
-                            Watch Session
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {(() => {
+                      const sorted = [...sessions].sort((a, b) => new Date(a.started_at || a.created_at || 0) - new Date(b.started_at || b.created_at || 0));
+                      const orderMap = {};
+                      sorted.forEach((s, i) => { orderMap[s.id] = i + 1; });
+                      return sessions.map((sess, idx) => (
+                        <TableRow key={sess.id}>
+                          <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }}>#{orderMap[sess.id] || (sessions.length - idx)}</TableCell>
+                          <TableCell sx={{ textTransform: 'capitalize' }}>{sess.status}</TableCell>
+                          <TableCell>{sess.stability_score ? `${Math.round(sess.stability_score)}%` : '100%'}</TableCell>
+                          <TableCell>{sess.total_messages ?? 0}</TableCell>
+                          <TableCell>{formatDateTime(sess.started_at)}</TableCell>
+                          <TableCell align="right">
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => navigate(`/client/sessions/${sess.id}`)}
+                            >
+                              Watch Session
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ));
+                    })()}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -1051,7 +1149,7 @@ export const ProjectDetail = () => {
           </Box>
         )}
 
-        {tabValue === 3 && <ProjectChangeRequestsTab projectId={projectId} />}
+        {tabValue === 3 && <ProjectChangeRequestsTab projectId={projectId} onContradictionsChanged={refreshContradictions} />}
         {tabValue === 4 && <ProjectSRSTab projectId={projectId} project={project} />}
 
       </Paper>

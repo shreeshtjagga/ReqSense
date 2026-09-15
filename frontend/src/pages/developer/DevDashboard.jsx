@@ -108,69 +108,53 @@ export const DevDashboard = () => {
 
   return (
     <Layout>
-      {}
+      {/* ── Top Header ── */}
       <Paper
         elevation={0}
         sx={{
-          p: { xs: 3, md: 4 },
+          p: { xs: 3, md: 3.5 },
           mb: 4,
-          borderRadius: 4,
-          background: 'linear-gradient(135deg, #1E1B4B 0%, #312E81 50%, #4338CA 100%)',
+          borderRadius: 3,
+          bgcolor: '#1E293B',
           color: '#FFFFFF',
-          position: 'relative',
-          overflow: 'hidden',
-          boxShadow: '0 20px 40px -15px rgba(49, 46, 129, 0.4)',
+          border: '1px solid #334155',
         }}
       >
-        <Box
-          sx={{
-            position: 'absolute',
-            top: -40,
-            right: -40,
-            width: 240,
-            height: 240,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(99, 102, 241, 0.3) 0%, rgba(0, 0, 0, 0) 70%)',
-            pointerEvents: 'none',
-          }}
-        />
-
-        <Box sx={{ position: 'relative', zIndex: 1, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 3 }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 3 }}>
           <Box sx={{ maxWidth: 640 }}>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
               <Chip
                 label="Developer Workspace"
                 size="small"
                 sx={{
-                  background: 'rgba(255, 255, 255, 0.15)',
-                  color: '#A5B4FC',
-                  fontWeight: 700,
-                  backdropFilter: 'blur(8px)',
+                  bgcolor: '#334155',
+                  color: '#94A3B8',
+                  fontWeight: 600,
                   fontSize: '0.75rem',
                 }}
               />
             </Stack>
-            <Typography variant="h2" sx={{ fontWeight: 900, mb: 1, letterSpacing: '-0.02em', textShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
+            <Typography variant="h4" sx={{ fontWeight: 800, mb: 1, letterSpacing: '-0.01em', color: '#FFFFFF' }}>
               {user?.name ? `Welcome back, ${user.name}` : 'Developer Projects'}
             </Typography>
-            <Typography variant="body1" sx={{ color: 'rgba(224, 231, 255, 0.85)', lineHeight: 1.6 }}>
-              Manage AI-driven requirements gathering, inspect extracted specification atoms, and review flagged contradictions in real time.
+            <Typography variant="body2" sx={{ color: '#94A3B8', lineHeight: 1.6 }}>
+              Manage requirements gathering, inspect captured specifications, and review flagged contradictions in real time.
             </Typography>
 
-            <Stack direction="row" spacing={3} sx={{ mt: 3 }}>
+            <Stack direction="row" spacing={3} sx={{ mt: 2.5 }}>
               <Box>
-                <Typography variant="h4" sx={{ fontWeight: 800, color: '#67E8F9' }}>
+                <Typography variant="h5" sx={{ fontWeight: 800, color: '#FFFFFF' }}>
                   {projects.length}
                 </Typography>
-                <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.7)', fontWeight: 600 }}>
+                <Typography variant="caption" sx={{ color: '#94A3B8', fontWeight: 500 }}>
                   Total Projects
                 </Typography>
               </Box>
-              <Box sx={{ borderLeft: '1px solid rgba(255,255,255,0.15)', pl: 3 }}>
-                <Typography variant="h4" sx={{ fontWeight: 800, color: '#34D399' }}>
+              <Box sx={{ borderLeft: '1px solid #334155', pl: 3 }}>
+                <Typography variant="h5" sx={{ fontWeight: 800, color: '#FFFFFF' }}>
                   {activeCount}
                 </Typography>
-                <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.7)', fontWeight: 600 }}>
+                <Typography variant="caption" sx={{ color: '#94A3B8', fontWeight: 500 }}>
                   Active Sessions
                 </Typography>
               </Box>
@@ -179,22 +163,15 @@ export const DevDashboard = () => {
 
           <Button
             variant="contained"
+            color="primary"
             size="large"
             startIcon={<AddIcon />}
             onClick={() => setCreateOpen(true)}
             sx={{
-              background: 'linear-gradient(135deg, #06B6D4 0%, #0891B2 100%)',
-              color: '#FFFFFF',
-              px: 3,
-              py: 1.5,
-              borderRadius: 3,
-              fontWeight: 700,
-              fontSize: '1rem',
-              boxShadow: '0 8px 25px rgba(6, 182, 212, 0.4)',
-              '&:hover': {
-                background: 'linear-gradient(135deg, #0891B2 0%, #0E7490 100%)',
-                transform: 'translateY(-2px)',
-              },
+              px: 2.5,
+              py: 1.25,
+              borderRadius: 2,
+              fontWeight: 600,
             }}
           >
             Create New Project
