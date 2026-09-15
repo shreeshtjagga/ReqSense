@@ -1,6 +1,17 @@
+const normalizeUtc = (dateString) => {
+  if (!dateString) return null;
+  if (typeof dateString !== 'string') return new Date(dateString);
+  const trimmed = dateString.trim();
+  if (trimmed.endsWith('Z') || trimmed.includes('+') || /-\d{2}:\d{2}$/.test(trimmed)) {
+    return new Date(trimmed);
+  }
+  const isoStr = trimmed.includes('T') ? trimmed + 'Z' : trimmed.replace(' ', 'T') + 'Z';
+  return new Date(isoStr);
+};
+
 export const formatDate = (dateString) => {
-  if (!dateString) return 'N/A';
-  const date = new Date(dateString);
+  const date = normalizeUtc(dateString);
+  if (!date || isNaN(date.getTime())) return 'N/A';
   return date.toLocaleDateString(undefined, {
     year: 'numeric',
     month: 'short',
@@ -9,10 +20,29 @@ export const formatDate = (dateString) => {
 };
 
 export const formatDateTime = (dateString) => {
-  if (!dateString) return 'N/A';
-  const date = new Date(dateString);
+  const date = normalizeUtc(dateString);
+  if (!date || isNaN(date.getTime())) return 'N/A';
   return date.toLocaleString(undefined, {
     year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+export const formatChatTime = (dateString) => {
+  const date = normalizeUtc(dateString);
+  if (!date || isNaN(date.getTime())) return '';
+  const now = new Date();
+  const isToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+  if (isToday) {
+    return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+  return date.toLocaleString(undefined, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
