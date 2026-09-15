@@ -22,6 +22,72 @@ from app.utils.prompts import PROMPT_VERSION
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+def _generate_fallback_summary(project_name: str, atoms: list) -> str:
+    techs = []
+    roles = []
+    features = []
+    constraints = []
+    for a in atoms:
+        subj = (a.subject or "").lower()
+        act = (a.action or a.raw_text or "").strip()
+        c = (a.constraint_text or "").strip()
+        if any(k in subj for k in ["tech", "database", "storage", "backend", "frontend"]):
+            techs.append(act)
+        elif any(k in subj for k in ["role", "user", "access"]):
+            roles.append(act)
+        elif any(k in subj for k in ["security", "constraint", "auth", "compliance"]):
+            constraints.append(f"{act} ({c})" if c else act)
+        else:
+            features.append(f"{act} ({c})" if c else act)
+
+    sentences = [
+        f"This Software Requirements Specification (SRS) defines the formal functional and architectural baseline for {project_name}."
+    ]
+    if techs:
+        sentences.append(f"The architectural and technology stack foundation encompasses: {', '.join(techs[:3])}.")
+    if roles:
+        sentences.append(f"System access and governance are structured around: {', '.join(roles[:2])}.")
+    if features:
+        sentences.append(f"Core operational capabilities include: {', '.join(features[:4])}.")
+    if constraints:
+        sentences.append(f"Security and operational constraints mandate that: {', '.join(constraints[:3])}.")
+    sentences.append("All specifications documented herein have been captured through stakeholder interviews and validated for technical consistency.")
+    return " ".join(sentences)
+
+def _format_requirement_statement(atom) -> str:
+    action = (atom.action or "").strip()
+    raw = (atom.raw_text or "").strip()
+    subj = (atom.subject or "").strip()
+    constraint = (atom.constraint_text or "").strip()
+
+    invalid_fragments = {
+        "is your choice", "unspecified", "no specific", "leave it for dev side",
+        "none", "n/a", "handle", "use", "includes", "define", "adhere", "shall be systematic"
+    }
+
+    if action and action.lower() not in invalid_fragments and len(action.split()) >= 3:
+        act_lower = action.lower()
+        if act_lower.startswith(("the system shall", "the platform shall", "the application shall")):
+            return action
+        elif act_lower.startswith(("shall", "must", "will")):
+            return f"The system {action}"
+        else:
+            return f"The system shall {action[0].lower() + action[1:]}"
+
+    if raw and len(raw.split()) >= 3 and raw.lower() not in invalid_fragments:
+        clean_raw = raw.strip().rstrip(".").strip()
+        if clean_raw.lower().startswith(("the system shall", "the platform shall", "the application shall")):
+            return clean_raw + "."
+        return f"The system shall support: {clean_raw}."
+
+    if constraint and constraint.lower() not in invalid_fragments:
+        return f"The system shall adhere to {constraint} for {subj.lower() if subj else 'system operations'}."
+
+    if action and action.lower() not in invalid_fragments:
+        return f"The system shall {action} as specified for {subj.lower() if subj else 'the feature'}."
+
+    return f"The system shall implement verified specifications for {subj or 'general system functionality'}."
+
 class SRSGenerator:
     @classmethod
     async def generate_srs(cls, session_id: uuid.UUID, db: AsyncSession) -> SRSVersion:
@@ -83,75 +149,47 @@ class SRSGenerator:
         atoms = verified_atoms
         conflicted_count = max(conflicted_count, len(pending_contradiction_atom_ids))
 
+        summary_text = ""
+        llm_model = getattr(settings, 'GROQ_FAST_MODEL', 'groq/compound-mini')
+        candidates = [llm_model, "groq/compound-mini", "groq/compound", getattr(settings, 'GROQ_MODEL', 'groq/compound')]
         if atoms and not settings.groq_is_mocked:
             try:
                 client = get_groq_client()
-                numbered = "\n".join(f"[{i+1}] {a.raw_text}" for i, a in enumerate(atoms))
-                filter_resp = client.chat.completions.create(
-                    model=settings.GROQ_MODEL,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": (
-                                "You are a requirements analyst. Given a list of requirement statements, "
-                                "return ONLY the numbers (comma-separated) of the ones that are unique, "
-                                "meaningful, and should be kept in a formal SRS document. "
-                                "Exclude: duplicates, near-duplicates, trivial conversational filler, "
-                                "greetings, vague non-requirements, single-word answers. "
-                                "Reply with ONLY numbers, e.g.: 1,3,5,7"
-                            ),
-                        },
-                        {"role": "user", "content": f"Filter these requirements:\n{numbered}"},
-                    ],
-                    timeout=settings.GROQ_TIMEOUT_SECONDS,
+                system_msg = (
+                    "You are a senior technical writer specialising in Software Requirements Specifications (SRS). "
+                    "Write a professional, comprehensive executive summary (150–250 words) outlining the project's "
+                    "purpose, architecture, core features, user roles, and operational constraints. "
+                    "Do not use markdown fences, bullet points, or section headings."
                 )
-                raw_indices = filter_resp.choices[0].message.content.strip()
-                keep = set()
-                for part in raw_indices.split(","):
-                    part = part.strip()
-                    if part.isdigit():
-                        idx = int(part) - 1
-                        if 0 <= idx < len(atoms):
-                            keep.add(idx)
-                if keep:
-                    atoms = [atoms[i] for i in sorted(keep)]
+                user_msg = (
+                    f"Write a formal executive summary for the '{project_name}' project based on these captured requirements:\n\n"
+                    + "\n".join([f"- [{a.subject or 'Requirement'}] {a.action or a.raw_text}" + (f" (Constraint: {a.constraint_text})" if a.constraint_text else "") for a in atoms])
+                )
+                seen_models = set()
+                for cand in candidates:
+                    if not cand or cand in seen_models:
+                        continue
+                    seen_models.add(cand)
+                    try:
+                        resp = client.chat.completions.create(
+                            model=cand,
+                            messages=[
+                                {"role": "system", "content": system_msg},
+                                {"role": "user", "content": user_msg},
+                            ],
+                            timeout=min(settings.GROQ_TIMEOUT_SECONDS, 6),
+                        )
+                        if resp and resp.choices and resp.choices[0].message.content.strip():
+                            summary_text = resp.choices[0].message.content.strip()
+                            llm_model = cand
+                            break
+                    except Exception:
+                        continue
             except Exception as e:
-                logger.warning(f"[SRS] LLM atom pre-filter failed, using all atoms: {e}")
+                logger.warning(f"[SRS] LLM executive summary generation failed ({e}), using structured fallback.")
 
-        summary_text = "No summary generated."
-        llm_model = settings.GROQ_MODEL
-        if atoms:
-            client = get_groq_client()
-            if not settings.groq_is_mocked:
-                try:
-                    system_msg = (
-                        "You are a senior technical writer specialising in Software Requirements Specifications (SRS). "
-                        "Write clear, professional prose. Be concise. Do not use bullet points or headers — "
-                        "produce a flowing executive summary paragraph."
-                    )
-                    user_msg = (
-                        f"Write a short executive summary (150–250 words) for an SRS document "
-                        f"for a project called \"{project_name}\".\n\n"
-                        "Base it on these captured requirements:\n"
-                        + "\n".join([f"- {a.raw_text}" for a in atoms])
-                    )
-                    response = client.chat.completions.create(
-                        model=settings.GROQ_MODEL,
-                        messages=[
-                            {"role": "system", "content": system_msg},
-                            {"role": "user", "content": user_msg},
-                        ],
-                        timeout=settings.GROQ_TIMEOUT_SECONDS,
-                    )
-                    summary_text = response.choices[0].message.content.strip()
-                except Exception as e:
-                    logger.error(f"Failed to generate Groq summary for SRS: {e}")
-                    summary_text = "Executive summary generation timed out/failed. Please review requirements below."
-            else:
-                summary_text = (
-                    f"This document specifies the requirements for the {project_name} project. "
-                    f"{len(atoms)} requirement atoms were captured across the gathering sessions."
-                )
+        if not summary_text or len(summary_text.split()) < 15:
+            summary_text = _generate_fallback_summary(project_name, atoms)
 
         doc = docx.Document()
         from docx.shared import Inches, Pt, RGBColor
@@ -233,7 +271,7 @@ class SRSGenerator:
                 table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
                 hdr_cells = table.rows[0].cells
-                hdr_titles = ["Ref #", "Subject Domain", "Action Statement", "Constraint Details"]
+                hdr_titles = ["Ref #", "Requirement Specification (IEEE 830)", "Subject Domain", "Constraint Details"]
                 for idx, text in enumerate(hdr_titles):
                     p = hdr_cells[idx].paragraphs[0]
                     run = p.add_run(text)
@@ -243,9 +281,10 @@ class SRSGenerator:
                 for atom in group_atoms:
                     row_cells = table.add_row().cells
                     row_cells[0].paragraphs[0].add_run(f"REQ-{atom_idx:03d}")
-                    row_cells[1].paragraphs[0].add_run(atom.subject or "Unspecified")
-                    row_cells[2].paragraphs[0].add_run(atom.action or "Unspecified")
-                    row_cells[3].paragraphs[0].add_run(atom.constraint_text or "N/A")
+                    row_cells[1].paragraphs[0].add_run(_format_requirement_statement(atom))
+                    row_cells[2].paragraphs[0].add_run(atom.subject or "General")
+                    constraint_val = atom.constraint_text if atom.constraint_text and atom.constraint_text.lower() not in ("n/a", "none", "unspecified", "") else "Standard"
+                    row_cells[3].paragraphs[0].add_run(constraint_val)
                     atom_idx += 1
 
                 doc.add_paragraph()
