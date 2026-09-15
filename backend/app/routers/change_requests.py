@@ -4,13 +4,14 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import require_roles, get_scoped_project
 from app.models.change_request import ChangeRequest
 from app.models.contradiction import Contradiction
+from app.models.requirement_atom import RequirementAtom
 from app.models.user import User
 from app.schemas.change_request import ChangeRequestCreate, ChangeRequestRead, ChangeRequestReview
 from app.services.impact_analyser import ImpactAnalyser
@@ -77,9 +78,22 @@ async def create_change_request(
     conflict_hits = analysis_result.get("_conflict_hits", [])
     if conflict_hits:
         for hit in conflict_hits:
+            existing_atom_id = hit.get("existing_atom_id")
+            if existing_atom_id:
+                dup_res = await db.execute(
+                    select(Contradiction).where(
+                        Contradiction.atom_1_id == existing_atom_id,
+                        Contradiction.status == "pending",
+                    )
+                )
+                if dup_res.scalar_one_or_none():
+                    logger.info(
+                        f"Skipping duplicate contradiction for atom {existing_atom_id} (already pending)"
+                    )
+                    continue
             db.add(Contradiction(
                 session_id=None,
-                atom_1_id=hit.get("existing_atom_id"),
+                atom_1_id=existing_atom_id,
                 atom_2_id=None,
                 confidence=hit.get("confidence"),
                 conflict_type=hit.get("conflict_type"),
@@ -93,7 +107,7 @@ async def create_change_request(
             ))
         await db.commit()
         logger.info(
-            f"{len(conflict_hits)} requirement conflict(s) persisted from change request {cr.id}"
+            f"{len(conflict_hits)} requirement conflict(s) processed from change request {cr.id}"
         )
 
     return cr
@@ -209,3 +223,40 @@ async def review_change_request(
     await db.commit()
     await db.refresh(cr)
     return cr
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_change_request(
+    id: uuid.UUID,
+    current_user: User = Depends(require_roles("admin", "developer", "client")),
+    db: AsyncSession = Depends(get_db)
+):
+    cr = await db.get(ChangeRequest, id)
+    if not cr:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Change request not found."
+        )
+
+    await get_scoped_project(cr.project_id, current_user, db)
+
+    if current_user.role == "client" and cr.client_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only delete change requests submitted by your account."
+        )
+
+    contradictions_res = await db.execute(
+        select(Contradiction).where(Contradiction.change_request_id == cr.id)
+    )
+    linked_contradictions = list(contradictions_res.scalars().all())
+    for c in linked_contradictions:
+        if c.atom_1_id:
+            atom = await db.get(RequirementAtom, c.atom_1_id)
+            if atom and atom.status == "conflicted":
+                atom.status = "active"
+                db.add(atom)
+        await db.delete(c)
+
+    await db.delete(cr)
+    await db.commit()
+    return None
