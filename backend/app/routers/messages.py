@@ -21,7 +21,7 @@ from app.models.user import User
 from app.schemas.message import MessageCreate, MessageRead
 from app.services.aria_agent import AriaAgent, _detect_client_tone
 from app.services.embedding_service import EmbeddingService
-from app.services.rdcd_layer import RDCDLayer
+from app.services.rdcd_layer import RDCDLayer, detect_contradiction_rule_based
 from app.services.session_memory import SessionMemory, get_redis_client
 from app.services.vector_store import VectorStore
 from app.config import get_settings
@@ -85,23 +85,29 @@ def _find_keyword_match(
     
     best = None
     best_score = 0.0
-    tech_words = {"ruby", "python", "javascript", "typescript", "java", "golang", "go", "php", "c#", "rust", "postgres", "postgresql", "mysql", "mongodb"}
-    curr_tech = set(re.findall(r"[a-z0-9]+", raw.lower())) & tech_words
+    backend_words = {"ruby", "rails", "python", "fastapi", "django", "java", "golang", "go", "php", "laravel", "c#", "rust", "node"}
+    frontend_words = {"react native", "react", "flutter", "swift", "kotlin", "vue", "angular", "javascript", "typescript"}
+    db_words = {"postgres", "postgresql", "postgis", "mysql", "mongodb", "sqlite", "oracle"}
+
+    curr_back = set(re.findall(r"[a-z0-9]+", raw.lower())) & backend_words
+    curr_front = set(re.findall(r"[a-z0-9]+", raw.lower())) & frontend_words
+    curr_db = set(re.findall(r"[a-z0-9]+", raw.lower())) & db_words
 
     for prior in prior_atoms:
         prior_raw = prior.raw_text or ""
         prior_subj = (prior.subject or "").lower().strip()
         
         score = _keyword_overlap_score(raw, prior_raw)
-        
 
-        if subj and prior_subj and (subj == prior_subj or "tech" in subj or "stack" in subj or "language" in subj):
-            score = max(score, 0.8)
-        
+        if subj and prior_subj and (subj == prior_subj):
+            score = max(score, 0.7)
 
-        prior_tech = set(re.findall(r"[a-z0-9]+", prior_raw.lower())) & tech_words
-        if curr_tech and prior_tech:
-            score = max(score, 0.9)
+        prior_back = set(re.findall(r"[a-z0-9]+", prior_raw.lower())) & backend_words
+        prior_front = set(re.findall(r"[a-z0-9]+", prior_raw.lower())) & frontend_words
+        prior_db = set(re.findall(r"[a-z0-9]+", prior_raw.lower())) & db_words
+
+        if (curr_back and prior_back) or (curr_front and prior_front) or (curr_db and prior_db):
+            score = max(score, 0.85)
 
         if score > best_score:
             best_score = score
@@ -213,11 +219,27 @@ async def create_message(
         if len(atom_summary) > 3000:
             atom_summary = atom_summary[:3000] + "..."
 
+        prior_session_msgs = (
+            await db.execute(
+                select(Message)
+                .join(Session, Message.session_id == Session.id)
+                .where(
+                    Session.project_id == session.project_id,
+                    Session.id != session_id,
+                    Message.sender.in_(["client", "user", "aria"]),
+                    Message.message_type != "conflict_alert",
+                )
+                .order_by(Message.created_at.desc())
+                .limit(30)
+            )
+        ).scalars().all()
+        prior_context = " ".join([m.content for m in reversed(prior_session_msgs) if m.content])[:4000]
+
         sanitized_content, is_flagged = RDCDLayer.sanitize_input(body.content)
 
         history = await SessionMemory.get_messages(session_id, db=db)
 
-        if not history:
+        if not history or len(history) <= 1:
             await SessionMemory.seed_from_prior_session(
                 current_session_id=session_id,
                 project_id=session.project_id,
@@ -230,6 +252,7 @@ async def create_message(
             "description": project.description if project else "",
             "domain": project.domain if project else "",
             "atom_summary": atom_summary[:3000] if atom_summary else "",
+            "prior_context": prior_context,
         }
 
         loop = asyncio.get_event_loop()
@@ -292,41 +315,25 @@ async def create_message(
             if atom_summary:
                 existing_atom_dict["project_atom_summary"] = atom_summary[:1500]
             try:
-                c_result = await loop.run_in_executor(
-                    None,
-                    functools.partial(RDCDLayer.detect_contradiction, existing_atom_dict, atom_dict),
-                )
-                if c_result and c_result.get("conflict_type") != "check_failed":
+                c_result = detect_contradiction_rule_based(existing_atom_dict, atom_dict)
+                if c_result and c_result.get("conflict_type") not in ("none", "check_failed"):
                     return (match, c_result)
+
+                if not settings.groq_is_mocked and match.get("distance", 1.0) < 0.2:
+                    c_result = await loop.run_in_executor(
+                        None,
+                        functools.partial(RDCDLayer.detect_contradiction, existing_atom_dict, atom_dict),
+                    )
+                    if c_result and c_result.get("conflict_type") not in ("none", "check_failed"):
+                        return (match, c_result)
             except Exception as exc:
                 logger.warning("Contradiction detect evaluation failed: %s", exc)
             return None
 
         async def _process_single_atom(atom_dict: dict, sibling_atoms: list[dict]):
-            raw_text = atom_dict.get("raw_text", sanitized_content)
             matches = []
-            try:
-                if not settings.chroma_is_mocked:
-                    embedding = await loop.run_in_executor(None, EmbeddingService.embed, raw_text)
-                    results = await loop.run_in_executor(
-                        None,
-                        lambda: VectorStore.query_similar_atoms(
-                            session_id=session.project_id,
-                            query_embedding=embedding,
-                            limit=2,
-                            status_filter="active",
-                        )
-                    )
-                    effective_threshold = min(chroma_threshold, 0.45)
-                    for res in results:
-                        if res.get("distance", 1.0) < effective_threshold:
-                            matches.append(res)
-                else:
-                    logger.debug("Chroma is mocked — skipping vector similarity for atom.")
-            except Exception as exc:
-                logger.warning("Chroma query failed for atom '%s...': %s", raw_text[:60], exc)
 
-            if not matches and prior_atoms:
+            if prior_atoms:
                 fb = _find_keyword_match(atom_dict, prior_atoms)
                 if fb:
                     matches.append(fb)
@@ -338,7 +345,6 @@ async def create_message(
                 subj_b = (sibling.get("subject") or "").lower().strip()
                 act_a = (atom_dict.get("action") or "").lower().strip()
                 act_b = (sibling.get("action") or "").lower().strip()
-                
 
                 shared_action_keywords = set(act_a.split()) & set(act_b.split())
                 if (subj_a and subj_b and subj_a == subj_b) or shared_action_keywords:

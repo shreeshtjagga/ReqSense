@@ -19,6 +19,8 @@ router = APIRouter(prefix="/contradictions", tags=["contradictions"])
 def _atom_display_text(atom: Optional[RequirementAtom]) -> Optional[str]:
     if not atom:
         return None
+    if atom.raw_text and atom.raw_text.strip():
+        return atom.raw_text.strip()
     parts = []
     if atom.subject:
         parts.append(atom.subject)
@@ -28,15 +30,28 @@ def _atom_display_text(atom: Optional[RequirementAtom]) -> Optional[str]:
         parts.append(f"({atom.constraint_text})")
     if parts:
         return " - ".join(parts)
-    return atom.raw_text or None
+    return "Requirement specification"
 
 async def _enrich(c: Contradiction, db: AsyncSession) -> ContradictionRead:
+    from app.models.change_request import ChangeRequest
+
     atom_1 = await db.get(RequirementAtom, c.atom_1_id) if c.atom_1_id else None
     atom_2 = await db.get(RequirementAtom, c.atom_2_id) if c.atom_2_id else None
+
+    cr = await db.get(ChangeRequest, c.change_request_id) if c.change_request_id else None
 
     data = ContradictionRead.model_validate(c)
     data.atom_1_text = _atom_display_text(atom_1)
     data.atom_2_text = _atom_display_text(atom_2)
+    data.atom_1_raw = atom_1.raw_text if atom_1 else None
+    data.atom_2_raw = atom_2.raw_text if atom_2 else None
+    data.atom_1_category = atom_1.subject if atom_1 else None
+    data.atom_2_category = atom_2.subject if atom_2 else None
+    data.atom_1_type = None
+    data.atom_2_type = None
+    if cr:
+        data.change_request_title = cr.title
+        data.change_request_description = cr.description
     return data
 
 @router.get("/project/{project_id}", response_model=List[ContradictionRead])
@@ -149,7 +164,7 @@ async def resolve_contradiction(
 
     await get_scoped_project(target_project_id, current_user, db)
 
-    c.status = body.action
+    c.status = "resolved" if body.action in ("resolved", "rejected") else "ignored"
     c.resolution = body.resolution or f"Marked as {body.action} by developer."
     c.is_false_positive = body.is_false_positive if body.is_false_positive is not None else False
     c.resolved_by = current_user.id
@@ -159,6 +174,7 @@ async def resolve_contradiction(
     atom_2 = await db.get(RequirementAtom, c.atom_2_id) if c.atom_2_id else None
 
     from app.services.vector_store import VectorStore
+    from app.models.change_request import ChangeRequest
 
     if body.action == "resolved":
         if atom_1:
@@ -174,9 +190,37 @@ async def resolve_contradiction(
             atom_2.status = "active"
             db.add(atom_2)
 
+        if c.change_request_id:
+            cr = await db.get(ChangeRequest, c.change_request_id)
+            if cr and cr.status == "pending":
+                cr.status = "approved"
+                cr.developer_note = body.resolution or "Approved and applied to baseline requirements."
+                db.add(cr)
+
         if session:
             session.stability_score = min(100.0, (session.stability_score or 0) + 10.0)
             db.add(session)
+
+    elif body.action == "rejected":
+        if atom_1:
+            atom_1.status = "active"
+            db.add(atom_1)
+
+        if atom_2:
+            atom_2.status = "superseded"
+            db.add(atom_2)
+            try:
+                VectorStore.update_atom_status(target_project_id, atom_2.id, "superseded")
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).warning("Failed to sync atom_2 superseded status to Chroma: %s", exc)
+
+        if c.change_request_id:
+            cr = await db.get(ChangeRequest, c.change_request_id)
+            if cr and cr.status == "pending":
+                cr.status = "rejected"
+                cr.developer_note = body.resolution or "Rejected due to conflict with baseline requirements."
+                db.add(cr)
 
     elif body.action == "ignored":
         if atom_1:
