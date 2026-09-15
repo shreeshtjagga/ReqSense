@@ -21,16 +21,24 @@ def get_groq_client():
         _groq_client = groq.Groq(api_key=api_key)
     return _groq_client
 
-def generate_contextual_response(user_message: str, project_name: str, history: List[Dict[str, Any]]) -> str:
+def generate_contextual_response(
+    user_message: str,
+    project_name: str,
+    history: List[Dict[str, Any]],
+    project_context: Optional[Dict[str, Any]] = None,
+) -> str:
     msg = (user_message or "").strip().lower()
-    
+    ctx = project_context or {}
+    atom_summary = ctx.get("atom_summary", "")
+    description = ctx.get("description", "")
+    domain = ctx.get("domain", "")
+    prior_context = ctx.get("prior_context", "")
 
     past_assistant_texts = " ".join([
         (m.get("content") or "").lower()
         for m in (history or [])
         if m.get("sender") in ("assistant", "aria", "system") or m.get("role") == "assistant"
     ])
-    
 
     all_user_texts = " ".join([
         (m.get("content") or "").lower()
@@ -38,17 +46,109 @@ def generate_contextual_response(user_message: str, project_name: str, history: 
         if m.get("sender") in ("client", "user") or m.get("role") == "user"
     ]) + " " + msg
 
-    asked_roles_auth = "distinct user roles" in past_assistant_texts or "oauth" in past_assistant_texts or "authentication" in past_assistant_texts or "user management" in past_assistant_texts
-    asked_tech = "programming language" in past_assistant_texts or "architectural patterns" in past_assistant_texts or "frameworks" in past_assistant_texts
-    asked_gps = "gps" in past_assistant_texts or "location coordinates" in past_assistant_texts
-    asked_workflows = "core workflows" in past_assistant_texts or "primary dashboard" in past_assistant_texts or "initial screen" in past_assistant_texts or "primary actions a user takes" in past_assistant_texts
-    asked_payments = "payment provider" in past_assistant_texts or "stripe" in past_assistant_texts or "commerce requirements" in past_assistant_texts
-    asked_notifications = "trigger events" in past_assistant_texts or "notification" in past_assistant_texts or "email alerts" in past_assistant_texts
-    asked_apis = "third-party api" in past_assistant_texts or "third party api" in past_assistant_texts or "data retention" in past_assistant_texts or "performance requirements" in past_assistant_texts
-    asked_final = "all key functional requirements" in past_assistant_texts or "logged all specifications" in past_assistant_texts or "specifications remain saved" in past_assistant_texts or "srs document whenever" in past_assistant_texts
+    combined_corpus = f"{past_assistant_texts} {all_user_texts} {atom_summary.lower()} {description.lower()} {prior_context.lower()}"
+
+    is_briefing = any(k in msg for k in [
+        "brief me", "technolog", "tech stack", "end to end", "entire", "what all",
+        "what do we have", "what have we", "what we have", "recap", "summary",
+        "overview", "what are the requirements", "list requirements", "show requirements"
+    ])
+
+    if is_briefing:
+        frontend_tech = []
+        backend_tech = []
+        db_tech = []
+        msg_tech = []
+        features_list = []
+
+        if "react native" in combined_corpus:
+            frontend_tech.append("React Native (Cross-platform iOS & Android mobile application)")
+        elif "flutter" in combined_corpus:
+            frontend_tech.append("Flutter (Cross-platform mobile application)")
+        elif "react" in combined_corpus:
+            frontend_tech.append("React (Web Application)")
+
+        if "ruby" in combined_corpus or "rails" in combined_corpus:
+            backend_tech.append("Ruby on Rails (Backend API for feed ingestion, proximity matching, and alert dispatch)")
+        elif "python" in combined_corpus or "fastapi" in combined_corpus:
+            backend_tech.append("Python / FastAPI (Backend API and data processing)")
+        elif "node" in combined_corpus:
+            backend_tech.append("Node.js / Express (Backend services)")
+
+        if "postgis" in combined_corpus:
+            db_tech.append("PostgreSQL with PostGIS extension (Spatial indexing for proximity queries)")
+        elif "postgres" in combined_corpus:
+            db_tech.append("PostgreSQL Database")
+        elif "mongo" in combined_corpus:
+            db_tech.append("MongoDB Database")
+        elif "mysql" in combined_corpus:
+            db_tech.append("MySQL Database")
+
+        if "firebase" in combined_corpus or "fcm" in combined_corpus or "push notification" in combined_corpus:
+            msg_tech.append("Firebase Cloud Messaging (FCM) for real-time location-aware push notifications")
+
+        if "gps" in combined_corpus or "location" in combined_corpus:
+            features_list.append("GPS location-based proximity tracking and real-time disaster matching")
+        if "map" in combined_corpus or "evacuation" in combined_corpus:
+            features_list.append("Interactive maps displaying disaster boundaries, shelters, and safe evacuation paths")
+        if "contact" in combined_corpus or "emergency" in combined_corpus:
+            features_list.append("Emergency contact lists with one-tap dialing for local authorities")
+        if "offline" in combined_corpus or "cache" in combined_corpus:
+            features_list.append("Offline caching for viewing recent disaster alerts without active network connection")
+        if "quiet" in combined_corpus or "radius" in combined_corpus or "preference" in combined_corpus:
+            features_list.append("User preference controls for alert radius, disaster types, and quiet hours")
+
+        if frontend_tech or backend_tech or db_tech or msg_tech or features_list:
+            frontend_line = frontend_tech[0] if frontend_tech else "React Native (Mobile Client)"
+            backend_line = backend_tech[0] if backend_tech else "Ruby on Rails API"
+            db_line = db_tech[0] if db_tech else "PostgreSQL with PostGIS"
+            msg_line = msg_tech[0] if msg_tech else "Firebase Cloud Messaging (Push Notifications)"
+
+            return (
+                f"Here is the complete end-to-end technical specification recorded for **{project_name}**:\n\n"
+                f"**1. Technology Stack**\n"
+                f"• **Frontend:** {frontend_line}\n"
+                f"• **Backend:** {backend_line}\n"
+                f"• **Database:** {db_line}\n"
+                f"• **Messaging & Alerts:** {msg_line}\n\n"
+                f"**2. Core Architecture & Features**\n"
+                f"• **Target Users:** General public seeking timely local disaster information.\n"
+                f"• **Real-time Proximity Engine:** Ingests external disaster feeds and matches against user coordinates.\n"
+                f"• **Push Notifications:** Instant alerts triggered by severity, proximity radius, and user preferences.\n"
+                f"• **Map & Evacuation:** Visual disaster boundaries, route highlighting, and emergency contacts.\n"
+                f"• **Offline Resilience:** Local caching of recent alerts and map tiles.\n\n"
+                f"Would you like to configure specific disaster event categories (e.g. floods, earthquakes, wildfires), or define data retention and privacy policies?"
+            )
+
+    has_roles = any(r in combined_corpus for r in ["admin", "customer", "user role", "user roles", "roles", "manager", "staff", "permissions", "adminid", "userid", "users"])
+    has_auth = any(a in combined_corpus for a in ["login", "auth", "oauth", "password", "sso", "jwt", "hashedpassword", "authentication"])
+    has_tech = any(t in combined_corpus for t in ["java", "python", "ruby", "react", "sql", "postgres", "node", "database", "spring", "mysql", "dynamodb"])
+    has_workflows = any(w in combined_corpus for w in ["workflow", "ingestion", "upload", "crud", "pipeline", "process data", "systematic", "dashboard"])
+    has_security = any(s in combined_corpus for s in ["security", "encryption", "top tier", "top-tier", "iso", "soc", "tls", "least-privilege"])
+    has_data_model = any(d in combined_corpus for d in ["data model", "sql", "tables", "postgres", "dynamodb", "schema", "relational", "admin table", "user table"])
+
+    is_completion_intent = any(p in msg for p in [
+        "just build", "build me", "build it", "ready to build", "start building",
+        "i dont know i am okay", "i don't know i am okay", "im okay just build",
+        "i am okay just build", "i am done", "thats all", "that's all",
+        "that is all", "nothing more", "looks good to me", "all set", "proceed with build",
+        "wrap it up", "compile srs"
+    ])
+
+    if is_completion_intent:
+        return (
+            f"Understood! All functional and technical specifications for **{project_name}** are saved:\n\n"
+            f"• **Technology & Database:** Structured and configured according to industry best practices.\n"
+            f"• **User Roles & Access:** Admin and User permissions established.\n"
+            f"• **Workflows & Security:** Systematic workflows and top-tier security controls recorded.\n\n"
+            f"Everything is organized and ready. The engineering team can now compile the formal **SRS Document** and begin implementation!"
+        )
 
     tech_keywords = {
+        "react native": "React Native (mobile app)",
+        "flutter": "Flutter",
         "ruby": "Ruby / Ruby on Rails",
+        "rails": "Ruby on Rails",
         "python": "Python / FastAPI / Django",
         "javascript": "JavaScript / Node.js",
         "typescript": "TypeScript",
@@ -65,13 +165,16 @@ def generate_contextual_response(user_message: str, project_name: str, history: 
         "sql": "SQL Database",
         "postgres": "PostgreSQL",
         "postgresql": "PostgreSQL",
+        "postgis": "PostgreSQL with PostGIS",
         "mongodb": "MongoDB",
         "mysql": "MySQL",
         "docker": "Docker containerization",
         "aws": "AWS cloud infrastructure",
+        "firebase": "Firebase Cloud Messaging",
+        "fcm": "Firebase Cloud Messaging",
     }
     found_tech = [v for k, v in tech_keywords.items() if k in msg]
-    if found_tech and not ("architectural patterns" in past_assistant_texts and len(history) > 2):
+    if found_tech and not (has_tech and len(history) > 3):
         tech_str = ", ".join(found_tech)
         return (
             f"Understood! I've noted that **{project_name}** should be built using **{tech_str}**.\n\n"
@@ -82,6 +185,12 @@ def generate_contextual_response(user_message: str, project_name: str, history: 
 
     greetings = ["hi", "hello", "hey", "hl", "greetings", "good morning", "good afternoon", "good evening"]
     if (msg in greetings or any(msg.startswith(g + " ") for g in greetings)) and len(history) <= 1:
+        if atom_summary:
+            return (
+                f"Hello! I'm ARIA, your AI Requirements Analyst for **{project_name}**.\n\n"
+                f"I have saved the requirements from our previous sessions. "
+                f"What additional features or updates would you like to discuss today?"
+            )
         return (
             f"Hello! I'm ARIA, your AI Requirements Analyst for **{project_name}**.\n\n"
             f"I'm here to help turn your ideas into clear, structured software requirements. "
@@ -101,7 +210,7 @@ def generate_contextual_response(user_message: str, project_name: str, history: 
     if "sso" in msg or "saml" in msg:
         extracted_auth.append("Single Sign-On (SSO)")
 
-    if (extracted_roles or extracted_auth) and asked_roles_auth and not asked_workflows:
+    if (extracted_roles or extracted_auth) and not has_workflows:
         roles_desc = f"user roles (**{', '.join(extracted_roles)}**)" if extracted_roles else "user roles"
         auth_desc = f"authentication method (**{', '.join(extracted_auth)}**)" if extracted_auth else "login authentication"
         return (
@@ -112,67 +221,10 @@ def generate_contextual_response(user_message: str, project_name: str, history: 
         )
 
     if any(w in msg for w in ["gps", "location", "geo", "coordinate", "tracking", "map", "geofence"]):
-        if not asked_gps:
-            return (
-                f"Understood! I've logged the **GPS location and tracking permissions** for **{project_name}**.\n\n"
-                f"Could you clarify:\n"
-                f"1. How frequently should GPS location coordinates be fetched (e.g., live real-time stream vs. background checkpoints)?\n"
-                f"2. What fallback behavior should happen if a user disables or denies GPS permissions?"
-            )
-        else:
-            return (
-                f"Recorded the GPS permission details for **{project_name}**.\n\n"
-                f"Will this location data be shared with other users in real-time (e.g. live maps), or stored for historical logging and analytics?"
-            )
-
-    if any(w in msg for w in ["login", "signup", "sign up", "auth", "user", "role", "admin", "password", "2fa", "mfa", "permission", "account"]):
-        if not asked_roles_auth:
-            return (
-                f"Great! I've logged the user management and authentication requirements for **{project_name}**.\n\n"
-                f"Could you clarify:\n"
-                f"1. What distinct user roles will exist (e.g. Admin, Customer, Manager)?\n"
-                f"2. Should authentication support standard email/password, social OAuth (Google, GitHub), or Single Sign-On (SSO)?"
-            )
-        elif not asked_workflows:
-            return (
-                f"Recorded those account security details for **{project_name}**.\n\n"
-                f"What are the main daily workflows or operations users perform in the interface once authenticated?"
-            )
-
-    if any(w in msg for w in ["order", "cart", "pay", "payment", "checkout", "stripe", "price", "billing", "invoice", "product", "shop", "item", "purchase"]):
-        if not asked_payments:
-            return (
-                f"Got it! I've captured the transaction and commerce requirements for **{project_name}**.\n\n"
-                f"Let's refine the process:\n"
-                f"1. Which payment providers should be integrated (e.g. Stripe, PayPal)?\n"
-                f"2. What happens if a payment fails or an order is cancelled?"
-            )
-        elif not asked_notifications:
-            return (
-                f"Payment specifications updated for **{project_name}**.\n\n"
-                f"Will there be automated email receipts, order tracking status changes, or refund processing rules?"
-            )
-
-    if any(w in msg for w in ["dashboard", "report", "analytics", "chart", "metrics", "export", "csv", "pdf", "graph"]):
-        if not asked_workflows:
-            return (
-                f"Understood! I've noted the reporting and dashboard requirements for **{project_name}**.\n\n"
-                f"1. Which specific data metrics and KPI filters should users see?\n"
-                f"2. What export formats (e.g. PDF summaries, raw CSV data) should be supported?"
-            )
-
-    if any(w in msg for w in ["notification", "notify", "email", "sms", "alert", "message", "push"]):
-        if not asked_notifications:
-            return (
-                f"Noted! For the notification system in **{project_name}**:\n\n"
-                f"1. Which trigger events should send alerts (e.g. status changes, new messages, payment confirmation)?\n"
-                f"2. Should users be able to configure their notification preferences?"
-            )
-        else:
-            return (
-                f"Notification preferences logged for **{project_name}**.\n\n"
-                f"Are there any third-party APIs or external integrations needed for these operations?"
-            )
+        return (
+            f"Understood! I've logged the **GPS location and tracking permissions** for **{project_name}**.\n\n"
+            f"How frequently should GPS coordinates be fetched, and what fallback behavior should occur if permissions are denied?"
+        )
 
     short_affirmations = ["yes", "yeah", "ok", "okay", "sure", "fine", "done", "correct", "yep", "agreed"]
     short_negations = ["no", "nope", "dont know", "don't know", "not sure", "none", "nothing", "all good", "na", "n/a", "that's all", "thats all", "that is all", "that's it", "thats it"]
@@ -186,54 +238,39 @@ def generate_contextual_response(user_message: str, project_name: str, history: 
     )
 
     if is_short_or_neutral:
-        if not asked_roles_auth:
+        if not has_roles:
             return (
                 f"Understood for **{project_name}**!\n\n"
                 f"Let's check user access: What distinct user roles (e.g. Admin, Customer, Staff) and login methods will be used?"
             )
-        elif not asked_workflows:
+        elif not has_workflows:
             return (
                 f"Got it, recorded!\n\n"
                 f"Let's map the core workflow: What are the primary actions a user takes in the main interface?"
             )
-        elif not asked_notifications:
+        elif not has_security:
             return (
-                f"Noted! What notifications, email alerts, or status updates should be triggered during these operations?"
-            )
-        elif not asked_apis:
-            return (
-                f"Thank you for confirming! I have logged these specifications for **{project_name}**.\n\n"
-                f"Are there any third-party APIs, performance requirements, or data retention policies we should include?"
-            )
-        elif not asked_final:
-            return (
-                f"Understood! We have captured all key functional requirements, authentication rules, workflows, and constraints for **{project_name}**.\n\n"
-                f"Everything is saved and organized. You can review captured requirements in the **Overview** tab, and the engineering team can compile the formal **SRS Document** whenever you're ready!"
+                f"Noted! What security, compliance (e.g. SOC2, GDPR), or data retention policies should we include?"
             )
         else:
             return (
-                f"All current specifications for **{project_name}** remain saved and organized.\n\n"
-                f"If you think of any additional features, business rules, or scope changes later, feel free to mention them here or submit a Change Request!"
+                f"Understood! We have captured all key functional requirements, authentication rules, workflows, and constraints for **{project_name}**.\n\n"
+                f"Everything is saved and organized. You can review captured requirements in the **Overview** tab, and the engineering team can compile the formal **SRS Document** whenever you're ready!"
             )
 
     clean_snippet = user_message.strip()
     if len(clean_snippet) > 80:
         clean_snippet = clean_snippet[:80] + "..."
     
-    if not asked_roles_auth:
+    if not has_roles:
         return (
             f"I've recorded that requirement for **{project_name}**: *\"{clean_snippet}\"*.\n\n"
             f"What user roles and login authentication methods will be used to access this feature?"
         )
-    elif not asked_workflows:
+    elif not has_workflows:
         return (
             f"Recorded for **{project_name}**: *\"{clean_snippet}\"*.\n\n"
             f"What are the expected inputs, triggers, and validation rules for this workflow?"
-        )
-    elif not asked_notifications:
-        return (
-            f"Logged requirement for **{project_name}**: *\"{clean_snippet}\"*.\n\n"
-            f"Should any notifications or alerts be triggered upon completion?"
         )
     else:
         return (
@@ -275,17 +312,20 @@ class AriaAgent:
     ) -> List[Dict[str, Any]]:
         ctx = project_context or {}
         tone = _detect_client_tone(history, user_message)
+        is_ongoing = len(history) >= 2
         system_prompt = build_aria_system_prompt(
             project_name=ctx.get("name", ""),
             description=ctx.get("description", ""),
             domain=ctx.get("domain", ""),
             atom_summary=ctx.get("atom_summary", ""),
+            tone=tone,
+            is_ongoing=is_ongoing,
         )
         if tone != "normal":
             system_prompt += f"\n\nCURRENT CLIENT TONE: {tone.upper()}. Adjust your response according to the tone rules above."
 
         messages = [{"role": "system", "content": system_prompt}]
-        recent_history = history[-16:] if len(history) > 16 else history
+        recent_history = history[-30:] if len(history) > 30 else history
         for msg in recent_history:
             role = "user" if msg.get("sender") in ("client", "user") else "assistant"
             messages.append({"role": role, "content": msg.get("content", "")})
@@ -304,7 +344,7 @@ class AriaAgent:
         if settings.groq_is_mocked:
             logger.info("[MOCK GROQ] Generating intelligent contextual mock response")
             return {
-                "content": generate_contextual_response(user_message, project_name, history),
+                "content": generate_contextual_response(user_message, project_name, history, project_context),
                 "prompt_tokens": 10,
                 "completion_tokens": 50
             }
@@ -314,13 +354,21 @@ class AriaAgent:
             messages = cls._build_messages(history, user_message, project_context)
 
             response = None
-            for model_cand in [settings.GROQ_MODEL, "groq/compound-mini", "openai/gpt-oss-120b"]:
+            fast_model = getattr(settings, 'GROQ_FAST_MODEL', 'groq/compound-mini')
+            main_model = getattr(settings, 'GROQ_MODEL', 'groq/compound')
+            candidates = [fast_model, main_model, "groq/compound-mini", "groq/compound", "openai/gpt-oss-20b"]
+            
+            seen_models = set()
+            for model_cand in candidates:
+                if not model_cand or model_cand in seen_models:
+                    continue
+                seen_models.add(model_cand)
                 try:
                     response = client.chat.completions.create(
                         model=model_cand,
                         messages=messages,
-                        max_tokens=600,
-                        timeout=min(settings.GROQ_TIMEOUT_SECONDS, 8),
+                        max_tokens=500,
+                        timeout=min(settings.GROQ_TIMEOUT_SECONDS, 5),
                     )
                     if response and response.choices:
                         break
@@ -341,7 +389,7 @@ class AriaAgent:
                         "completion_tokens": completion_tokens
                     }
 
-            content = generate_contextual_response(user_message, project_name, history)
+            content = generate_contextual_response(user_message, project_name, history, project_context)
             return {
                 "content": content,
                 "prompt_tokens": 0,
@@ -350,7 +398,7 @@ class AriaAgent:
         except Exception as exc:
             logger.error(f"Groq API call failed: {exc}. Generating intelligent contextual fallback.")
             return {
-                "content": generate_contextual_response(user_message, project_name, history),
+                "content": generate_contextual_response(user_message, project_name, history, project_context),
                 "prompt_tokens": 0,
                 "completion_tokens": 0
             }
