@@ -3,7 +3,7 @@ import { Box, Paper, Typography, Divider, Skeleton } from '@mui/material';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
-import SmartToyIcon from '@mui/icons-material/SmartToy';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 
 export const ChatWindow = ({
   messages,
@@ -39,9 +39,9 @@ export const ChatWindow = ({
         bgcolor: 'background.default',
       }}
     >
-      {}
+      {/* Header */}
       <Box sx={{ px: 3, py: 2, display: 'flex', alignItems: 'center', gap: 1.5, bgcolor: 'background.paper', flexShrink: 0 }}>
-        <SmartToyIcon color="secondary" />
+        <AutoAwesomeIcon color="secondary" />
         <Box>
           <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
             {title}
@@ -53,10 +53,9 @@ export const ChatWindow = ({
       </Box>
       <Divider sx={{ flexShrink: 0 }} />
 
-      {}
+      {/* Message Stream */}
       <Box sx={{ flexGrow: 1, minHeight: 0, overflowY: 'auto', p: 3, display: 'flex', flexDirection: 'column' }}>
         {loading ? (
-
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <Skeleton variant="rounded" height={60} width="60%" sx={{ borderRadius: 3 }} />
             <Skeleton variant="rounded" height={60} width="75%" sx={{ borderRadius: 3, alignSelf: 'flex-end' }} />
@@ -64,7 +63,7 @@ export const ChatWindow = ({
           </Box>
         ) : safeMessages.length === 0 ? (
           <Box sx={{ m: 'auto', textAlign: 'center', maxWidth: 320 }}>
-            <SmartToyIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.4, mb: 2 }} />
+            <AutoAwesomeIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.4, mb: 2 }} />
             <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
               Start Requirement Gathering
             </Typography>

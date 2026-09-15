@@ -1,11 +1,194 @@
 import React from 'react';
 import { Box, Paper, Typography, Avatar } from '@mui/material';
-import SmartToyIcon from '@mui/icons-material/SmartToy';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import PersonIcon from '@mui/icons-material/Person';
 import SettingsSuggestIcon from '@mui/icons-material/SettingsSuggest';
 import { MESSAGE_SENDER } from '../../utils/constants';
-import { formatDateTime } from '../../utils/helpers';
+import { formatChatTime } from '../../utils/helpers';
 import ConflictAlert from './ConflictAlert';
+
+const renderInlineFormatting = (text, isClient) => {
+  if (!text) return text;
+
+  const tokens = [];
+  const regex = /(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\*[^*]+\*|_[^_]+_)/g;
+  let lastIndex = 0;
+  let match;
+  let keyIdx = 0;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      tokens.push(text.substring(lastIndex, match.index));
+    }
+    const token = match[0];
+    if (token.startsWith('**') && token.endsWith('**')) {
+      tokens.push(
+        <strong key={`b-${keyIdx++}`} style={{ fontWeight: 700 }}>
+          {token.slice(2, -2)}
+        </strong>
+      );
+    } else if (token.startsWith('__') && token.endsWith('__')) {
+      tokens.push(
+        <strong key={`b-${keyIdx++}`} style={{ fontWeight: 700 }}>
+          {token.slice(2, -2)}
+        </strong>
+      );
+    } else if (token.startsWith('`') && token.endsWith('`')) {
+      tokens.push(
+        <Box
+          component="code"
+          key={`c-${keyIdx++}`}
+          sx={{
+            bgcolor: isClient ? 'rgba(255,255,255,0.2)' : '#F1F5F9',
+            color: isClient ? '#FFFFFF' : '#0F172A',
+            px: 0.6,
+            py: 0.2,
+            borderRadius: 1,
+            fontFamily: 'monospace',
+            fontSize: '0.88em',
+          }}
+        >
+          {token.slice(1, -1)}
+        </Box>
+      );
+    } else if ((token.startsWith('*') && token.endsWith('*')) || (token.startsWith('_') && token.endsWith('_'))) {
+      tokens.push(
+        <em key={`i-${keyIdx++}`} style={{ fontStyle: 'italic' }}>
+          {token.slice(1, -1)}
+        </em>
+      );
+    } else {
+      tokens.push(token);
+    }
+    lastIndex = regex.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    tokens.push(text.substring(lastIndex));
+  }
+
+  return tokens.length > 0 ? tokens : text;
+};
+
+const FormattedChatMessage = ({ content, isClient }) => {
+  if (!content) return null;
+
+  const lines = content.split('\n');
+  const elements = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (/^[-*•]\s+/.test(trimmed)) {
+      const bulletText = trimmed.replace(/^[-*•]\s+/, '');
+      elements.push(
+        <Box
+          key={`l-${i}`}
+          sx={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 1,
+            my: 0.35,
+            pl: 0.5,
+          }}
+        >
+          <Box
+            component="span"
+            sx={{
+              display: 'inline-block',
+              width: 5,
+              height: 5,
+              borderRadius: '50%',
+              bgcolor: isClient ? '#FFFFFF' : '#4F46E5',
+              mt: 1.1,
+              flexShrink: 0,
+            }}
+          />
+          <Typography
+            component="span"
+            variant="body1"
+            sx={{ lineHeight: 1.6, wordBreak: 'break-word', color: 'inherit', fontSize: '0.95rem' }}
+          >
+            {renderInlineFormatting(bulletText, isClient)}
+          </Typography>
+        </Box>
+      );
+    } else if (/^\d+\.\s+/.test(trimmed)) {
+      const match = trimmed.match(/^(\d+\.)\s+(.+)$/);
+      const numPrefix = match ? match[1] : '';
+      const numText = match ? match[2] : trimmed;
+      elements.push(
+        <Box
+          key={`nl-${i}`}
+          sx={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 0.75,
+            my: 0.35,
+            pl: 0.5,
+          }}
+        >
+          <Typography
+            component="span"
+            variant="body1"
+            sx={{
+              fontWeight: 700,
+              lineHeight: 1.6,
+              color: isClient ? 'rgba(255,255,255,0.9)' : '#4F46E5',
+              flexShrink: 0,
+              fontSize: '0.95rem',
+            }}
+          >
+            {numPrefix}
+          </Typography>
+          <Typography
+            component="span"
+            variant="body1"
+            sx={{ lineHeight: 1.6, wordBreak: 'break-word', color: 'inherit', fontSize: '0.95rem' }}
+          >
+            {renderInlineFormatting(numText, isClient)}
+          </Typography>
+        </Box>
+      );
+    } else if (/^#{1,3}\s+/.test(trimmed)) {
+      const headingText = trimmed.replace(/^#{1,3}\s+/, '');
+      elements.push(
+        <Typography
+          key={`h-${i}`}
+          variant="subtitle1"
+          sx={{
+            fontWeight: 800,
+            my: 0.5,
+            color: 'inherit',
+            lineHeight: 1.4,
+          }}
+        >
+          {renderInlineFormatting(headingText, isClient)}
+        </Typography>
+      );
+    } else if (trimmed === '') {
+      elements.push(<Box key={`sp-${i}`} sx={{ height: 8 }} />);
+    } else {
+      elements.push(
+        <Typography
+          key={`p-${i}`}
+          variant="body1"
+          sx={{
+            lineHeight: 1.6,
+            wordBreak: 'break-word',
+            color: 'inherit',
+            fontSize: '0.95rem',
+          }}
+        >
+          {renderInlineFormatting(line, isClient)}
+        </Typography>
+      );
+    }
+  }
+
+  return <Box>{elements}</Box>;
+};
 
 export const ChatMessage = ({ message, onResolveConflict }) => {
 
@@ -77,7 +260,7 @@ export const ChatMessage = ({ message, onResolveConflict }) => {
             mt: 0.5,
           }}
         >
-          <SmartToyIcon fontSize="small" sx={{ color: '#FFFFFF' }} />
+          <AutoAwesomeIcon fontSize="small" sx={{ color: '#FFFFFF' }} />
         </Avatar>
       )}
 
@@ -105,9 +288,7 @@ export const ChatMessage = ({ message, onResolveConflict }) => {
               onResolve={onResolveConflict}
             />
           ) : (
-            <Typography variant="body1" sx={{ whiteSpace: 'pre-line', wordBreak: 'break-word', lineHeight: 1.6 }}>
-              {content || ''}
-            </Typography>
+            <FormattedChatMessage content={content} isClient={isClient} />
           )}
         </Paper>
         <Typography
@@ -122,7 +303,7 @@ export const ChatMessage = ({ message, onResolveConflict }) => {
             fontWeight: 500,
           }}
         >
-          {created_at ? formatDateTime(created_at) : ''}
+          {created_at ? formatChatTime(created_at) : ''}
         </Typography>
       </Box>
 

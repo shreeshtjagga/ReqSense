@@ -9,9 +9,10 @@ export const ChatInput = ({ onSendMessage, disabled, sending }) => {
   const handleSend = () => {
     if (!text.trim() || text.length > maxLength || disabled || sending) return;
     const toSend = text;
-    onSendMessage(toSend)
-      .then(() => setText(''))
-      .catch(() => {  });
+    setText('');
+    onSendMessage(toSend).catch(() => {
+      setText(toSend);
+    });
   };
 
   const handleKeyDown = (e) => {
@@ -91,10 +92,7 @@ export const ChatInput = ({ onSendMessage, disabled, sending }) => {
           }
         }}
       />
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1, px: 0.5 }}>
-        <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
-          Pro-tip: Describe actions, target users, and constraints clearly for optimal atom extraction.
-        </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mt: 1, px: 0.5 }}>
         <Typography
           variant="caption"
           color={isOverLimit ? 'error.main' : 'text.secondary'}

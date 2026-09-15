@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Paper } from '@mui/material';
-import SmartToyIcon from '@mui/icons-material/SmartToy';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { keyframes } from '@mui/system';
 import { styled } from '@mui/material/styles';
 
@@ -50,7 +50,7 @@ export const TypingIndicator = () => {
           mt: 0.5,
         }}
       >
-        <SmartToyIcon fontSize="small" />
+        <AutoAwesomeIcon fontSize="small" />
       </Paper>
 
       <Box sx={{ maxWidth: '70%' }}>
