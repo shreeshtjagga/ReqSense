@@ -14,6 +14,8 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.config import get_settings
 from app.middleware.error_handlers import register_error_handlers
 from app.middleware.request_id import RequestIDMiddleware
+from app.middleware.security_headers import SecurityHeadersMiddleware
+from app.middleware.size_limit import ContentLengthLimitMiddleware
 from app.services.embedding_service import EmbeddingService
 from app.services.rate_limit_service import limiter
 
@@ -30,7 +32,6 @@ if settings.SENTRY_DSN:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-
     async def _warm_db():
         try:
             from app.database import engine
@@ -61,6 +62,8 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(ContentLengthLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
