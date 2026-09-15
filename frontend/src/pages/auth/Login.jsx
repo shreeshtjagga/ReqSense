@@ -3,6 +3,7 @@ import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { loginUser } from '../../api/auth';
 import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
+import HelpContactModal from '../../components/common/HelpContactModal';
 
 const AnimatedCube = () => {
   const canvasRef = useRef(null);
@@ -464,86 +465,12 @@ export const Login = () => {
         </div>
       </div>
 
-      {}
-      {modalType && (
-        <div
-          style={styles.modalBackdrop}
-          onClick={() => setModalType(null)}
-        >
-          <div
-            style={styles.modalCard}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {}
-            <div style={styles.modalHeader}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <ReqSenseLogo size={28} />
-                <h3 style={styles.modalTitle}>
-                  {modalType === 'help' ? 'Help & Getting Started' : 'Contact Support'}
-                </h3>
-              </div>
-              <button
-                style={styles.closeBtn}
-                onClick={() => setModalType(null)}
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
-
-            {}
-            <div style={styles.modalBody}>
-              {modalType === 'help' ? (
-                <div style={styles.simpleList}>
-                  <div style={styles.simpleItem}>
-                    <strong style={styles.itemTitle}>🤖 ARIA Requirements Gathering</strong>
-                    <p style={styles.itemDesc}>Conduct interactive conversations with the ARIA agent to automatically capture and structure functional requirements.</p>
-                  </div>
-                  <div style={styles.simpleItem}>
-                    <strong style={styles.itemTitle}>⚡ Contradiction Detection (RDCD)</strong>
-                    <p style={styles.itemDesc}>Conflicting stakeholder statements are detected in real-time and isolated until approved by an engineering lead.</p>
-                  </div>
-                  <div style={styles.simpleItem}>
-                    <strong style={styles.itemTitle}>📄 SRS Document Export</strong>
-                    <p style={styles.itemDesc}>Generate and download IEEE-standard specification documents (.docx) with executive summaries and functional tables.</p>
-                  </div>
-                </div>
-              ) : (
-                <div style={styles.simpleList}>
-                  <div style={styles.simpleItem}>
-                    <strong style={styles.itemTitle}>✉️ Direct Support Email</strong>
-                    <p style={styles.itemDesc}>
-                      For inquiries, access requests, or bug reports:
-                      <a href="mailto:support@reqsense.ai" style={styles.contactLink}>support@reqsense.ai</a>
-                    </p>
-                  </div>
-                  <div style={styles.simpleItem}>
-                    <strong style={styles.itemTitle}>⏱️ Operational Hours</strong>
-                    <p style={styles.itemDesc}>Monday – Friday, 9:00 AM – 6:00 PM EST (Response within 2 hours).</p>
-                  </div>
-                  <a
-                    href="mailto:support@reqsense.ai?subject=ReqSense%20Inquiry"
-                    style={styles.primaryActionBtn}
-                  >
-                    Open Mail App
-                  </a>
-                </div>
-              )}
-            </div>
-
-            {}
-            <div style={styles.modalFooter}>
-              <button
-                type="button"
-                style={styles.footerCloseBtn}
-                onClick={() => setModalType(null)}
-              >
-                Got it
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Help & Contact Modal */}
+      <HelpContactModal
+        open={Boolean(modalType)}
+        initialTab={modalType}
+        onClose={() => setModalType(null)}
+      />
     </div>
   );
 };

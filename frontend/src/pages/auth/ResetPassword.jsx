@@ -162,7 +162,7 @@ export const ResetPassword = () => {
           </Link>
           <Box sx={{ width: '1px', height: '16px', bgcolor: 'rgba(255,255,255,0.25)' }} />
           <Link
-            href="mailto:support@reqsense.ai"
+            href="mailto:shreesht.jagga@gmail.com"
             sx={{
               color: 'rgba(255,255,255,0.85)',
               display: 'flex',

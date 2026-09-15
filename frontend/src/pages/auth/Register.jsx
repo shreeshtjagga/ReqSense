@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { registerUser } from '../../api/auth';
 import { useToastStore } from '../../store/toastStore';
+import HelpContactModal from '../../components/common/HelpContactModal';
 
 const AnimatedCube = () => {
   const canvasRef = useRef(null);
@@ -310,6 +311,7 @@ export const Register = () => {
   const [role, setRole]                     = useState(isInviteFlow ? inviteRole : 'client');
   const [orgId, setOrgId]                   = useState(inviteOrg);
   const [loading, setLoading]               = useState(false);
+  const [modalType, setModalType]           = useState(null);
 
   const navigate  = useNavigate();
   const showToast = useToastStore((s) => s.showToast);
@@ -375,11 +377,11 @@ export const Register = () => {
           <span style={s.logoText}>ReqSense <span style={s.aiText}>AI</span></span>
         </div>
         <div style={s.helpRow}>
-          <button style={s.helpBtn} onClick={() => showToast('Help documentation available in your dashboard.', 'info')}>
+          <button style={s.helpBtn} onClick={() => setModalType('help')}>
             <HelpIcon /> Help
           </button>
           <span style={s.divider}>|</span>
-          <button style={s.helpBtn} onClick={() => showToast('Contact support at support@reqsense.ai', 'info')}>
+          <button style={s.helpBtn} onClick={() => setModalType('contact')}>
             <HeadsetIcon /> Contact Us
           </button>
         </div>
@@ -603,6 +605,13 @@ export const Register = () => {
           </p>
         </div>
       </div>
+
+      {/* Help & Contact Modal */}
+      <HelpContactModal
+        open={Boolean(modalType)}
+        initialTab={modalType}
+        onClose={() => setModalType(null)}
+      />
     </div>
   );
 };
