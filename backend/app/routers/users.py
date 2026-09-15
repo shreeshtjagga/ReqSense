@@ -2,7 +2,7 @@ import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -96,12 +96,17 @@ async def admin_list_users(
 
     q = select(User)
     if current_user.organization_id:
-        q = q.where(User.organization_id == current_user.organization_id)
+        q = q.where(
+            or_(
+                User.organization_id == current_user.organization_id,
+                User.organization_id.is_(None)
+            )
+        )
 
     if role:
         q = q.where(User.role == role)
 
-    q = q.offset(offset).limit(limit)
+    q = q.order_by(User.created_at.desc()).offset(offset).limit(limit)
     res = await db.execute(q)
     return res.scalars().all()
 

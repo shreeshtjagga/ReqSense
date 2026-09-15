@@ -101,9 +101,10 @@ async def forgot_password(
             token=raw_token,
             reset_url=f"{settings.FRONTEND_URL}/reset-password?token={raw_token}"
         )
-    return JSONResponse(
-        content={"message": "If this email is registered, a reset link has been sent."}
-    )
+    res_content = {"message": "If this email is registered, a reset link has been sent."}
+    if settings.ENV == "development" and raw_token:
+        res_content["dev_reset_token"] = raw_token
+    return JSONResponse(content=res_content)
 
 @router.post(
     "/reset-password",
