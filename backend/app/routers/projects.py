@@ -64,15 +64,24 @@ async def list_projects(
         if current_user.organization_id:
             conditions.append(Project.organization_id == current_user.organization_id)
         result = await db.execute(
-            select(Project).where(or_(*conditions))
+            select(Project).where(or_(*conditions)).distinct()
         )
     else:
+        from app.models.session import Session
+        conditions = [
+            Project.id.in_(
+                select(ProjectClient.project_id).where(ProjectClient.client_id == current_user.id)
+            ),
+            Project.id.in_(
+                select(Session.project_id).where(Session.client_id == current_user.id)
+            ),
+        ]
+        if current_user.organization_id:
+            conditions.append(Project.organization_id == current_user.organization_id)
         result = await db.execute(
-            select(Project)
-            .join(ProjectClient, ProjectClient.project_id == Project.id)
-            .where(ProjectClient.client_id == current_user.id)
+            select(Project).where(or_(*conditions)).distinct()
         )
-    return result.scalars().all()
+    return result.scalars().unique().all()
 
 @router.get("/{project_id}", response_model=ProjectRead)
 async def get_project(
