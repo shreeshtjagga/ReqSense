@@ -11,6 +11,14 @@ class ContradictionRead(BaseModel):
     atom_2_id: Optional[uuid.UUID]
     atom_1_text: Optional[str] = None
     atom_2_text: Optional[str] = None
+    atom_1_raw: Optional[str] = None
+    atom_2_raw: Optional[str] = None
+    atom_1_category: Optional[str] = None
+    atom_2_category: Optional[str] = None
+    atom_1_type: Optional[str] = None
+    atom_2_type: Optional[str] = None
+    change_request_title: Optional[str] = None
+    change_request_description: Optional[str] = None
     similarity_score: Optional[float]
     confidence: Optional[float]
     conflict_type: Optional[str]
@@ -28,6 +36,6 @@ class ContradictionRead(BaseModel):
     model_config = {"from_attributes": True}
 
 class ContradictionResolve(BaseModel):
-    action: Literal["resolved", "ignored"]
+    action: Literal["resolved", "ignored", "rejected"]
     resolution: Optional[str] = None
     is_false_positive: Optional[bool] = False
