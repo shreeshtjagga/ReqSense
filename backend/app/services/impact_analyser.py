@@ -83,7 +83,7 @@ class ImpactAnalyser:
             except Exception as e:
                 logger.error(f"LLM impact analysis failed: {e}")
                 llm_result = {
-                    "affected_features": [f"{a.subject}: {a.action}" for a in atoms[:2]],
+                    "affected_features": [],
                     "severity": "medium",
                     "impact_report": "Architectural Impact Assessment: Reviewing requirement dependencies and consistency.",
                 }
@@ -152,9 +152,15 @@ class ImpactAnalyser:
         from sqlalchemy import select as _select
         import re
 
-        atoms = RDCDLayer.extract_atoms(f"{title}. {description}")
+        combined_cr_text = f"{title}. {description}".strip()
+        atoms = RDCDLayer.extract_atoms(combined_cr_text)
         if not atoms:
-            return []
+            atoms = [{
+                "subject": "Platform / Requirement",
+                "action": combined_cr_text,
+                "constraint_text": "",
+                "raw_text": combined_cr_text,
+            }]
 
         prior_res = await db.execute(
             _select(RequirementAtom)
@@ -194,7 +200,7 @@ class ImpactAnalyser:
                         "Chroma/embedding lookup skipped for CR atom (non-fatal): %s", vec_err
                     )
 
-            if not matches and prior_atoms:
+            if prior_atoms:
                 subj_cand = (atom_dict.get("subject") or "").lower().strip()
                 action_cand = (atom_dict.get("action") or "").lower().strip()
                 for pa in prior_atoms:
@@ -204,11 +210,24 @@ class ImpactAnalyser:
 
                     same_subject = bool(subj_cand and pa_subj and subj_cand == pa_subj)
                     score = _kw_overlap(raw_text, pa.raw_text or "")
-                    
-                    tech_keywords = ["database", "db", "postgres", "mysql", "mongodb", "python", "ruby", "javascript", "golang", "auth", "login", "payment"]
+
+                    tech_keywords = [
+                        "database", "db", "postgres", "postgresql", "mysql", "mongodb", "sqlite",
+                        "python", "ruby", "rails", "fastapi", "django", "javascript", "typescript",
+                        "golang", "java", "spring", "php", "laravel", "rust", "c#", ".net",
+                        "auth", "login", "payment", "backup", "restore", "notification", "email",
+                        "mobile", "web", "website", "ios", "android", "react native", "flutter", "desktop"
+                    ]
                     shared_tech = any(k in raw_text.lower() and k in pa_raw for k in tech_keywords)
 
-                    if same_subject or shared_tech or score >= 0.15:
+                    mobile_keys = ["mobile", "android", "ios", "react native", "flutter", "smartphone"]
+                    web_keys = ["web", "website", "browser", "desktop", "portal"]
+                    cross_platform_shift = (
+                        (any(k in raw_text.lower() for k in mobile_keys) and any(k in pa_raw for k in web_keys)) or
+                        (any(k in raw_text.lower() for k in web_keys) and any(k in pa_raw for k in mobile_keys))
+                    )
+
+                    if same_subject or shared_tech or cross_platform_shift or score >= 0.10:
                         matches.append({
                             "id": pa.id,
                             "document": pa.raw_text,
