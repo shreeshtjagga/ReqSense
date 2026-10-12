@@ -1,4 +1,5 @@
 import uuid
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -7,31 +8,47 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import CurrentUser, require_roles
 from app.models.organization import Organization
-from app.schemas.organization import OrganizationCreate, OrganizationRead
-
 from app.models.user import User
+from app.schemas.organization import OrganizationCreate, OrganizationRead
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
 @router.post("", response_model=OrganizationRead, status_code=status.HTTP_201_CREATED)
 async def create_organization(
     body: OrganizationCreate,
-    current_user: User = Depends(require_roles("admin")),
+    current_user: User = Depends(require_roles("developer")),
     db: AsyncSession = Depends(get_db),
 ):
     org = Organization(name=body.name)
     db.add(org)
     await db.commit()
     await db.refresh(org)
+
+    # Link creator if they don't have one
+    if not current_user.organization_id:
+        current_user.organization_id = org.id
+        db.add(current_user)
+        await db.commit()
+
     return org
+
+@router.get("/my", response_model=Optional[OrganizationRead])
+async def get_my_organization(
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    if not current_user.organization_id:
+        return None
+    result = await db.execute(select(Organization).where(Organization.id == current_user.organization_id))
+    return result.scalar_one_or_none()
 
 @router.get("/{org_id}", response_model=OrganizationRead)
 async def get_organization(
     org_id: uuid.UUID,
-    current_user: User = Depends(require_roles("admin", "developer", "client")),
+    current_user: User = Depends(require_roles("developer", "client")),
     db: AsyncSession = Depends(get_db),
 ):
-    if current_user.role != "admin" and current_user.organization_id != org_id:
+    if current_user.organization_id != org_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Organization not found.",

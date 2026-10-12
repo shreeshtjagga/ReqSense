@@ -5,11 +5,11 @@ import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import require_roles
+from app.dependencies import require_roles, get_scoped_project
 from app.models.change_request import ChangeRequest
 from app.models.contradiction import Contradiction
 from app.models.message import Message
@@ -73,12 +73,15 @@ async def executive_summary(
     org_id = current_user.organization_id
 
     if project_id:
-        proj = await db.scalar(select(Project).where(Project.id == project_id, Project.organization_id == org_id))
-        if not proj:
-            raise HTTPException(status_code=404, detail="Project not found.")
-        target_pids = [project_id]
+        proj = await get_scoped_project(project_id=project_id, user=current_user, db=db)
+        target_pids = [proj.id]
     else:
-        p_res = await db.execute(select(Project.id).where(Project.organization_id == org_id))
+        conditions = []
+        if org_id:
+            conditions.append(Project.organization_id == org_id)
+        if current_user.role == "developer":
+            conditions.append(Project.developer_id == current_user.id)
+        p_res = await db.execute(select(Project.id).where(or_(*conditions) if conditions else True))
         target_pids = list(p_res.scalars().all())
 
     if not target_pids:

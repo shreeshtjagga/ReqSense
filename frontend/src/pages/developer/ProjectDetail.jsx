@@ -618,20 +618,6 @@ export const ProjectDetail = () => {
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const [chromaThreshold, setChromaThreshold] = useState(0.3);
-  const [savingThreshold, setSavingThreshold] = useState(false);
-
-  const handleSaveThreshold = useCallback(async (newValue) => {
-    setSavingThreshold(true);
-    try {
-      await updateProject(projectId, { chroma_similarity_threshold: newValue });
-      showToast(`Similarity threshold updated to ${newValue}`, 'success');
-    } catch {
-      showToast('Failed to update similarity threshold.', 'error');
-    } finally {
-      setSavingThreshold(false);
-    }
-  }, [projectId, showToast]);
 
   const [selectedContradiction, setSelectedContradiction] = useState(null);
   const [resolving, setResolving] = useState(false);
@@ -664,9 +650,6 @@ export const ProjectDetail = () => {
       const proj = await getProject(projectId);
       setProject(proj);
       setActiveProject(proj);
-      if (proj?.chroma_similarity_threshold != null) {
-        setChromaThreshold(proj.chroma_similarity_threshold);
-      }
 
       const sessList = await listSessionsForProject(projectId);
       setSessions(sessList);
@@ -899,54 +882,12 @@ export const ProjectDetail = () => {
 
         <Divider sx={{ my: 2 }} />
 
-        {}
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 3, flexWrap: 'wrap' }}>
-
-            {}
-            <Paper
-              variant="outlined"
-              sx={{ p: 2, borderRadius: 2, minWidth: 280, maxWidth: 360, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0' }}
-            >
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-                <InfoOutlinedIcon sx={{ fontSize: 16, color: 'primary.main' }} />
-                <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.primary' }}>
-                  Contradiction Detection Sensitivity
-                </Typography>
-                <Typography variant="caption" sx={{ ml: 'auto', fontWeight: 700, color: 'primary.main' }}>
-                  {(chromaThreshold * 100).toFixed(0)}%
-                </Typography>
-              </Stack>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5, lineHeight: 1.5 }}>
-                Controls how similar two requirements must be before ARIA flags them as contradictions.
-                Lower % = more sensitive (more flags). Higher % = only very close conflicts flagged.
-              </Typography>
-              <Slider
-                value={chromaThreshold}
-                onChange={(_, val) => setChromaThreshold(val)}
-                onChangeCommitted={(_, val) => handleSaveThreshold(val)}
-                min={0.1}
-                max={0.9}
-                step={0.05}
-                valueLabelDisplay="auto"
-                valueLabelFormat={(v) => `${(v * 100).toFixed(0)}%`}
-                disabled={savingThreshold}
-                color="primary"
-                size="small"
-                marks={[
-                  { value: 0.1, label: 'High' },
-                  { value: 0.5, label: 'Medium' },
-                  { value: 0.9, label: 'Low' },
-                ]}
-              />
-            </Paper>
-
-            <Box sx={{ borderLeft: '1px solid #E2E8F0', pl: 3, display: { xs: 'none', sm: 'block' } }}>
-              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
-                Invited Clients:
-              </Typography>
-              <ProjectClientsList projectId={projectId} refreshKey={clientsRefreshKey} />
-            </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+              Invited Clients:
+            </Typography>
+            <ProjectClientsList projectId={projectId} refreshKey={clientsRefreshKey} />
           </Box>
         </Box>
       </Paper>
@@ -1088,7 +1029,6 @@ export const ProjectDetail = () => {
                     <TableRow>
                       <TableCell><strong>Source</strong></TableCell>
                       <TableCell><strong>Conflict Type</strong></TableCell>
-                      <TableCell><strong>Confidence</strong></TableCell>
                       <TableCell><strong>Aria Warning Message</strong></TableCell>
                       <TableCell><strong>Status</strong></TableCell>
                       <TableCell><strong>False +ve</strong></TableCell>
@@ -1111,7 +1051,6 @@ export const ProjectDetail = () => {
                         <TableCell sx={{ textTransform: 'capitalize', fontWeight: 600 }}>
                           {c.conflict_type?.replace(/_/g, ' ') || 'direct contradiction'}
                         </TableCell>
-                        <TableCell>{c.confidence != null ? `${Math.round(c.confidence * 100)}%` : 'N/A'}</TableCell>
                         <TableCell sx={{ maxWidth: 280 }}>{c.aria_message}</TableCell>
                         <TableCell>
                           <Badge label={c.status} type="conflict" />

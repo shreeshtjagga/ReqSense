@@ -155,7 +155,7 @@ async def create_message(
     body: MessageCreate,
     request: Request,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(require_roles("admin", "developer", "client")),
+    current_user: User = Depends(require_roles("developer", "client")),
     db: AsyncSession = Depends(get_db),
 ):
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
@@ -247,11 +247,33 @@ async def create_message(
             )
             history = await SessionMemory.get_messages(session_id, db=db)
 
+        # Query active pending contradictions for the project
+        pending_c_res = await db.execute(
+            select(Contradiction)
+            .join(Session, Contradiction.session_id == Session.id)
+            .where(
+                Session.project_id == session.project_id,
+                Contradiction.status == "pending",
+            )
+        )
+        pending_contradictions = pending_c_res.scalars().all()
+        pending_conflict_lines = []
+        for c in pending_contradictions:
+            a1 = await db.get(RequirementAtom, c.atom_1_id) if c.atom_1_id else None
+            a2 = await db.get(RequirementAtom, c.atom_2_id) if c.atom_2_id else None
+            a1_text = (a1.raw_text if a1 else "") or (a1.action if a1 else "") or "Established baseline"
+            a2_text = (a2.raw_text if a2 else "") or (a2.action if a2 else "") or "Proposed change"
+            pending_conflict_lines.append(
+                f"- Conflict: Current baseline '{a1_text}' vs proposed change '{a2_text}' (STATUS: PENDING DEVELOPER REVIEW — Proposed change NOT accepted yet)"
+            )
+        pending_conflicts_summary = "\n".join(pending_conflict_lines)
+
         project_context = {
             "name": project.name if project else "",
             "description": project.description if project else "",
             "domain": project.domain if project else "",
             "atom_summary": atom_summary[:3000] if atom_summary else "",
+            "pending_conflicts_summary": pending_conflicts_summary,
             "prior_context": prior_context,
         }
 
@@ -439,21 +461,14 @@ async def create_message(
                             else None
                         )
 
-                        if atom_1_id:
-                            conflicted_atom_1 = await db.get(RequirementAtom, atom_1_id)
-                            if conflicted_atom_1 and conflicted_atom_1.status == "active":
-                                conflicted_atom_1.status = "conflicted"
-                                db.add(conflicted_atom_1)
-                                logger.info(
-                                    "Marked atom %s as 'conflicted' (older side of contradiction).",
-                                    atom_1_id,
-                                )
-
+                        # Keep atom_1 active as the recorded baseline until developer explicitly approves change.
+                        # Only the candidate incoming atom (ra) is marked 'conflicted' pending review.
                         ra.status = "conflicted"
                         db.add(ra)
                         logger.info(
-                            "Marked atom %s as 'conflicted' (newer side of contradiction).",
+                            "Marked proposed atom %s as 'conflicted' pending review against active baseline atom %s.",
                             ra.id,
+                            atom_1_id,
                         )
 
                         c = Contradiction(

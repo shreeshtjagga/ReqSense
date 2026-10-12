@@ -17,7 +17,7 @@ router = APIRouter(prefix="/requirement-atoms", tags=["requirement-atoms"])
 @router.get("/project/{project_id}", response_model=List[RequirementAtomRead])
 async def list_atoms_for_project(
     project_id: uuid.UUID,
-    current_user: User = Depends(require_roles("admin", "developer", "client")),
+    current_user: User = Depends(require_roles("developer", "client")),
     status_filter: Optional[str] = None,
     limit: int = 200,
     offset: int = 0,
@@ -41,7 +41,7 @@ async def list_atoms_for_project(
 @router.get("/session/{session_id}", response_model=List[RequirementAtomRead])
 async def list_atoms_for_session(
     session_id: uuid.UUID,
-    current_user: User = Depends(require_roles("admin", "developer", "client")),
+    current_user: User = Depends(require_roles("developer", "client")),
     limit: int = 200,
     offset: int = 0,
     db: AsyncSession = Depends(get_db),

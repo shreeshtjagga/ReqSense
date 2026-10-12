@@ -10,8 +10,8 @@ import {
 export const Badge = ({ label, type, ...props }) => {
   let color = 'default';
   
-  if (type === 'feature') {
-    color = getFeatureStatusColor(label);
+  if (type === 'project' || type === 'status' || type === 'feature') {
+    color = label === 'active' || label === 'completed' ? 'success' : 'default';
   } else if (type === 'change-request') {
     color = getChangeRequestStatusColor(label);
   } else if (type === 'conflict') {

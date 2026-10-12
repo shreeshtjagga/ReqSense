@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy import Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -27,11 +27,11 @@ class Session(Base):
         String(50), default="active", nullable=False
     )
     started_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
     )
     ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     total_messages: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    drift_events: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     contradiction_events: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     stability_score: Mapped[float] = mapped_column(Float, default=100.0, nullable=False)
 

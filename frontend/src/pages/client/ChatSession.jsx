@@ -221,7 +221,13 @@ export const ChatSession = () => {
               variant="outlined"
               color="inherit"
               startIcon={<ArrowBackIcon />}
-              onClick={() => session?.project_id ? navigate(`/client/projects/${session.project_id}`) : navigate('/')}
+              onClick={() => {
+                if (session?.project_id) {
+                  navigate(user?.role === 'developer' ? `/dev/projects/${session.project_id}` : `/client/projects/${session.project_id}`);
+                } else {
+                  navigate('/');
+                }
+              }}
               sx={{ alignSelf: 'flex-start' }}
             >
               Back to Project

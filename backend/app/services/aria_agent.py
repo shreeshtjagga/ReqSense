@@ -5,6 +5,7 @@ import groq
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from app.config import get_settings
 from app.utils.prompts import build_aria_system_prompt, PROMPT_VERSION
+from app.utils.helpers import contains_keyword
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -21,15 +22,40 @@ def get_groq_client():
         _groq_client = groq.Groq(api_key=api_key)
     return _groq_client
 
+NEUTRAL_FALLBACK_MESSAGE = (
+    "Thank you for sharing those details! I've recorded that requirement for your project. "
+    "Could you tell me more about any specific user roles, permissions, or rules needed for this feature?"
+)
+
+def _parse_dynamic_atoms(atom_summary: str) -> List[Dict[str, str]]:
+    """Dynamically parses structured requirement atoms from atom_summary without hardcoding."""
+    parsed = []
+    if not atom_summary:
+        return parsed
+    for line in atom_summary.split("\n"):
+        line = line.strip()
+        if not line or not ("Subject:" in line or "Action:" in line):
+            continue
+        atom_info = {}
+        for part in line.split(" | "):
+            if ":" in part:
+                k, v = part.split(":", 1)
+                atom_info[k.strip().lower()] = v.strip()
+        if atom_info:
+            parsed.append(atom_info)
+    return parsed
+
 def generate_contextual_response(
     user_message: str,
     project_name: str,
     history: List[Dict[str, Any]],
     project_context: Optional[Dict[str, Any]] = None,
 ) -> str:
+    import re
     msg = (user_message or "").strip().lower()
     ctx = project_context or {}
     atom_summary = ctx.get("atom_summary", "")
+    pending_conflicts = ctx.get("pending_conflicts_summary", "").strip()
     description = ctx.get("description", "")
     domain = ctx.get("domain", "")
     prior_context = ctx.get("prior_context", "")
@@ -47,11 +73,157 @@ def generate_contextual_response(
     ]) + " " + msg
 
     combined_corpus = f"{past_assistant_texts} {all_user_texts} {atom_summary.lower()} {description.lower()} {prior_context.lower()}"
+    dynamic_atoms = _parse_dynamic_atoms(atom_summary)
+
+
+    if pending_conflicts:
+
+        is_asking_spec = any(k in msg for k in [
+            "what", "which", "show", "tell me", "list", "who", "how", "requirements", "choice", "language", "database", "stack", "tech", "role", "platform"
+        ])
+        if is_asking_spec:
+
+            conflict_words = set(re.findall(r'[a-zA-Z0-9_]{3,}', pending_conflicts.lower()))
+            msg_words = set(re.findall(r'[a-zA-Z0-9_]{3,}', msg))
+            common_topics = (conflict_words & msg_words) - {"the", "and", "for", "with", "what", "which", "are", "project", "wait", "you", "now", "use"}
+
+            is_general_stack_query = any(q in msg for q in ["what programming", "what language", "which language", "what tech", "what backend", "programming lan"]) and\
+                any(k in pending_conflicts.lower() for k in ["backend", "framework", "language", "stack", "tech", "platform"])
+            is_general_db_query = any(q in msg for q in ["what database", "which database", "what db", "which db", "what data base"]) and\
+                any(k in pending_conflicts.lower() for k in ["database", "storage", "db"])
+            is_general_role_query = any(q in msg for q in ["what role", "who are the user", "what access", "permissions"]) and\
+                any(k in pending_conflicts.lower() for k in ["role", "user", "access", "permission", "admin", "customer", "manager"])
+
+            if common_topics or is_general_stack_query or is_general_db_query or is_general_role_query:
+                return (
+                    f"There is currently an active contradiction pending review for **{project_name}**:\n\n"
+                    f"{pending_conflicts}\n\n"
+                    f"Neither choice has been finalized or replaced yet. The proposed change is under pending review by the development team, and the previously established baseline requirement remains the active specification until approved."
+                )
+
+
+    if any(q in msg for q in ["what programming", "what language", "which language", "what tech", "what backend", "programming lan", "tech stack", "technology stack"]):
+        tech_atoms = [
+            a.get("action", "") or a.get("constraint", "")
+            for a in dynamic_atoms
+            if any(k in a.get("subject", "").lower() for k in ["tech", "stack", "architecture", "backend", "frontend", "language"])
+        ]
+        if tech_atoms:
+            tech_str = ", ".join(tech_atoms)
+            return (
+                f"For **{project_name}**, the recorded technology choices are: **{tech_str}**.\n\n"
+                f"Would you like to adjust these technical specifications or add any other requirements?"
+            )
+
+        # Fallback: scan raw atom_summary text for backend tech keywords
+        backend_kw = {"python": "Python", "django": "Django", "fastapi": "FastAPI", "java": "Java",
+                      "spring": "Spring Boot", "ruby": "Ruby on Rails", "node": "Node.js",
+                      "golang": "Golang", "rust": "Rust", "php": "PHP"}
+        if atom_summary:
+            found_techs = [name for kw, name in backend_kw.items() if kw in atom_summary.lower()]
+            if found_techs:
+                return (
+                    f"For **{project_name}**, the confirmed backend technology is: **{', '.join(found_techs)}**.\n\n"
+                    f"Would you like to explore any other area of the project?"
+                )
+
+        # Only ask if truly nothing is recorded
+        if not atom_summary:
+            return (
+                f"We haven't finalized the programming language or technology stack for **{project_name}** yet.\n\n"
+                f"Do you have a preferred stack, or would you like me to note specific technical requirements?"
+            )
+        # If atom_summary exists but didn't match, let LLM handle it
+        return None
+
+
+    if any(q in msg for q in ["what database", "which database", "what db", "which db", "what data base", "storage"]):
+        db_atoms = [
+            a.get("action", "") or a.get("constraint", "")
+            for a in dynamic_atoms
+            if any(k in a.get("subject", "").lower() for k in ["database", "storage", "data"])
+        ]
+        if db_atoms:
+            db_str = ", ".join(db_atoms)
+            return (
+                f"For **{project_name}**, the recorded database engine is: **{db_str}**.\n\n"
+                f"Would you like to configure specific database requirements or proceed with other features?"
+            )
+
+        # Fallback: scan raw atom_summary text for DB keywords
+        db_kw = {"postgresql": "PostgreSQL", "postgres": "PostgreSQL", "postgree": "PostgreSQL",
+                 "mysql": "MySQL", "mongodb": "MongoDB", "sqlite": "SQLite"}
+        if atom_summary:
+            found_dbs = [name for kw, name in db_kw.items() if kw in atom_summary.lower()]
+            if found_dbs:
+                return (
+                    f"For **{project_name}**, the confirmed database is: **{found_dbs[0]}**.\n\n"
+                    f"Would you like to configure any other area?"
+                )
+
+        if not atom_summary:
+            return (
+                f"We haven't recorded a specific database engine for **{project_name}** yet.\n\n"
+                f"What database or storage system would you prefer to use?"
+            )
+        return None
+
+
+    if any(q in msg for q in ["what role", "who are the user", "what user", "what access", "permissions"]):
+        role_atoms = [
+            a.get("action", "") or a.get("constraint", "")
+            for a in dynamic_atoms
+            if any(k in a.get("subject", "").lower() for k in ["role", "user", "access", "permission", "auth"])
+        ]
+        if role_atoms:
+            role_str = ", ".join(role_atoms)
+            return (
+                f"For **{project_name}**, the recorded user roles and access rules are: **{role_str}**.\n\n"
+                f"Would you like to modify any role permissions or add other workflows?"
+            )
+
+        return (
+            f"We haven't finalized the user roles or access permissions for **{project_name}** yet.\n\n"
+            f"What distinct user types or access tiers (such as Administrator, Standard User, or Guest) will use the system?"
+        )
+
+    # ── Feature & functional requirement queries ──
+    if any(q in msg for q in ["what are the features", "what feature", "which feature", "list features", "show features", "features captured", "features we have", "what have we decided", "features so far", "what requirements", "show requirements", "list requirements"]):
+        features_list = []
+        for a in dynamic_atoms:
+            subj = a.get("subject", "Feature")
+            action = a.get("action", "") or a.get("constraint", "")
+            raw = a.get("raw_text", "")
+            desc = action or raw
+            if desc:
+                features_list.append(f"• **{subj}:** {desc}")
+
+        if not features_list and atom_summary:
+            for line in atom_summary.split("\n"):
+                if line.strip():
+                    features_list.append(f"• {line.strip()}")
+
+        if features_list:
+            feat_text = "\n".join(features_list[:20])
+            conflict_notice = f"\n\n⚠️ **Pending Contradiction (Under Review):**\n{pending_conflicts}" if pending_conflicts else ""
+            return (
+                f"Here are the recorded requirements and features for **{project_name}**:\n\n"
+                f"{feat_text}"
+                f"{conflict_notice}\n\n"
+                f"What additional workflow or feature would you like to define next?"
+            )
+        else:
+            return (
+                f"We haven't recorded specific features for **{project_name}** yet.\n\n"
+                f"What core functionality or user workflows would you like to build?"
+            )
+
 
     is_briefing = any(k in msg for k in [
         "brief me", "technolog", "tech stack", "end to end", "entire", "what all",
         "what do we have", "what have we", "what we have", "recap", "summary",
-        "overview", "what are the requirements", "list requirements", "show requirements"
+        "overview", "what are the requirements", "list requirements", "show requirements",
+        "show me the requirements", "requirements captured", "what requirements", "tell me the requirements"
     ])
 
     if is_briefing:
@@ -59,66 +231,67 @@ def generate_contextual_response(
         backend_tech = []
         db_tech = []
         msg_tech = []
-        features_list = []
 
-        if "react native" in combined_corpus:
+
+        search_target = atom_summary.lower() if atom_summary else combined_corpus
+
+        if "react native" in search_target:
             frontend_tech.append("React Native (Cross-platform iOS & Android mobile application)")
-        elif "flutter" in combined_corpus:
+        elif "flutter" in search_target:
             frontend_tech.append("Flutter (Cross-platform mobile application)")
-        elif "react" in combined_corpus:
+        elif "react" in search_target:
             frontend_tech.append("React (Web Application)")
 
-        if "ruby" in combined_corpus or "rails" in combined_corpus:
-            backend_tech.append("Ruby on Rails (Backend API for feed ingestion, proximity matching, and alert dispatch)")
-        elif "python" in combined_corpus or "fastapi" in combined_corpus:
-            backend_tech.append("Python / FastAPI (Backend API and data processing)")
-        elif "node" in combined_corpus:
+        if "java" in search_target:
+            backend_tech.append("Java / Spring Boot (Backend API)")
+        elif "ruby" in search_target or "rails" in search_target:
+            backend_tech.append("Ruby on Rails (Backend API)")
+        elif "python" in search_target or "fastapi" in search_target or "django" in search_target:
+            backend_tech.append("Python / FastAPI (Backend API)")
+        elif "node" in search_target:
             backend_tech.append("Node.js / Express (Backend services)")
+        elif "golang" in search_target or "go" in search_target:
+            backend_tech.append("Go (Backend API)")
 
-        if "postgis" in combined_corpus:
-            db_tech.append("PostgreSQL with PostGIS extension (Spatial indexing for proximity queries)")
-        elif "postgres" in combined_corpus:
+        if "postgis" in search_target:
+            db_tech.append("PostgreSQL with PostGIS extension")
+        elif "postgres" in search_target or "postgree" in search_target:
             db_tech.append("PostgreSQL Database")
-        elif "mongo" in combined_corpus:
+        elif "mongo" in search_target:
             db_tech.append("MongoDB Database")
-        elif "mysql" in combined_corpus:
+        elif "mysql" in search_target:
             db_tech.append("MySQL Database")
 
-        if "firebase" in combined_corpus or "fcm" in combined_corpus or "push notification" in combined_corpus:
-            msg_tech.append("Firebase Cloud Messaging (FCM) for real-time location-aware push notifications")
+        if "firebase" in search_target or "fcm" in search_target or "push notification" in search_target:
+            msg_tech.append("Firebase Cloud Messaging (FCM)")
 
-        if "gps" in combined_corpus or "location" in combined_corpus:
-            features_list.append("GPS location-based proximity tracking and real-time disaster matching")
-        if "map" in combined_corpus or "evacuation" in combined_corpus:
-            features_list.append("Interactive maps displaying disaster boundaries, shelters, and safe evacuation paths")
-        if "contact" in combined_corpus or "emergency" in combined_corpus:
-            features_list.append("Emergency contact lists with one-tap dialing for local authorities")
-        if "offline" in combined_corpus or "cache" in combined_corpus:
-            features_list.append("Offline caching for viewing recent disaster alerts without active network connection")
-        if "quiet" in combined_corpus or "radius" in combined_corpus or "preference" in combined_corpus:
-            features_list.append("User preference controls for alert radius, disaster types, and quiet hours")
 
-        if frontend_tech or backend_tech or db_tech or msg_tech or features_list:
-            frontend_line = frontend_tech[0] if frontend_tech else "React Native (Mobile Client)"
-            backend_line = backend_tech[0] if backend_tech else "Ruby on Rails API"
-            db_line = db_tech[0] if db_tech else "PostgreSQL with PostGIS"
-            msg_line = msg_tech[0] if msg_tech else "Firebase Cloud Messaging (Push Notifications)"
+        if pending_conflicts:
+            if any(k in pending_conflicts.lower() for k in ["backend", "framework", "language", "python", "java", "ruby", "rails", "node"]):
+                backend_tech = ["Under Review / Conflict Pending Resolution"]
+            if any(k in pending_conflicts.lower() for k in ["database", "postgres", "mysql", "mongo", "sqlite"]):
+                db_tech = ["Under Review / Conflict Pending Resolution"]
+            if any(k in pending_conflicts.lower() for k in ["platform", "mobile", "web", "desktop"]):
+                frontend_tech = ["Under Review / Conflict Pending Resolution"]
 
-            return (
-                f"Here is the complete end-to-end technical specification recorded for **{project_name}**:\n\n"
-                f"**1. Technology Stack**\n"
-                f"• **Frontend:** {frontend_line}\n"
-                f"• **Backend:** {backend_line}\n"
-                f"• **Database:** {db_line}\n"
-                f"• **Messaging & Alerts:** {msg_line}\n\n"
-                f"**2. Core Architecture & Features**\n"
-                f"• **Target Users:** General public seeking timely local disaster information.\n"
-                f"• **Real-time Proximity Engine:** Ingests external disaster feeds and matches against user coordinates.\n"
-                f"• **Push Notifications:** Instant alerts triggered by severity, proximity radius, and user preferences.\n"
-                f"• **Map & Evacuation:** Visual disaster boundaries, route highlighting, and emergency contacts.\n"
-                f"• **Offline Resilience:** Local caching of recent alerts and map tiles.\n\n"
-                f"Would you like to configure specific disaster event categories (e.g. floods, earthquakes, wildfires), or define data retention and privacy policies?"
-            )
+        frontend_line = frontend_tech[0] if frontend_tech else "Web / Mobile Interface (To be finalized)"
+        backend_line = backend_tech[0] if backend_tech else "Backend Services (To be finalized)"
+        db_line = db_tech[0] if db_tech else "Database Layer (To be finalized)"
+        msg_line = msg_tech[0] if msg_tech else "Notification Service"
+
+        conflict_block = ""
+        if pending_conflicts:
+            conflict_block = f"\n\n⚠️ **Pending Contradictions (Under Review):**\n{pending_conflicts}\n"
+
+        return (
+            f"Here are the captured specifications recorded for **{project_name}**:\n\n"
+            f"• **Backend & Tech Stack:** {backend_line}\n"
+            f"• **Database:** {db_line}\n"
+            f"• **Frontend / Client:** {frontend_line}\n"
+            f"• **Notifications & Services:** {msg_line}"
+            f"{conflict_block}\n\n"
+            f"Everything is structured and tracked. If all requirements are complete, please **End the Session** so I can forward these specifications directly to the development team to generate the formal SRS document!"
+        )
 
     has_roles = any(r in combined_corpus for r in ["admin", "customer", "user role", "user roles", "roles", "manager", "staff", "permissions", "adminid", "userid", "users"])
     has_auth = any(a in combined_corpus for a in ["login", "auth", "oauth", "password", "sso", "jwt", "hashedpassword", "authentication"])
@@ -137,11 +310,11 @@ def generate_contextual_response(
 
     if is_completion_intent:
         return (
-            f"Understood! All functional and technical specifications for **{project_name}** are saved:\n\n"
-            f"• **Technology & Database:** Structured and configured according to industry best practices.\n"
-            f"• **User Roles & Access:** Admin and User permissions established.\n"
-            f"• **Workflows & Security:** Systematic workflows and top-tier security controls recorded.\n\n"
-            f"Everything is organized and ready. The engineering team can now compile the formal **SRS Document** and begin implementation!"
+            f"Understood! All functional and technical specifications for **{project_name}** have been successfully captured:\n\n"
+            f"• **Technology & Database:** Structured and recorded for engineering.\n"
+            f"• **User Roles & Access:** Permissions and roles clearly defined.\n"
+            f"• **Workflows & Operations:** Business rules and lifecycle steps saved.\n\n"
+            f"Everything is organized and ready. Please click **End Session** to conclude our session and forward the full specifications to the development team for SRS compilation and implementation!"
         )
 
     tech_keywords = {
@@ -156,8 +329,9 @@ def generate_contextual_response(
         "vue": "Vue.js",
         "angular": "Angular",
         "java": "Java / Spring Boot",
-        "go": "Golang",
         "golang": "Golang",
+        "go lang": "Golang",
+        "go language": "Golang",
         "php": "PHP / Laravel",
         "c#": "C# / .NET",
         ".net": ".NET",
@@ -173,7 +347,13 @@ def generate_contextual_response(
         "firebase": "Firebase Cloud Messaging",
         "fcm": "Firebase Cloud Messaging",
     }
-    found_tech = [v for k, v in tech_keywords.items() if k in msg]
+    sorted_tech_kw = sorted(tech_keywords.items(), key=lambda item: len(item[0]), reverse=True)
+    found_tech = []
+    seen_tech_labels = set()
+    for k, v in sorted_tech_kw:
+        if contains_keyword(msg, k) and v not in seen_tech_labels:
+            seen_tech_labels.add(v)
+            found_tech.append(v)
     if found_tech and not (has_tech and len(history) > 3):
         tech_str = ", ".join(found_tech)
         return (
@@ -201,7 +381,7 @@ def generate_contextual_response(
     for r in ["admin", "customer", "user", "client", "manager", "driver", "vendor", "guest", "moderator"]:
         if r in msg:
             extracted_roles.append(r.title())
-    
+
     extracted_auth = []
     if "oauth" in msg or "o auth" in msg or "google" in msg or "github" in msg or "social" in msg:
         extracted_auth.append("OAuth / Social Login")
@@ -228,7 +408,7 @@ def generate_contextual_response(
 
     short_affirmations = ["yes", "yeah", "ok", "okay", "sure", "fine", "done", "correct", "yep", "agreed"]
     short_negations = ["no", "nope", "dont know", "don't know", "not sure", "none", "nothing", "all good", "na", "n/a", "that's all", "thats all", "that is all", "that's it", "thats it"]
-    
+
     is_short_or_neutral = (
         msg in short_affirmations or
         msg in short_negations or
@@ -254,31 +434,29 @@ def generate_contextual_response(
             )
         else:
             return (
-                f"Understood! We have captured all key functional requirements, authentication rules, workflows, and constraints for **{project_name}**.\n\n"
-                f"Everything is saved and organized. You can review captured requirements in the **Overview** tab, and the engineering team can compile the formal **SRS Document** whenever you're ready!"
+                f"Understood! All key functional requirements, user access roles, workflows, and specifications for **{project_name}** have been recorded.\n\n"
+                f"If you are finished adding requirements, please click **End Session** so I can forward these specifications directly to the development team to generate your formal SRS document!"
             )
 
     clean_snippet = user_message.strip()
     if len(clean_snippet) > 80:
         clean_snippet = clean_snippet[:80] + "..."
-    
+
     if not has_roles:
         return (
-            f"I've recorded that requirement for **{project_name}**: *\"{clean_snippet}\"*.\n\n"
-            f"What user roles and login authentication methods will be used to access this feature?"
+            f"Understood! What distinct user roles (such as Admin, Customer, or Staff) and login methods will be used to access this feature?"
         )
     elif not has_workflows:
         return (
-            f"Recorded for **{project_name}**: *\"{clean_snippet}\"*.\n\n"
-            f"What are the expected inputs, triggers, and validation rules for this workflow?"
+            f"Got it! What are the expected step-by-step user actions, inputs, and validation rules for this workflow?"
         )
     else:
         return (
-            f"Requirement noted for **{project_name}**: *\"{clean_snippet}\"*.\n\n"
-            f"Are there any additional constraints, error conditions, or security considerations for this feature?"
+            f"Noted! Are there any additional business constraints, edge cases, or security considerations for this feature?"
         )
 
 def _detect_client_tone(history: List[Dict[str, Any]], current_msg: str = "") -> str:
+    import re
     recent_client_msgs = [
         (m.get("content") or "").strip().lower()
         for m in (history or [])[-6:]
@@ -289,13 +467,16 @@ def _detect_client_tone(history: List[Dict[str, Any]], current_msg: str = "") ->
 
     combined = " ".join(recent_client_msgs[-3:])
 
-    if any(p in combined for p in ["already told", "already said", "i said", "you keep", "again", "stop asking", "why are you", "i mentioned", "told you"]):
+    frustrated_patterns = [r"\balready told\b", r"\balready said\b", r"\bi said\b", r"\byou keep\b", r"\bagain\b", r"\bstop asking\b", r"\bwhy are you\b", r"\bi mentioned\b", r"\btold you\b"]
+    if any(re.search(p, combined) for p in frustrated_patterns):
         return "frustrated"
 
-    if any(p in combined for p in ["don't understand", "dont understand", "what do you mean", "confused", "not sure what", "can you explain"]):
+    confused_patterns = [r"\bdon't understand\b", r"\bdont understand\b", r"\bwhat do you mean\b", r"\bconfused\b", r"\bnot sure what\b", r"\bcan you explain\b"]
+    if any(re.search(p, combined) for p in confused_patterns):
         return "confused"
 
-    if any(p in combined for p in ["api", "endpoint", "schema", "database", "microservice", "architecture", "docker", "kubernetes", "sql", "nosql", "jwt", "oauth"]):
+    tech_patterns = [r"\bapi\b", r"\bendpoint\b", r"\bschema\b", r"\bdatabase\b", r"\bmicroservice\b", r"\barchitecture\b", r"\bdocker\b", r"\bkubernetes\b", r"\bsql\b", r"\bnosql\b", r"\bjwt\b", r"\boauth\b"]
+    if any(re.search(p, combined) for p in tech_patterns):
         return "technical"
 
     if recent_client_msgs and all(len(m.split()) <= 3 for m in recent_client_msgs[-2:] if m):
@@ -318,6 +499,7 @@ class AriaAgent:
             description=ctx.get("description", ""),
             domain=ctx.get("domain", ""),
             atom_summary=ctx.get("atom_summary", ""),
+            pending_conflicts_summary=ctx.get("pending_conflicts_summary", ""),
             tone=tone,
             is_ongoing=is_ongoing,
         )
@@ -325,7 +507,7 @@ class AriaAgent:
             system_prompt += f"\n\nCURRENT CLIENT TONE: {tone.upper()}. Adjust your response according to the tone rules above."
 
         messages = [{"role": "system", "content": system_prompt}]
-        recent_history = history[-30:] if len(history) > 30 else history
+        recent_history = history[-16:] if len(history) > 16 else history
         for msg in recent_history:
             role = "user" if msg.get("sender") in ("client", "user") else "assistant"
             messages.append({"role": role, "content": msg.get("content", "")})
@@ -354,10 +536,11 @@ class AriaAgent:
             messages = cls._build_messages(history, user_message, project_context)
 
             response = None
-            fast_model = getattr(settings, 'GROQ_FAST_MODEL', 'groq/compound-mini')
-            main_model = getattr(settings, 'GROQ_MODEL', 'groq/compound')
-            candidates = [fast_model, main_model, "groq/compound-mini", "groq/compound", "openai/gpt-oss-20b"]
-            
+            fast_model = getattr(settings, 'GROQ_FAST_MODEL', 'openai/gpt-oss-20b')
+            main_model = getattr(settings, 'GROQ_MODEL', 'qwen/qwen3.8-27b')
+            _valid_fallbacks = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+            candidates = [main_model, fast_model] + [m for m in _valid_fallbacks if m not in (main_model, fast_model)]
+
             seen_models = set()
             for model_cand in candidates:
                 if not model_cand or model_cand in seen_models:
@@ -368,11 +551,13 @@ class AriaAgent:
                         model=model_cand,
                         messages=messages,
                         max_tokens=500,
-                        timeout=min(settings.GROQ_TIMEOUT_SECONDS, 5),
+                        temperature=0.7,
+                        timeout=min(settings.GROQ_TIMEOUT_SECONDS, 10),
                     )
                     if response and response.choices:
                         break
-                except Exception:
+                except Exception as _model_err:
+                    logger.warning("Model %s failed: %s", model_cand, _model_err)
                     continue
 
             if response and response.choices:

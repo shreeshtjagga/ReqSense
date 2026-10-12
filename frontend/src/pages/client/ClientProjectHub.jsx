@@ -367,12 +367,11 @@ const ImpactReportDisplay = ({ report }) => {
     const bullets = conflictsRaw.split(/\n\s*•\s+/).filter(Boolean);
     for (const bullet of bullets) {
       const withMatch = bullet.match(/Conflicts with:\s*"([^"]+)"/);
-      const typeMatch = bullet.match(/\[([^\-]+)\s*-\s*(\d+)%\s*Confidence\]/);
+      const typeMatch = bullet.match(/\[([^\-\]]+)(?:\s*-\s*(\d+)%\s*Confidence)?\]/);
       const noteMatch = bullet.match(/ARIA Note:\s*(.+)/s);
       conflictItems.push({
         existingReq: withMatch?.[1]?.trim() || bullet.substring(0, 80),
         conflictType: typeMatch?.[1]?.trim() || 'Conflict',
-        confidence: typeMatch?.[2] ? parseInt(typeMatch[2]) : null,
         ariaNote: noteMatch?.[1]?.trim() || '',
       });
     }
@@ -403,11 +402,6 @@ const ImpactReportDisplay = ({ report }) => {
             <Paper key={i} elevation={0} sx={{ p: 1.5, bgcolor: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 2 }}>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.75 }}>
                 <Chip label={item.conflictType} size="small" sx={{ bgcolor: '#FDE68A', color: '#92400E', fontWeight: 700, fontSize: '0.72rem' }} />
-                {item.confidence !== null && (
-                  <Typography variant="caption" sx={{ color: '#92400E', fontWeight: 600 }}>
-                    {item.confidence}% confidence
-                  </Typography>
-                )}
               </Stack>
               <Typography variant="caption" sx={{ display: 'block', color: '#78350F', fontWeight: 600, mb: 0.5 }}>
                 Conflicts with existing requirement:
@@ -809,7 +803,11 @@ const ChangeRequestTab = ({ projectId, project, onCancel, onContradictionsChange
 
                   {/* Impact Analysis */}
                   {cr.impact_report && (
-                    <Accordion variant="outlined" sx={{ mt: 1.5, borderRadius: '8px !important', '&:before': { display: 'none' } }}>
+                    <Accordion
+                      defaultExpanded={Boolean(cr.impact_report.includes('Detected Requirement Conflicts'))}
+                      variant="outlined"
+                      sx={{ mt: 1.5, borderRadius: '8px !important', '&:before': { display: 'none' } }}
+                    >
                       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                         <Typography variant="caption" sx={{
                           fontWeight: 700,

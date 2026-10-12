@@ -7,13 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.database import get_db
 from app.schemas.auth import (
-    ForgotPasswordRequest,
     LoginRequest,
     LogoutRequest,
     RefreshRequest,
     RegisterRequest,
     RegisterResponse,
-    ResetPasswordRequest,
     TokenResponse,
 )
 from app.services import auth_service
@@ -82,40 +80,4 @@ async def logout(
 ) -> None:
     await auth_service.logout_user(db, raw_refresh_token=body.refresh_token)
 
-@router.post(
-    "/forgot-password",
-    status_code=status.HTTP_200_OK,
-    summary="Request a password reset email",
-)
-@limiter.limit("5/minute")
-async def forgot_password(
-    request: Request,
-    body: ForgotPasswordRequest,
-    db: AsyncSession = Depends(get_db),
-) -> JSONResponse:
-    raw_token = await auth_service.initiate_password_reset(db, email=body.email)
-    if raw_token:
-        from app.services.notification_service import send_password_reset_email
-        send_password_reset_email(
-            to_email=body.email,
-            token=raw_token,
-            reset_url=f"{settings.FRONTEND_URL}/reset-password?token={raw_token}"
-        )
-    res_content = {"message": "If this email is registered, a reset link has been sent."}
-    if settings.ENV == "development" and raw_token:
-        res_content["dev_reset_token"] = raw_token
-    return JSONResponse(content=res_content)
 
-@router.post(
-    "/reset-password",
-    status_code=status.HTTP_200_OK,
-    summary="Complete password reset with token",
-)
-async def reset_password(
-    body: ResetPasswordRequest,
-    db: AsyncSession = Depends(get_db),
-) -> JSONResponse:
-    await auth_service.complete_password_reset(
-        db, raw_token=body.token, new_password=body.new_password
-    )
-    return JSONResponse(content={"message": "Password reset successful."})

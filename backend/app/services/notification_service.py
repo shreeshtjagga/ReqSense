@@ -5,15 +5,6 @@ from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
-def send_password_reset_email(to_email: str, token: str, reset_url: str) -> None:
-    from app.tasks.email_tasks import send_email_task
-
-    send_email_task.delay(
-        to_email=to_email,
-        template="password_reset",
-        context={"token": token, "reset_url": reset_url},
-    )
-    logger.info("Queued password_reset to %s", to_email)
 
 def send_project_invite_email(
     to_email: str, project_name: str, invite_url: str

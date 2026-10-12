@@ -16,7 +16,6 @@ class SessionRead(BaseModel):
     started_at: datetime
     ended_at: Optional[datetime]
     total_messages: int
-    drift_events: int
     contradiction_events: int
     stability_score: float
     srs_status: Optional[str] = "generated"

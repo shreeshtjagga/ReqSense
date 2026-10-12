@@ -44,3 +44,9 @@ def strip_json_fences(text: str) -> str:
             text = text[start : end + 1].strip()
 
     return text
+
+def contains_keyword(text: str, keywords: list[str]) -> bool:
+    if not text:
+        return False
+    lower = text.lower()
+    return any(k.lower() in lower for k in keywords)

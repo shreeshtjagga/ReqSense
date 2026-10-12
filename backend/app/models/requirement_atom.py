@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy import Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -23,12 +23,10 @@ class RequirementAtom(Base):
     constraint_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     raw_text: Mapped[str] = mapped_column(Text, nullable=False)
     embedding_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    embedding_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    embedding_version: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     status: Mapped[str] = mapped_column(
         String(50), default="active", nullable=False
     )
-    turn_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
     )

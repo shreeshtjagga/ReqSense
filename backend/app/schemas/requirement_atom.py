@@ -13,10 +13,7 @@ class RequirementAtomRead(BaseModel):
     constraint_text: Optional[str]
     raw_text: str
     embedding_id: Optional[str]
-    embedding_model: Optional[str]
-    embedding_version: Optional[str]
     status: str
-    turn_number: Optional[int]
     created_at: datetime
 
     model_config = {"from_attributes": True}

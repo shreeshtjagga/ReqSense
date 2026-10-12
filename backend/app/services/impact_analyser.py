@@ -30,7 +30,7 @@ class ImpactAnalyser:
             select(RequirementAtom)
             .where(
                 RequirementAtom.project_id == project_id,
-                RequirementAtom.status.in_(["active", "conflicted"]),
+                RequirementAtom.status == "active",
             )
             .order_by(RequirementAtom.created_at.desc())
             .limit(100)
@@ -110,6 +110,9 @@ class ImpactAnalyser:
         if any(h["confidence"] >= 0.5 for h in unique_conflict_hits):
             llm_result["severity"] = "high"
 
+        if not llm_result.get("affected_features") and unique_conflict_hits:
+            llm_result["affected_features"] = [h["existing_text"] for h in unique_conflict_hits]
+
         existing_report = llm_result.get("impact_report", "").strip()
         if "Automated impact analysis failed" in existing_report:
             existing_report = (
@@ -120,7 +123,7 @@ class ImpactAnalyser:
         if unique_conflict_hits:
             conflict_lines = "\n".join(
                 f"  • Conflicts with: \"{h['existing_text'][:150]}\" "
-                f"[{h['conflict_type'].replace('_', ' ').title()} - {h['confidence']:.0%} Confidence]\n"
+                f"[{h['conflict_type'].replace('_', ' ').title()}]\n"
                 f"    ARIA Note: {h['aria_message']}"
                 for h in unique_conflict_hits
             )
@@ -166,7 +169,7 @@ class ImpactAnalyser:
             _select(RequirementAtom)
             .where(
                 RequirementAtom.project_id == project_id,
-                RequirementAtom.status.in_(["active", "conflicted"]),
+                RequirementAtom.status == "active",
             )
             .order_by(RequirementAtom.created_at.desc())
             .limit(200)

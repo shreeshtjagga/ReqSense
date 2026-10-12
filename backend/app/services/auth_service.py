@@ -12,7 +12,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.models.password_reset_token import PasswordResetToken
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.schemas.auth import TokenResponse
@@ -77,11 +76,12 @@ async def register_user(
     email: str,
     password: str,
     role: str,
-    organization_id: Optional[uuid.UUID],
+    organization_id: Optional[uuid.UUID] = None,
     invite_token: Optional[str] = None,
 ) -> User:
     from app.models.project import ProjectClient
     from app.models.project_invite_token import ProjectInviteToken
+    from app.models.organization import Organization
 
     invite = None
     if invite_token:
@@ -111,6 +111,19 @@ async def register_user(
             )
         organization_id = invite.organization_id
         role = invite.role
+    else:
+        if organization_id:
+            org_res = await db.execute(select(Organization).where(Organization.id == organization_id))
+            org = org_res.scalar_one_or_none()
+            if not org:
+                org = Organization(id=organization_id, name=f"{name}'s Organization")
+                db.add(org)
+                await db.flush()
+        else:
+            org = Organization(name=f"{name}'s Organization")
+            db.add(org)
+            await db.flush()
+            organization_id = org.id
 
     existing = await db.execute(select(User).where(User.email == email))
     if existing.scalar_one_or_none():
@@ -256,61 +269,3 @@ async def logout_user(
         record.revoked = True
         await db.flush()
 
-async def initiate_password_reset(
-    db: AsyncSession,
-    *,
-    email: str,
-) -> Optional[str]:
-    result = await db.execute(select(User).where(User.email == email))
-    user = result.scalar_one_or_none()
-    if not user:
-        return None
-
-    raw_token = secrets.token_urlsafe(32)
-    now = datetime.now(timezone.utc)
-    reset_record = PasswordResetToken(
-        user_id=user.id,
-        token=raw_token,
-        expires_at=now + timedelta(hours=1),
-    )
-    db.add(reset_record)
-    await db.flush()
-    return raw_token
-
-async def complete_password_reset(
-    db: AsyncSession,
-    *,
-    raw_token: str,
-    new_password: str,
-) -> None:
-    result = await db.execute(
-        select(PasswordResetToken).where(PasswordResetToken.token == raw_token)
-    )
-    record = result.scalar_one_or_none()
-
-    now = datetime.now(timezone.utc)
-    if not record or record.used or _as_utc(record.expires_at) < now:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Reset token is invalid or has expired.",
-        )
-
-    record.used = True
-    user_result = await db.execute(select(User).where(User.id == record.user_id))
-    user = user_result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Reset token is invalid.",
-        )
-
-    user.password_hash = hash_password(new_password)
-
-    from sqlalchemy import update
-    await db.execute(
-        update(RefreshToken)
-        .where(RefreshToken.user_id == user.id)
-        .values(revoked=True)
-    )
-
-    await db.flush()

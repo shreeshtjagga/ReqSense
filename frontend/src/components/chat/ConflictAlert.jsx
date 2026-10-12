@@ -63,10 +63,6 @@ export const ConflictAlert = ({ contradiction, onResolve }) => {
           <strong>Conflict Type:</strong>
           <span>{(conflict_type || 'direct_contradiction').replace(/_/g, ' ')}</span>
         </Box>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-          <strong>Confidence:</strong>
-          <span>{confidence ? `${Math.round(confidence * 100)}%` : 'N/A'}</span>
-        </Box>
       </Stack>
 
       {canResolve && onResolve && !isAlreadyResolved && (

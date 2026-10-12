@@ -244,6 +244,31 @@ class SessionMemory:
             }
             seeded = [marker] + [{"sender": m.sender, "content": m.content} for m in prior_msgs]
 
+            from app.models.requirement_atom import RequirementAtom
+            atoms_res = await db.execute(
+                select(RequirementAtom)
+                .where(RequirementAtom.project_id == project_id, RequirementAtom.status == "active")
+                .order_by(RequirementAtom.created_at.asc())
+            )
+            project_atoms = atoms_res.scalars().all()
+            if project_atoms:
+                feat_lines = []
+                for a in project_atoms:
+                    s = a.subject or "Requirement"
+                    act = a.action or a.raw_text or ""
+                    if act:
+                        feat_lines.append(f"• {s}: {act}")
+                if feat_lines:
+                    summary_marker = {
+                        "sender": "aria",
+                        "content": (
+                            "[Confirmed project specifications from prior sessions:\n"
+                            + "\n".join(feat_lines[:20])
+                            + "\nThese features are already established for the project.]"
+                        ),
+                    }
+                    seeded = [summary_marker] + seeded
+
             key = cls._key(current_session_id)
             async with _store_lock:
                 if key in _store:

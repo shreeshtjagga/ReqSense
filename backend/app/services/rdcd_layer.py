@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from typing import List, Dict, Any, Tuple
 import groq
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
@@ -115,6 +116,75 @@ def extract_atoms_rule_based(message_content: str) -> List[Dict[str, Any]]:
             "raw_text": message_content
         })
 
+    # ── Role definitions ──
+    roles_catalog = {
+        "buyer": ("Buyer", "browse and purchase products from the application"),
+        "seller": ("Seller", "list and sell products with pricing and images"),
+        "admin": ("Admin", "exercise master administrative control over the application"),
+        "vendor": ("Vendor", "manage store catalog, inventory, and fulfill customer orders"),
+        "merchant": ("Merchant", "manage store listings and process incoming transactions"),
+        "customer": ("Customer", "create account, search products, add items to cart, and checkout"),
+        "manager": ("Manager", "oversee daily store operations and manage order fulfillment"),
+        "staff": ("Staff", "access back-office tools according to assigned permissions"),
+        "moderator": ("Moderator", "review content, approve listings, and resolve disputes"),
+    }
+    
+    if any(k in lower for k in ["role", "roles", "user type", "tiers", "access"]):
+        for r_key, (r_name, r_action) in roles_catalog.items():
+            if re.search(r'\b' + re.escape(r_key) + r'\b', lower):
+                atoms.append({
+                    "subject": f"{r_name} Role",
+                    "action": f"support {r_name} role in application",
+                    "constraint_text": f"{r_name} user permissions",
+                    "raw_text": message_content
+                })
+
+    if "buyer" in lower and any(w in lower for w in ["buy", "purchase", "order", "shop", "checkout", "cart", "product"]):
+        atoms.append({
+            "subject": "Buyer Feature",
+            "action": "browse, select, and buy products through the application",
+            "constraint_text": "Buyer purchase flow",
+            "raw_text": message_content
+        })
+    if "seller" in lower and any(w in lower for w in ["sell", "listing", "list", "upload", "image", "price", "catalog"]):
+        atoms.append({
+            "subject": "Seller Feature",
+            "action": "sell products by listing prices and uploading product images",
+            "constraint_text": "Seller catalog management",
+            "raw_text": message_content
+        })
+    if "admin" in lower and any(w in lower for w in ["control", "master", "manage", "monitor", "dashboard", "super"]):
+        atoms.append({
+            "subject": "Admin Feature",
+            "action": "exercise master administrative control and oversight over the application",
+            "constraint_text": "Superadmin master permissions",
+            "raw_text": message_content
+        })
+
+    if any(w in lower for w in ["search", "filter", "sorting", "sort by"]):
+        atoms.append({
+            "subject": "Search & Filters",
+            "action": "search and filter products across the application",
+            "constraint_text": "Dynamic filters and search query support",
+            "raw_text": message_content
+        })
+
+    if any(w in lower for w in ["cart", "shopping cart", "basket"]):
+        atoms.append({
+            "subject": "Cart Management",
+            "action": "manage items in shopping cart and proceed to checkout",
+            "constraint_text": "Session-backed shopping cart",
+            "raw_text": message_content
+        })
+
+    if any(w in lower for w in ["payment", "credit card", "debit card", "upi", "net banking", "wallet", "stripe", "razorpay"]):
+        atoms.append({
+            "subject": "Payment Processing",
+            "action": "process secure payments via multiple payment gateways and methods",
+            "constraint_text": "Secure payment workflow",
+            "raw_text": message_content
+        })
+
     if "manager" in lower and "customer" in lower and ("order" in lower or "deliver" in lower):
         customer_raw = "Customers place orders."
         if any(neg in lower for neg in ["don't", "do not", "doesn't", "does not", "never", "not"]):
@@ -133,7 +203,7 @@ def extract_atoms_rule_based(message_content: str) -> List[Dict[str, Any]]:
                 "raw_text": customer_raw
             }
         ])
-    elif "order" in lower or "deliver" in lower:
+    elif ("order" in lower or "deliver" in lower) and not any(a.get("subject") == "Buyer Feature" for a in atoms):
         atoms.append({
             "subject": "customer",
             "action": "place order",
@@ -147,6 +217,25 @@ def extract_atoms_rule_based(message_content: str) -> List[Dict[str, Any]]:
             "constraint_text": "authentication",
             "raw_text": message_content
         })
+
+    if not atoms:
+        match = re.search(r'\b([A-Za-z]{3,20})\s+(?:will\s+be\s+able\s+to|would\s+be\s+able\s+to|is\s+able\s+to|can|will|should|must)\s+([^.,;\n]{6,100})', message_content, re.IGNORECASE)
+        if match:
+            subj_word = match.group(1).capitalize()
+            action_phrase = match.group(2).strip()
+            atoms.append({
+                "subject": f"{subj_word} Capability",
+                "action": action_phrase,
+                "constraint_text": "",
+                "raw_text": message_content
+            })
+        elif len(message_content.split()) >= 3 and not any(k in lower for k in ["hello", "hi", "hey", "thanks", "ok", "okay", "yes", "no"]):
+            atoms.append({
+                "subject": "Functional Feature",
+                "action": message_content.strip()[:120],
+                "constraint_text": "",
+                "raw_text": message_content
+            })
 
     return atoms
 

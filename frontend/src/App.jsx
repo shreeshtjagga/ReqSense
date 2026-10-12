@@ -1,12 +1,10 @@
 import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { CircularProgress, Box } from '@mui/material';
+import { Box } from '@mui/material';
 import { useAuth } from './hooks/useAuth';
 
 const Login = lazy(() => import('./pages/auth/Login'));
 const Register = lazy(() => import('./pages/auth/Register'));
-const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
-const ResetPassword = lazy(() => import('./pages/auth/ResetPassword'));
 const AcceptInvite = lazy(() => import('./pages/auth/AcceptInvite'));
 
 const ClientDashboard = lazy(() => import('./pages/client/ClientDashboard'));
@@ -16,19 +14,21 @@ const ChatSession = lazy(() => import('./pages/client/ChatSession'));
 const DevDashboard = lazy(() => import('./pages/developer/DevDashboard'));
 const ProjectDetail = lazy(() => import('./pages/developer/ProjectDetail'));
 
-const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
-const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
-const Analytics = lazy(() => import('./pages/admin/Analytics'));
-const AdminAuditLogs = lazy(() => import('./pages/admin/AdminAuditLogs'));
-
 import ToastNotification from './components/common/Alert';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import NotFound from './pages/NotFound';
 
 const RouteFallback = () => (
-  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-    <CircularProgress />
-  </Box>
+  <Box
+    sx={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      minHeight: '100vh',
+      bgcolor: 'transparent',
+      opacity: 0,
+    }}
+  />
 );
 
 const PrivateRoute = ({ children, allowedRoles }) => {
@@ -48,9 +48,6 @@ const PrivateRoute = ({ children, allowedRoles }) => {
 const DashboardSwitcher = () => {
   const { user } = useAuth();
   
-  if (user?.role === 'admin') {
-    return <AdminDashboard />;
-  }
   if (user?.role === 'developer') {
     return <DevDashboard />;
   }
@@ -62,14 +59,12 @@ export const App = () => {
     <ErrorBoundary>
       <Suspense fallback={<RouteFallback />}>
         <Routes>
-          {}
+          {/* Public Auth Routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/accept-invite" element={<AcceptInvite />} />
 
-          {}
+          {/* Root Role-Based Dashboard */}
           <Route
             path="/"
             element={
@@ -79,11 +74,11 @@ export const App = () => {
             }
           />
 
-          {}
+          {/* Client Routes */}
           <Route
             path="/client/projects/:projectId"
             element={
-              <PrivateRoute allowedRoles={['client']}>
+              <PrivateRoute allowedRoles={['client', 'developer']}>
                 <ClientProjectHub />
               </PrivateRoute>
             }
@@ -91,54 +86,27 @@ export const App = () => {
           <Route
             path="/client/sessions/:sessionId"
             element={
-              <PrivateRoute allowedRoles={['client', 'developer', 'admin']}>
+              <PrivateRoute allowedRoles={['client', 'developer']}>
                 <ChatSession />
               </PrivateRoute>
             }
           />
 
-          {}
+          {/* Developer Routes */}
           <Route
             path="/dev/projects/:projectId"
             element={
-              <PrivateRoute allowedRoles={['developer', 'admin']}>
+              <PrivateRoute allowedRoles={['developer']}>
                 <ProjectDetail />
               </PrivateRoute>
             }
           />
 
-          {}
-          <Route
-            path="/admin/users"
-            element={
-              <PrivateRoute allowedRoles={['admin']}>
-                <UserManagement />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/admin/analytics"
-            element={
-              <PrivateRoute allowedRoles={['admin', 'developer']}>
-                <Analytics />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/admin/audit-logs"
-            element={
-              <PrivateRoute allowedRoles={['admin']}>
-                <AdminAuditLogs />
-              </PrivateRoute>
-            }
-          />
-
-          {}
+          {/* 404 Catch-All */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
       
-      {}
       <ToastNotification />
     </ErrorBoundary>
   );
