@@ -256,12 +256,6 @@ export const ChatSession = () => {
                   </Box>
                 </Box>
 
-                <Box>
-                  <Typography variant="caption" color="text.secondary">Total Requirements Exchanged</Typography>
-                  <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, color: 'primary.main' }}>
-                    {session?.total_messages || messages.length || 0}
-                  </Typography>
-                </Box>
 
                 <Box>
                   <Typography variant="caption" color="text.secondary">ARIA Assistant</Typography>
