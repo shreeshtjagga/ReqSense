@@ -8,7 +8,9 @@ import { ROLES } from '../../utils/constants';
 
 const STATUS_META = {
   pending: { label: 'Pending Review', color: 'warning' },
-  resolved: { label: 'Resolved', color: 'success' },
+  resolved: { label: 'Accepted by Developer', color: 'success' },
+  approved: { label: 'Accepted by Developer', color: 'success' },
+  rejected: { label: 'Rejected by Developer', color: 'error' },
   ignored: { label: 'Ignored / False Positive', color: 'default' },
 };
 
@@ -21,36 +23,44 @@ export const ConflictAlert = ({ contradiction, onResolve }) => {
   const {
     contradiction_id,
     conflict_type,
-    confidence,
     aria_message,
     status,
   } = contradiction;
 
   const statusInfo = STATUS_META[status] ?? STATUS_META.pending;
-  const isAlreadyResolved = status === 'resolved' || status === 'ignored';
+  const isRejected = status === 'rejected';
+  const isAccepted = status === 'resolved' || status === 'approved';
+  const isAlreadyResolved = isRejected || isAccepted || status === 'ignored';
 
   return (
     <Alert
-      severity={isAlreadyResolved ? 'success' : 'warning'}
-      icon={<WarningAmberIcon fontSize="inherit" />}
+      severity={isRejected ? 'error' : isAccepted ? 'success' : 'warning'}
+      icon={
+        isRejected ? (
+          <RemoveCircleOutlineIcon fontSize="inherit" sx={{ color: '#DC2626' }} />
+        ) : isAccepted ? (
+          <CheckCircleOutlineIcon fontSize="inherit" sx={{ color: '#16A34A' }} />
+        ) : (
+          <WarningAmberIcon fontSize="inherit" />
+        )
+      }
       sx={{
-        backgroundColor: isAlreadyResolved ? '#F0FDF4' : '#FFFBEB',
-        color: isAlreadyResolved ? '#166534' : '#92400E',
-        border: `1px solid ${isAlreadyResolved ? '#BBF7D0' : '#FDE68A'}`,
+        backgroundColor: isRejected ? '#FEF2F2' : isAccepted ? '#F0FDF4' : '#FFFBEB',
+        color: isRejected ? '#991B1B' : isAccepted ? '#166534' : '#92400E',
+        border: `1px solid ${isRejected ? '#FECACA' : isAccepted ? '#BBF7D0' : '#FDE68A'}`,
         '& .MuiAlert-icon': {
-          color: isAlreadyResolved ? '#16A34A' : '#D97706',
+          color: isRejected ? '#DC2626' : isAccepted ? '#16A34A' : '#D97706',
         },
       }}
     >
       <AlertTitle sx={{ fontWeight: 700, mb: 1 }}>
-        Contradiction Detected
+        Contradiction {isRejected ? 'Rejected' : isAccepted ? 'Resolved' : 'Detected'}
         {' '}
-        {}
         <Chip
           label={statusInfo.label}
           color={statusInfo.color}
           size="small"
-          sx={{ ml: 1, fontSize: '0.7rem', height: 20 }}
+          sx={{ ml: 1, fontSize: '0.7rem', height: 20, fontWeight: 700 }}
         />
       </AlertTitle>
 
@@ -89,8 +99,18 @@ export const ConflictAlert = ({ contradiction, onResolve }) => {
         </Box>
       )}
       {isAlreadyResolved && (
-        <Typography variant="caption" sx={{ fontWeight: 700, color: status === 'resolved' ? '#16A34A' : '#64748B' }}>
-          {status === 'resolved' ? '✓ Resolved' : '— Ignored / False Positive'}
+        <Typography
+          variant="caption"
+          sx={{
+            fontWeight: 700,
+            color: isRejected ? '#DC2626' : isAccepted ? '#16A34A' : '#64748B',
+          }}
+        >
+          {isRejected
+            ? '✕ Rejected by Developer'
+            : isAccepted
+            ? '✓ Accepted by Developer'
+            : '— Ignored / False Positive'}
         </Typography>
       )}
     </Alert>
