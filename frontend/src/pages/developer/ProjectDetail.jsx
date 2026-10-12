@@ -1074,8 +1074,14 @@ export const ProjectDetail = () => {
                               Resolve
                             </Button>
                           ) : (
-                            <Typography variant="caption" color="text.secondary">
-                              {c.is_false_positive ? 'False Positive' : 'Resolved'}
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                fontWeight: 700,
+                                color: (c.status === 'rejected' || (c.resolution && c.resolution.toLowerCase().includes('reject'))) ? 'error.main' : 'success.main',
+                              }}
+                            >
+                              {c.is_false_positive ? 'False Positive' : (c.status === 'rejected' || (c.resolution && c.resolution.toLowerCase().includes('reject')) ? 'Rejected' : 'Accepted')}
                             </Typography>
                           )}
                         </TableCell>

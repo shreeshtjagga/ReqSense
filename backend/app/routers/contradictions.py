@@ -164,7 +164,7 @@ async def resolve_contradiction(
 
     await get_scoped_project(target_project_id, current_user, db)
 
-    c.status = "resolved" if body.action in ("resolved", "rejected") else "ignored"
+    c.status = "rejected" if body.action == "rejected" else ("resolved" if body.action == "resolved" else "ignored")
     c.resolution = body.resolution or f"Marked as {body.action} by developer."
     c.is_false_positive = body.is_false_positive if body.is_false_positive is not None else False
     c.resolved_by = current_user.id

@@ -92,7 +92,11 @@ export const getChangeRequestStatusColor = (status) => {
 export const getConflictStatusColor = (status) => {
   switch (status?.toLowerCase()) {
     case 'resolved':
+    case 'approved':
+    case 'accepted':
       return 'success';
+    case 'rejected':
+      return 'error';
     case 'ignored':
       return 'info';
     case 'pending':

@@ -986,52 +986,66 @@ const ContradictionsTab = ({ contradictions, loading }) => {
 
       {resolved.length > 0 && (
         <Box>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#16A34A', mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-            <CheckCircleIcon fontSize="small" />
-            Resolved by Developer ({resolved.length})
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary', mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <RateReviewIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+            Reviewed by Developer ({resolved.length})
           </Typography>
           <Stack spacing={1.5}>
-            {resolved.map((c) => (
-              <Paper
-                key={c.id}
-                variant="outlined"
-                sx={{ p: 2, borderRadius: 3, borderColor: '#BBF7D0', bgcolor: '#F0FDF4', opacity: 0.9 }}
-              >
-                <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Typography variant="body2" sx={{ color: '#166534', fontWeight: 600 }}>
-                      {CONFLICT_TYPE_LABELS[c.conflict_type] || 'Direct Contradiction'}
-                    </Typography>
+            {resolved.map((c) => {
+              const isRejected = c.status === 'rejected' || (c.resolution && c.resolution.toLowerCase().includes('reject'));
+              return (
+                <Paper
+                  key={c.id}
+                  variant="outlined"
+                  sx={{
+                    p: 2,
+                    borderRadius: 3,
+                    borderColor: isRejected ? '#FECACA' : '#BBF7D0',
+                    bgcolor: isRejected ? '#FEF2F2' : '#F0FDF4',
+                    opacity: 0.95,
+                  }}
+                >
+                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Typography variant="body2" sx={{ color: isRejected ? '#991B1B' : '#166534', fontWeight: 600 }}>
+                        {CONFLICT_TYPE_LABELS[c.conflict_type] || 'Direct Contradiction'}
+                      </Typography>
+                      <Chip
+                        icon={c.source === 'change_request' ? <RateReviewIcon fontSize="small" /> : <ChatIcon fontSize="small" />}
+                        label={c.source === 'change_request' ? 'From Change Request' : 'From ARIA Chat'}
+                        size="small"
+                        variant="outlined"
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: '0.72rem',
+                          borderColor: isRejected ? '#F87171' : undefined,
+                          color: isRejected ? '#991B1B' : undefined,
+                        }}
+                      />
+                    </Stack>
                     <Chip
-                      icon={c.source === 'change_request' ? <RateReviewIcon fontSize="small" /> : <ChatIcon fontSize="small" />}
-                      label={c.source === 'change_request' ? 'From Change Request' : 'From ARIA Chat'}
+                      label={isRejected ? '✕ Rejected by Developer' : (c.status === 'resolved' || c.status === 'approved' ? '✓ Accepted by Developer' : 'Marked False Positive')}
                       size="small"
-                      variant="outlined"
-                      sx={{ fontWeight: 600, fontSize: '0.72rem' }}
+                      color={isRejected ? 'error' : (c.status === 'resolved' || c.status === 'approved' ? 'success' : 'default')}
+                      sx={{ fontWeight: 700, fontSize: '0.72rem' }}
                     />
                   </Stack>
-                  <Chip
-                    label={c.status === 'resolved' ? '✓ Resolved by Developer' : 'Marked False Positive'}
-                    size="small"
-                    color={c.status === 'resolved' ? 'success' : 'default'}
-                    sx={{ fontWeight: 700, fontSize: '0.72rem' }}
-                  />
-                </Stack>
-                {c.aria_message && (
+                  {c.aria_message && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                      {c.aria_message}
+                    </Typography>
+                  )}
+                  {c.resolution && (
+                    <Typography variant="caption" sx={{ display: 'block', mt: 0.75, color: isRejected ? '#DC2626' : '#15803D', fontWeight: 600 }}>
+                      Developer Decision: {c.resolution}
+                    </Typography>
+                  )}
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                    {c.aria_message}
+                    {formatChatTime(c.resolved_at || c.detected_at)}
                   </Typography>
-                )}
-                {c.resolution && (
-                  <Typography variant="caption" sx={{ display: 'block', mt: 0.75, color: '#15803D', fontWeight: 600 }}>
-                    Developer Decision: {c.resolution}
-                  </Typography>
-                )}
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                  {formatChatTime(c.resolved_at || c.detected_at)}
-                </Typography>
-              </Paper>
-            ))}
+                </Paper>
+              );
+            })}
           </Stack>
         </Box>
       )}
